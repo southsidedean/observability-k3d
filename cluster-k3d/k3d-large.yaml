@@ -1,0 +1,53 @@
+# k3d-medium.yaml
+# Cluster configuration using k3d
+# Tom Dean
+# Last edit: 4/24/2025
+#
+# k3d configuration docs:
+# https://k3d.io/stable/usage/configfile/
+
+apiVersion: k3d.io/v1alpha5
+kind: Simple
+#metadata:
+#  name: $CLUSTER_NAME
+servers: 1
+agents: 6
+network: $CLUSTER_NETWORK
+#ports:
+#  - port: 8080:80 # same as `--port '8088:80@loadbalancer'`
+#    nodeFilters:
+#      - loadbalancer
+#  - port: 8443:443 # same as `--port '8443:443@loadbalancer'`
+#    nodeFilters:
+#      - loadbalancer
+image: rancher/k3s:v1.31.7-k3s1
+options:
+  k3d:
+    disableLoadbalancer: true
+  k3s:
+    extraArgs:
+      - arg: --debug
+        nodeFilters:
+          - server:*
+          - agent:*
+      - arg: --disable=traefik
+        nodeFilters:
+          - server:*
+    nodeLabels:
+      - label: topology.kubernetes.io/zone=central
+        nodeFilters: [agent:0]
+      - label: topology.kubernetes.io/zone=central
+        nodeFilters: [agent:1]
+      - label: topology.kubernetes.io/zone=west
+        nodeFilters: [agent:2]
+      - label: topology.kubernetes.io/zone=west
+        nodeFilters: [agent:3]
+      - label: topology.kubernetes.io/zone=east
+        nodeFilters: [agent:4]
+      - label: topology.kubernetes.io/zone=east
+        nodeFilters: [agent:5]
+      - label: egressgateway=true
+        nodeFilters: [agent:*]
+  kubeconfig:
+    updateDefaultKubeconfig: true # add new cluster to your default Kubeconfig; same as `--kubeconfig-update-default` (default: true)
+    switchCurrentContext: false # also set current-context to the new cluster's context; same as `--kubeconfig-switch-context` (default: true)

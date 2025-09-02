@@ -1,0 +1,115 @@
+grafana.ini:
+  server:
+    root_url: '%(protocol)s://localhost:9001/grafana'
+    serve_from_sub_path: true
+    enforce_domain: false
+  auth:
+    disable_login_form: true
+  auth.anonymous:
+    enabled: true
+    org_role: Editor
+  auth.basic:
+    enabled: false
+  analytics:
+    check_for_updates: false
+  panels:
+    disable_sanitize_html: true
+  log:
+    mode: console
+  log.console:
+    format: text
+    level: debug
+
+## Expose the grafana service to be accessed from outside the cluster (LoadBalancer service).
+## or access it from within the cluster (ClusterIP service). Set the service type and the port to serve it.
+## ref: http://kubernetes.io/docs/user-guide/services/
+##
+service:
+  enabled: true
+  type: ClusterIP
+#  type: LoadBalancer
+#  loadBalancerIP: ""
+#  loadBalancerClass: ""
+  #loadBalancerSourceRanges: []
+  port: 3000
+  targetPort: 3000
+  ## Service annotations. Can be templated.
+  annotations: {}
+  labels: {}
+  #portName: service
+
+#ingress:
+#  enabled: true
+  # For Kubernetes >= 1.18 you should specify the ingress-controller via the field ingressClassName
+  # See https://kubernetes.io/blog/2020/04/02/improvements-to-the-ingress-api-in-kubernetes-1.18/#specifying-the-class-of-an-ingress
+#  ingressClassName: "traefik"
+  # Values can be templated
+#  annotations:
+#    kubernetes.io/ingress.class: "traefik"
+#    ingress.kubernetes.io/ssl-redirect: "false"
+    # kubernetes.io/tls-acme: "true"
+#  labels: {}
+#  path: /
+#  hosts: {}
+  #  - localhost
+
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+    - name: prometheus
+      label: istio-prometheus
+      type: prometheus
+      access: proxy
+      orgId: 1
+      url: http://prometheus.istio-system.svc.cluster.local:9090
+      isDefault: true
+      jsonData:
+        timeInterval: "5s"
+      editable: true
+
+dashboardProviders:
+  dashboardproviders.yaml:
+    apiVersion: 1
+    providers:
+    - name: 'default'
+      orgId: 1
+      folder: ''
+      type: file
+      disableDeletion: false
+      editable: true
+      options:
+        path: /var/lib/grafana/dashboards/default
+
+# Install Istio dashboards from https://grafana.com/orgs/istio/dashboards
+
+dashboards:
+  default:
+    istio-control-plane-dashboard:
+      gnetId: 7645
+      revision: 256
+      datasource: prometheus
+    istio-mesh-dashboard:
+      gnetId: 7639
+      revision: 256
+      datasource: prometheus
+    istio-performance-dashboard:
+      gnetId: 11829
+      revision: 256
+      datasource: prometheus
+    istio-service-dashboard:
+      gnetId: 7636
+      revision: 256
+      datasource: prometheus
+    istio-wasm-extension-dashboard:
+      gnetId: 13277
+      revision: 213
+      datasource: prometheus
+    istio-workload-dashboard:
+      gnetId: 7630
+      revision: 256
+      datasource: prometheus
+    istio-ztunnel-dashboard:
+      gnetId: 21306
+      revision: 23
+      datasource: prometheus
