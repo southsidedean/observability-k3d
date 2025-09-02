@@ -21,8 +21,7 @@ If you don't have the following, you're gonna have a bad time:
 - [The `kubectx` command](https://github.com/ahmetb/kubectx)
 - [The `curl` command](https://curl.se/download.html)
 - The `watch` command
-- The contents of [this](https://github.com/southsidedean/istio-envoy-sandboxes/tree/main) GitHub repository
-  - We're going to use the sandbox [here](https://github.com/southsidedean/istio-envoy-sandboxes/tree/main/k3d-sandboxes/kagent-sandbox)
+- The contents of [this](https://github.com/southsidedean/observability-k3d) GitHub repository
 - Internet access to pull containers
 
 Everything else is self-contained, just run the script to create the cluster(s).
