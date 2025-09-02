@@ -1,7 +1,7 @@
-# kagent-sandboxes
+# observability-k3d
 
 ## Tom Dean
-## Last edit: 5/27/25
+## Last edit: 9/2/25
 
 ## *INITIAL DRAFT - UNDER DEVELOPMENT*
 
@@ -27,9 +27,9 @@ If you don't have the following, you're gonna have a bad time:
 
 Everything else is self-contained, just run the script to create the cluster(s).
 
-## About the Sandbox
+## About the Observability Cluster
 
-The `kagent` dashboard can be accessed on your local machine, via `http://localhost:7001` or `http://$IP_ADDRESS:7001`.
+Introduction
 
 All the Helm `values` files and other YAML manifests live in the `manifest` directory:
 
@@ -40,6 +40,17 @@ manifests
 ├── http-listener.yaml
 ├── kagent-httproute.yaml
 ├── kagent-values.yaml
+├── monitoring
+│   ├── alerts
+│   │   ├── kustomization.yaml
+│   │   └── prometheus-rules.yaml
+│   ├── kustomization.yaml
+│   ├── loki-stack-values.yaml
+│   └── probes
+│       ├── kustomization.yaml
+│       ├── probe-dns.yaml
+│       ├── probe-gateway.yaml
+│       └── probe-websites.yaml
 └── registries.yaml
 ```
 
@@ -62,7 +73,9 @@ Several options exist for deploying cluster(s):
   - Great for building your own!
 - A script to tear down your cluster(s).
 
-# `kagent` Stuff
+### About kagent
+
+The `kagent` dashboard can be accessed on your local machine, via `http://localhost:7001` or `http://$IP_ADDRESS:7001`.
 
 # Summary
 
