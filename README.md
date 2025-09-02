@@ -5,6 +5,8 @@
 
 ## *INITIAL DRAFT - UNDER DEVELOPMENT*
 
+***This code is not at a functional state yet.  Still testing / debugging.***
+
 ## Introduction
 
 Introduction.
