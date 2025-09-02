@@ -1,0 +1,16 @@
+apiVersion: monitoring.coreos.com/v1
+kind: Probe
+metadata:
+  name: dns-servers
+  namespace: monitoring
+spec:
+  interval: 30s
+  module: icmp_ping
+  prober:
+    url: blackbox-prometheus-blackbox-exporter.monitoring.svc.cluster.local:9115
+  targets:
+    staticConfig:
+      static:
+        - 8.8.8.8
+        - 1.1.1.1
+
