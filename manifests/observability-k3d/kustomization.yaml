@@ -1,0 +1,41 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: monitoring
+
+# ConfigMaps
+configMapGenerator:
+  - name: prometheus-config
+    files:
+      - prometheus.yaml=prometheus/prometheus.yaml
+  - name: alertmanager-config
+    files:
+      - alertmanager.yaml=prometheus/alertmanager-config.yaml
+
+# Secrets (Grafana admin)
+secretGenerator:
+  - name: grafana-admin
+    literals:
+      - admin-user=${GRAFANA_ADMIN_USER}
+      - admin-password=${GRAFANA_ADMIN_PASSWORD}
+
+# Resources
+resources:
+  # Prometheus
+  - prometheus/prometheus-deployment.yaml
+  - prometheus/prometheus-service.yaml
+  - prometheus/prometheus-rule-country-alerts.yaml
+
+  # Alertmanager
+  - prometheus/alertmanager-deployment.yaml
+  - prometheus/alertmanager-service.yaml
+  - prometheus/alertmanager-config.yaml
+
+  # Grafana
+  - grafana/grafana-deployment.yaml
+  - grafana/grafana-service.yaml
+
+  # Loki + Promtail
+  - loki/loki-deployment.yaml
+  - loki/loki-service.yaml
+  - promtail/promtail-daemonset.yaml

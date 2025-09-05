@@ -1,0 +1,46 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions/positions.yaml
+
+clients:
+  - url: http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: sshd
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: sshd
+          __path__: /var/log/auth.log
+    pipeline_stages:
+      - regex:
+          expression: '.*'
+      - geoip:
+          database: /GeoLite2-City.mmdb
+          source: remote_addr
+          target: geo
+      - labels:
+          geo_country_name: '{{ .geo.Country.Names.en }}'
+          app: sshd
+
+  - job_name: sudo
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: sudo
+          __path__: /var/log/auth.log
+    pipeline_stages:
+      - regex:
+          expression: '.*sudo.*'
+      - geoip:
+          database: /GeoLite2-City.mmdb
+          source: remote_addr
+          target: geo
+      - labels:
+          geo_country_name: '{{ .geo.Country.Names.en }}'
+          app: sudo
