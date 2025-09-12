@@ -1,26 +1,17 @@
 # k3d-medium.yaml
 # Cluster configuration using k3d
 # Tom Dean
-# Last edit: 4/24/2025
+# Last edit: 9/12/2025
 #
 # k3d configuration docs:
 # https://k3d.io/stable/usage/configfile/
 
 apiVersion: k3d.io/v1alpha5
 kind: Simple
-#metadata:
-#  name: $CLUSTER_NAME
 servers: 1
 agents: 3
 network: $CLUSTER_NETWORK
-#ports:
-#  - port: 8088:80 # same as `--port '8088:80@loadbalancer'`
-#    nodeFilters:
-#      - loadbalancer
-#  - port: 8443:443 # same as `--port '8443:443@loadbalancer'`
-#    nodeFilters:
-#      - loadbalancer
-image: rancher/k3s:v1.31.7-k3s1
+image: $K3S_VERSION
 options:
   k3d:
     disableLoadbalancer: false
@@ -34,11 +25,11 @@ options:
         nodeFilters:
           - server:*
     nodeLabels:
-      - label: topology.kubernetes.io/zone=central
+      - label: topology.kubernetes.io/zone=observability-1
         nodeFilters: [agent:0]
-      - label: topology.kubernetes.io/zone=west
+      - label: topology.kubernetes.io/zone=observability-2
         nodeFilters: [agent:1]
-      - label: topology.kubernetes.io/zone=east
+      - label: topology.kubernetes.io/zone=observability-3
         nodeFilters: [agent:2]
       - label: egressgateway=true
         nodeFilters: [agent:*]
