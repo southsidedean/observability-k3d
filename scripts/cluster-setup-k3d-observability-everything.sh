@@ -19,7 +19,6 @@ echo
 
 # Create the k3d cluster
 
-k3d cluster create $CLUSTER_NAME -c cluster-k3d/k3d-cluster.yaml --port 7001:80@loadbalancer --port 7401:443@loadbalancer --api-port 0.0.0.0:7601
 k3d cluster create $CLUSTER_NAME \
     -c cluster-k3d/k3d-cluster.yaml \
     --port 7001:80@loadbalancer \
@@ -44,14 +43,12 @@ echo
 
 # Install 'kagent' using Helm
 
-helm install kagent-crds oci://ghcr.io/kagent-dev/kagent/helm/kagent-crds \
 helm upgrade -i kagent-crds oci://ghcr.io/kagent-dev/kagent/helm/kagent-crds \
     --namespace $KAGENT_NAMESPACE \
     --create-namespace \
     --wait \
     --kube-context $KUBECTX_NAME
 echo
-helm install kagent oci://ghcr.io/kagent-dev/kagent/helm/kagent \
 helm upgrade -i kagent oci://ghcr.io/kagent-dev/kagent/helm/kagent \
     --namespace $KAGENT_NAMESPACE \
     --set providers.openAI.apiKey=$OPENAI_API_KEY \
@@ -117,13 +114,11 @@ echo
 
 # Install 'kgateway' CRDs using Helm
 
-helm upgrade -i --create-namespace --namespace $KGATEWAY_NAMESPACE --version v${KGATEWAY_VERSION} kgateway-crds oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds --set controller.image.pullPolicy=Always
 helm upgrade -i --create-namespace --namespace $KGATEWAY_NAMESPACE --version v${KGATEWAY_VERSION} kgateway-crds oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds --set controller.image.pullPolicy=Always --wait
 echo
 
 # Install 'kgateway' using Helm
 
-helm upgrade -i --namespace $KGATEWAY_NAMESPACE --version v${KGATEWAY_VERSION} kgateway oci://cr.kgateway.dev/kgateway-dev/charts/kgateway --set controller.image.pullPolicy=Always
 helm upgrade -i --namespace $KGATEWAY_NAMESPACE --version v${KGATEWAY_VERSION} kgateway oci://cr.kgateway.dev/kgateway-dev/charts/kgateway --set controller.image.pullPolicy=Always --wait
 echo
 
@@ -141,7 +136,6 @@ echo
 
 # Apply custom monitoring resources
 echo "Applying custom monitoring resources (Probes, Alerts)..."
-kubectl apply -k manifests/monitoring/probes --context $KUBECTX_NAME
 kubectl apply -k manifests/monitoring/alerts --context $KUBECTX_NAME
 echo
 

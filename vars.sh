@@ -19,7 +19,6 @@ export OPENAI_API_KEY=""
 export KGATEWAY_VERSION="2.1.0-main"
 export KGATEWAY_NAMESPACE=kgateway-system
 export GATEWAY_API_VERSION="v1.3.0"
-export OPENAI_API_KEY=""
 export GRAFANA_ADMIN_PASSWORD="prom-operator"
 export K3S_VERSION="rancher/k3s:v1.31.7-k3s1"
 
