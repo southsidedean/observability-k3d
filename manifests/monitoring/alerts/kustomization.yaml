@@ -1,7 +1,7 @@
-# manifests/dashboards/kustomization.yaml
+# manifests/monitoring/alerts/kustomization.yaml
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: monitoring # Install dashboards into the monitoring namespace
 resources:
   - blackbox-exporter-dashboard.yaml
-  - node-exporter-dashboard.yaml
+  - node-exporter-alerts.yaml

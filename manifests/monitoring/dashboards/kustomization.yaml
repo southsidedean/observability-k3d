@@ -4,3 +4,4 @@ kind: Kustomization
 namespace: monitoring # Install dashboards into the monitoring namespace
 resources:
   - blackbox-exporter-dashboard.yaml
+  - node-exporter-dashboard.yaml
