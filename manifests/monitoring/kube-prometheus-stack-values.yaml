@@ -1,0 +1,60 @@
+# manifests/monitoring/kube-prometheus-stack-values.yaml
+# Values for kube-prometheus-stack
+
+alertmanager:
+  ingress:
+    enabled: false
+  alertmanagerSpec:
+    storage:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 1Gi
+
+prometheus:
+  ingress:
+    enabled: false
+  prometheusSpec:
+    # Enable scraping of ServiceMonitors, PodMonitors, and PrometheusRules in all namespaces
+    serviceMonitorSelector: {}
+    podMonitorSelector: {}
+    ruleSelector: {}
+    # Persistence using the default k3s local-path-provisioner
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 10Gi
+
+grafana:
+  enabled: true
+  ingress:
+    enabled: false
+  # Allow Grafana to find dashboards in all namespaces (for unpoller dashboards)
+  sidecar:
+    dashboards:
+      enabled: true
+      searchNamespace: "ALL"
+  # Persistence using the default k3s local-path-provisioner
+  persistence:
+    enabled: true
+    type: pvc
+    accessModes: [ReadWriteOnce]
+    size: 2Gi
+  # grafana.ini settings for path-based routing via /grafana
+  grafana.ini:
+    server:
+      root_url: "%(protocol)s://%(domain)s:%(http_port)s/grafana"
+      serve_from_sub_path: true
+  # Add Loki as a datasource
+  additionalDataSources:
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://loki.monitoring.svc.cluster.local:3100
+    jsonData:
+      maxLines: 1000

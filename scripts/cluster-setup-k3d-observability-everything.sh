@@ -12,9 +12,21 @@ source vars.sh
 
 k3d cluster delete $CLUSTER_NAME
 
+# Create local directory for persistent data if it doesn't exist
+echo "Creating local directory for persistent data in $PERSISTENT_DATA_PATH..."
+mkdir -p $PERSISTENT_DATA_PATH
+echo
+
 # Create the k3d cluster
 
 k3d cluster create $CLUSTER_NAME -c cluster-k3d/k3d-cluster.yaml --port 7001:80@loadbalancer --port 7401:443@loadbalancer --api-port 0.0.0.0:7601
+k3d cluster create $CLUSTER_NAME \
+    -c cluster-k3d/k3d-cluster.yaml \
+    --port 7001:80@loadbalancer \
+    --port 7401:443@loadbalancer \
+    --port "$SYSLOG_PORT:$SYSLOG_PORT/udp@loadbalancer" \
+    --volume "$PERSISTENT_DATA_PATH:/var/lib/rancher/k3s/storage@all" \
+    --api-port 0.0.0.0:7601
 k3d cluster list
 
 # Configure the kubectl context(s)
@@ -33,16 +45,69 @@ echo
 # Install 'kagent' using Helm
 
 helm install kagent-crds oci://ghcr.io/kagent-dev/kagent/helm/kagent-crds \
+helm upgrade -i kagent-crds oci://ghcr.io/kagent-dev/kagent/helm/kagent-crds \
     --namespace $KAGENT_NAMESPACE \
     --create-namespace \
+    --wait \
     --kube-context $KUBECTX_NAME
 echo
 helm install kagent oci://ghcr.io/kagent-dev/kagent/helm/kagent \
+helm upgrade -i kagent oci://ghcr.io/kagent-dev/kagent/helm/kagent \
     --namespace $KAGENT_NAMESPACE \
     --set providers.openAI.apiKey=$OPENAI_API_KEY \
+    --wait \
     --kube-context $KUBECTX_NAME
 echo
 watch -n 1 kubectl get all -n $KAGENT_NAMESPACE --context $KUBECTX_NAME
+echo
+
+# --- Observability Stack ---
+
+echo "Installing Observability Stack (Prometheus, Grafana, Loki)..."
+echo "This may take a few minutes."
+
+# Add Helm repos
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo add grafana https://grafana.github.io/helm-charts
+helm repo add unpoller https://unpoller.github.io/helm-charts
+helm repo update
+
+# Install kube-prometheus-stack
+echo "Installing kube-prometheus-stack..."
+helm upgrade -i kube-prometheus-stack prometheus-community/kube-prometheus-stack \
+    --namespace $MONITORING_NAMESPACE \
+    --create-namespace \
+    -f manifests/monitoring/kube-prometheus-stack-values.yaml \
+    --set grafana.adminPassword=$GRAFANA_ADMIN_PASSWORD \
+    --wait \
+    --kube-context $KUBECTX_NAME
+
+# Install loki-stack
+# NOTE: Ensure grafana is disabled in your loki-stack-values.yaml to avoid conflicts
+# with the Grafana from kube-prometheus-stack.
+# e.g., in loki-stack-values.yaml:
+# grafana:
+#   enabled: false
+echo "Installing loki-stack..."
+helm upgrade -i loki grafana/loki-stack \
+    --namespace $MONITORING_NAMESPACE \
+    -f manifests/monitoring/loki-stack-values.yaml \
+    --wait \
+    --kube-context $KUBECTX_NAME
+
+echo "Installing unpoller for UniFi metrics..."
+helm upgrade -i unpoller unpoller/unpoller \
+    --namespace $MONITORING_NAMESPACE \
+    -f manifests/monitoring/unpoller-values.yaml \
+    --set "unpoller.unifi.controller.url=$UNIFI_CONTROLLER_URL" \
+    --set "unpoller.unifi.controller.user=$UNIFI_CONTROLLER_USER" \
+    --set "unpoller.unifi.controller.pass=$UNIFI_CONTROLLER_PASS" \
+    --wait \
+    --kube-context $KUBECTX_NAME
+
+
+echo "Waiting for observability stack to be ready... Press Ctrl+C to continue."
+watch -n 1 kubectl get all -n $MONITORING_NAMESPACE --context $KUBECTX_NAME
 echo
 
 # Install the Kubernetes Gateway API CRDs
@@ -53,11 +118,13 @@ echo
 # Install 'kgateway' CRDs using Helm
 
 helm upgrade -i --create-namespace --namespace $KGATEWAY_NAMESPACE --version v${KGATEWAY_VERSION} kgateway-crds oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds --set controller.image.pullPolicy=Always
+helm upgrade -i --create-namespace --namespace $KGATEWAY_NAMESPACE --version v${KGATEWAY_VERSION} kgateway-crds oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds --set controller.image.pullPolicy=Always --wait
 echo
 
 # Install 'kgateway' using Helm
 
 helm upgrade -i --namespace $KGATEWAY_NAMESPACE --version v${KGATEWAY_VERSION} kgateway oci://cr.kgateway.dev/kgateway-dev/charts/kgateway --set controller.image.pullPolicy=Always
+helm upgrade -i --namespace $KGATEWAY_NAMESPACE --version v${KGATEWAY_VERSION} kgateway oci://cr.kgateway.dev/kgateway-dev/charts/kgateway --set controller.image.pullPolicy=Always --wait
 echo
 
 # Check our 'kgateway' installation
@@ -72,11 +139,30 @@ echo
 kubectl get gateways -A
 echo
 
+# Apply custom monitoring resources
+echo "Applying custom monitoring resources (Probes, Alerts)..."
+kubectl apply -k manifests/monitoring/probes --context $KUBECTX_NAME
+kubectl apply -k manifests/monitoring/alerts --context $KUBECTX_NAME
+echo
+
 # Create an HTTPRoute for 'kagent'
 
 kubectl apply -f manifests/kagent-httproute.yaml
 echo
+
+# Create an HTTPRoute for 'grafana'
+
+kubectl apply -f manifests/monitoring/grafana-httproute.yaml
+echo
+
 kubectl get httproute -A
 echo
+
+echo "Grafana should be available at http://localhost:7001/grafana"
+echo "Login with user 'admin' and password '$GRAFANA_ADMIN_PASSWORD'."
+echo
+echo "Syslog is exposed on UDP port $SYSLOG_PORT on your host."
+echo "Configure your devices to send syslog to udp://<your_host_ip>:$SYSLOG_PORT"
+echo "UniFi dashboards have been added to Grafana."
 
 exit 0
