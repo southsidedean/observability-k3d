@@ -14,7 +14,7 @@ k3d cluster delete $CLUSTER_NAME
 
 # Create local directory for persistent data if it doesn't exist
 echo "Creating local directory for persistent data in $PERSISTENT_DATA_PATH..."
-mkdir -p $PERSISTENT_DATA_PATH
+sudo mkdir -p $PERSISTENT_DATA_PATH
 echo
 
 # Create the k3d cluster
