@@ -14,7 +14,9 @@ k3d cluster delete $CLUSTER_NAME
 
 # Create local directory for persistent data if it doesn't exist
 echo "Creating local directory for persistent data in $PERSISTENT_DATA_PATH..."
-sudo mkdir -p $PERSISTENT_DATA_PATH
+# The user running this script needs write permissions to the parent directory of PERSISTENT_DATA_PATH.
+# If this path is in a privileged location (e.g., /media), you may need to create it manually with 'sudo' first.
+mkdir -p $PERSISTENT_DATA_PATH
 echo
 
 # Create the k3d cluster
@@ -54,8 +56,9 @@ helm upgrade -i kagent oci://ghcr.io/kagent-dev/kagent/helm/kagent \
     --set providers.openAI.apiKey=$OPENAI_API_KEY \
     --wait \
     --kube-context $KUBECTX_NAME
-echo
-watch -n 1 kubectl get all -n $KAGENT_NAMESPACE --context $KUBECTX_NAME
+echo "kagent installation complete. Current status:"
+kubectl get all -n $KAGENT_NAMESPACE --context $KUBECTX_NAME
+echo "You can watch the status with: watch -n 1 kubectl get all -n $KAGENT_NAMESPACE --context $KUBECTX_NAME"
 echo
 
 # --- Observability Stack ---
@@ -102,9 +105,10 @@ helm upgrade -i unpoller unpoller/unpoller \
     --wait \
     --kube-context $KUBECTX_NAME
 
-
-echo "Waiting for observability stack to be ready... Press Ctrl+C to continue."
-watch -n 1 kubectl get all -n $MONITORING_NAMESPACE --context $KUBECTX_NAME
+echo "Observability stack installation complete. Current status:"
+kubectl get all -n $MONITORING_NAMESPACE --context $KUBECTX_NAME
+echo "You can watch the status with: watch -n 1 kubectl get all -n $MONITORING_NAMESPACE --context $KUBECTX_NAME"
+echo "It may take a few minutes for all pods to become ready."
 echo
 
 # Install the Kubernetes Gateway API CRDs
@@ -124,7 +128,9 @@ echo
 
 # Check our 'kgateway' installation
 
-watch -n 1 kubectl get all -n $KGATEWAY_NAMESPACE
+echo "kgateway installation complete. Current status:"
+kubectl get all -n $KGATEWAY_NAMESPACE
+echo "You can watch the status with: watch -n 1 kubectl get all -n $KGATEWAY_NAMESPACE"
 echo
 
 # Create an HTTP listener
@@ -136,6 +142,7 @@ echo
 
 # Apply custom monitoring resources
 echo "Applying custom monitoring resources (Probes, Alerts)..."
+kubectl apply -k manifests/monitoring/probes --context $KUBECTX_NAME
 kubectl apply -k manifests/monitoring/alerts --context $KUBECTX_NAME
 echo
 

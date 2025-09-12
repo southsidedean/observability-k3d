@@ -1,24 +1,18 @@
 # observability-k3d
 
-## Tom Dean
-## Last edit: 9/2/25
-## Last edit: 9/12/2025
-
-## *INITIAL DRAFT - UNDER DEVELOPMENT*
 ## Introduction
 
-***This code is not at a functional state yet.  Still testing / debugging.***
 This repository provides scripts and manifests to quickly stand up a local Kubernetes cluster using `k3d` with a comprehensive observability stack. The stack is designed for home lab environments, particularly those using Ubiquiti UniFi network gear.
 
-## Introduction
 The following components are installed:
 - **Prometheus:** For metrics collection and alerting.
 - **Grafana:** For visualization and dashboards.
 - **Loki:** For log aggregation.
 - **Promtail:** For shipping logs to Loki, including a syslog listener.
 - **Unpoller:** For exporting detailed metrics from a UniFi Controller to Prometheus.
+- **kagent & kgateway:** For AI-assisted Kubernetes operations and simplified ingress.
 
-Introduction.
+Data for Prometheus, Grafana, and Loki is persisted to a local directory on your host machine to survive cluster restarts.
 
 ## Prerequisites
 
@@ -37,19 +31,15 @@ If you don't have the following, you're gonna have a bad time:
 
 Everything else is self-contained, just run the script to create the cluster(s).
 
-## About the Observability Cluster
 ### Configuration
 
-Introduction
 Before running the setup script, you must configure the environment variables in `vars.sh`:
 
-All the Helm `values` files and other YAML manifests live in the `manifest` directory:
 - `PERSISTENT_DATA_PATH`: The local directory on your host machine where monitoring data will be stored (e.g., `/media/content/observability`).
 - `UNIFI_CONTROLLER_URL`, `UNIFI_CONTROLLER_USER`, `UNIFI_CONTROLLER_PASS`: Credentials for a **read-only** user on your UniFi Controller.
 - `OPENAI_API_KEY`: (Optional) Your API key for OpenAI if you intend to use the AI features of `kagent`.
 
 ### Usage
-
 The primary script `scripts/cluster-setup-k3d-observability-everything.sh` automates the entire process.
 
 1.  **Configure variables:** Edit `vars.sh` as described above.
@@ -72,7 +62,7 @@ Once the script is complete, you can access the services:
 
 - **Grafana:** `http://localhost:7001/grafana`
   - **Login:** `admin` / password set in `GRAFANA_ADMIN_PASSWORD` from `vars.sh`.
-- **kagent:** `http://localhost:7001/kagent` (The path is defined in `manifests/kagent-httproute.yaml`)
+- **kagent UI:** `http://localhost:7001/kagent`
 - **Syslog:** Your host machine will listen for syslog messages on UDP port `1514` (or as configured in `SYSLOG_PORT`). Configure your devices (like UniFi gear or Ubuntu servers) to send logs to `udp://<your_host_ip>:1514`.
 
 ### Querying Syslog Data
@@ -86,33 +76,33 @@ For example, to see logs from a device named `unifi-dream-machine`, use the foll
 ### Repository Structure
 
 ```bash
-manifests
-├── grafana-ingress.yaml
-├── grafana-values.yaml
-├── http-listener.yaml
-├── kagent-httproute.yaml
-├── kagent-values.yaml
-├── monitoring
-│   ├── alerts
-│   │   ├── kustomization.yaml
-│   │   └── prometheus-rules.yaml
-│   ├── kustomization.yaml
-│   │   └── unifi-prometheus-rules.yaml
-│   ├── probes
-│   │   ├── kustomization.yaml
-│   │   ├── probe-dns.yaml
-│   │   ├── probe-gateway.yaml
-│   │   └── probe-websites.yaml
-│   ├── grafana-httproute.yaml
-│   ├── kube-prometheus-stack-values.yaml
-│   ├── loki-stack-values.yaml
-│   └── probes
-│       ├── kustomization.yaml
-│       ├── probe-dns.yaml
-│       ├── probe-gateway.yaml
-│       └── probe-websites.yaml
-│   └── unpoller-values.yaml
-└── registries.yaml
+.
+├── README.md
+├── cluster-k3d
+│   └── k3d-cluster.yaml
+├── manifests
+│   ├── http-listener.yaml
+│   ├── kagent-httproute.yaml
+│   ├── monitoring
+│   │   ├── alerts
+│   │   │   ├── kustomization.yaml
+│   │   │   ├── prometheus-rules.yaml
+│   │   │   └── unifi-prometheus-rules.yaml
+│   │   ├── grafana-httproute.yaml
+│   │   ├── kube-prometheus-stack-values.yaml
+│   │   ├── loki-stack-values.yaml
+│   │   ├── probes
+│   │   │   ├── kustomization.yaml
+│   │   │   ├── probe-dns.yaml
+│   │   │   ├── probe-gateway.yaml
+│   │   │   └── probe-websites.yaml
+│   │   └── unpoller-values.yaml
+│   └── registries.yaml
+├── scripts
+│   ├── cluster-destroy-k3d.sh
+│   ├── cluster-setup-k3d-naked.sh
+│   └── cluster-setup-k3d-observability-everything.sh
+└── vars.sh
 ```
 
 If you want to tweak the variables for the scripts, look in the `vars.sh` file.
