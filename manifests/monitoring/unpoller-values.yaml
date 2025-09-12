@@ -3,11 +3,11 @@
 
 unpoller:
   # UniFi Controller credentials will be passed in via the setup script.
-  unifi:
-    controller:
-      url: $UNIFI_CONTROLLER_URL
-      user: $UNIFI_CONTROLLER_USER
-      pass: $UNIFI_CONTROLLER_PASS
+  # unifi:
+  #   controller:
+  #     url: https://unifi.yourdomain.com
+  #     user: unifipoller
+  #     pass: your_password_here
 
   # Create a ServiceMonitor for Prometheus to scrape metrics.
   prometheus:

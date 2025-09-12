@@ -4,6 +4,23 @@
 # Tom Dean
 # Last edit: 9/12/2025
 
+# --- Helper Functions ---
+
+check_command() {
+    if ! command -v "$1" &> /dev/null; then
+        echo "Error: '$1' command not found. Please install it and ensure it's in your PATH."
+        exit 1
+    fi
+}
+
+# --- Prerequisite Checks ---
+
+check_command k3d
+check_command helm
+check_command kubectl
+check_command kubectx
+check_command curl
+
 # Set environment variables
 
 source vars.sh
