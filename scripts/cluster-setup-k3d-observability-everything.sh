@@ -35,7 +35,7 @@ echo
 helm install kagent-crds oci://ghcr.io/kagent-dev/kagent/helm/kagent-crds \
     --namespace $KAGENT_NAMESPACE \
     --create-namespace \
-    --kube-context $kKUBECTX_NAME
+    --kube-context $KUBECTX_NAME
 echo
 helm install kagent oci://ghcr.io/kagent-dev/kagent/helm/kagent \
     --namespace $KAGENT_NAMESPACE \
