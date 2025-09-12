@@ -157,17 +157,16 @@ echo
 kubectl get gateways -A
 echo
 
-# Apply custom monitoring resources
-echo "Applying custom monitoring resources (Probes, Alerts)..."
-kubectl apply -k manifests/monitoring/probes --context $KUBECTX_NAME
-kubectl apply -k manifests/monitoring/alerts --context $KUBECTX_NAME
-echo
-
 # Create an HTTPRoute for 'kagent'
 
 kubectl apply -f manifests/kagent-httproute.yaml
 echo
 
+# Apply custom monitoring resources
+echo "Applying custom monitoring resources (Probes, Alerts, Dashboards)..."
+kubectl apply -k manifests/monitoring/probes --context $KUBECTX_NAME
+kubectl apply -k manifests/monitoring/alerts --context $KUBECTX_NAME
+kubectl apply -k manifests/monitoring/dashboards --context $KUBECTX_NAME
 # Create an HTTPRoute for 'grafana'
 
 kubectl apply -f manifests/monitoring/grafana-httproute.yaml

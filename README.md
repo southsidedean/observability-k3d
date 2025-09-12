@@ -80,21 +80,25 @@ For example, to see logs from a device named `unifi-dream-machine`, use the foll
 ├── README.md
 ├── cluster-k3d
 │   └── k3d-cluster.yaml
-├── manifests
+├── manifests/
+│   ├── dashboards
+│   │   ├── blackbox-exporter-dashboard.yaml
+│   │   └── kustomization.yaml
 │   ├── http-listener.yaml
 │   ├── kagent-httproute.yaml
 │   ├── monitoring
 │   │   ├── alerts
 │   │   │   ├── kustomization.yaml
+│   │   │   ├── k8s-resource-alerts.yaml
 │   │   │   ├── prometheus-rules.yaml
 │   │   │   └── unifi-prometheus-rules.yaml
 │   │   ├── grafana-httproute.yaml
 │   │   ├── kube-prometheus-stack-values.yaml
 │   │   ├── loki-stack-values.yaml
 │   │   ├── probes
-│   │   │   ├── kustomization.yaml
 │   │   │   ├── probe-dns.yaml
 │   │   │   ├── probe-gateway.yaml
+│   │   │   ├── probe-k8s-apiserver.yaml
 │   │   │   └── probe-websites.yaml
 │   │   └── unpoller-values.yaml
 │   └── registries.yaml

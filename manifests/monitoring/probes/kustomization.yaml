@@ -1,0 +1,8 @@
+# manifests/monitoring/probes/kustomization.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - probe-dns.yaml
+  - probe-gateway.yaml
+  - probe-websites.yaml
+  - probe-k8s-apiserver.yaml

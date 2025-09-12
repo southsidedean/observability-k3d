@@ -30,6 +30,26 @@ prometheus:
             requests:
               storage: 10Gi
 
+prometheus-blackbox-exporter:
+  enabled: true
+  config:
+    modules:
+      http_2xx:
+        prober: http
+        timeout: 5s
+        http:
+          valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+          follow_redirects: true
+          preferred_ip_protocol: "ip4"
+      # Custom module for probing in-cluster services over HTTPS
+      http_k8s_service:
+        prober: http
+        timeout: 5s
+        http:
+          bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+          tls_config:
+            ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+
 grafana:
   enabled: true
   ingress:
