@@ -73,6 +73,28 @@ For example, to see logs from a device named `unifi-dream-machine`, use the foll
 
 `{job="syslog", host="unifi-dream-machine"}`
 
+### Monitoring External Hosts (e.g., Ubuntu Servers)
+
+This stack is pre-configured to monitor external Linux hosts using `node-exporter`.
+
+1.  **Install Node Exporter:** On each Ubuntu server you want to monitor, install and enable the `node-exporter` service.
+    ```bash
+    sudo apt-get install prometheus-node-exporter
+    sudo systemctl start node-exporter
+    sudo systemctl enable node-exporter
+    ```
+    Verify it's running by visiting `http://<your_ubuntu_ip>:9100/metrics`.
+
+2.  **Configure Prometheus:** Open `manifests/monitoring/kube-prometheus-stack-values.yaml`. Find the `additionalScrapeConfigs` section and add the IP addresses and port (`9100`) of your Ubuntu servers to the `targets` list.
+
+3.  **Re-run the setup script:** Execute `./scripts/cluster-setup-k3d-observability-everything.sh` again to apply the new configuration.
+
+Once complete, the "Node Exporter Full" dashboard will be populated with metrics from your servers, and the new host-level alerts will be active.
+
+### UniFi Dashboards
+
+The `unpoller` component automatically installs a comprehensive set of Grafana dashboards for your UniFi devices. Look for dashboards with "UniFi" in the title in your Grafana instance.
+
 ### Repository Structure
 
 ```bash
@@ -82,14 +104,16 @@ For example, to see logs from a device named `unifi-dream-machine`, use the foll
 │   └── k3d-cluster.yaml
 ├── manifests/
 │   ├── dashboards
-│   │   ├── blackbox-exporter-dashboard.yaml
-│   │   └── kustomization.yaml
+│   │   ├── blackbox-exporter-dashboard.yaml # Dashboard for Probes
+│   │   ├── kustomization.yaml
+│   │   └── node-exporter-dashboard.yaml   # Dashboard for Linux Hosts
 │   ├── http-listener.yaml
 │   ├── kagent-httproute.yaml
 │   ├── monitoring
 │   │   ├── alerts
 │   │   │   ├── kustomization.yaml
 │   │   │   ├── k8s-resource-alerts.yaml
+│   │   │   ├── node-exporter-alerts.yaml
 │   │   │   ├── prometheus-rules.yaml
 │   │   │   └── unifi-prometheus-rules.yaml
 │   │   ├── grafana-httproute.yaml

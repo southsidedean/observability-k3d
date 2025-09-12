@@ -29,6 +29,16 @@ prometheus:
           resources:
             requests:
               storage: 10Gi
+    # Add this section to scrape external node-exporter instances.
+    # You must install node-exporter on your Ubuntu hosts and add their IPs here.
+    additionalScrapeConfigs:
+      - job_name: 'node-exporter'
+        static_configs:
+          - targets:
+            # - '192.168.1.10:9100' # <--- Add your Ubuntu host IPs here
+            # - '192.168.1.11:9100'
+            labels:
+              group: 'linux-servers'
 
 prometheus-blackbox-exporter:
   enabled: true
