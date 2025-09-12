@@ -9,5 +9,5 @@ spec:
       namespace: kgateway-system
   rules:
     - backendRefs:
-        - name: kagent
+        - name: kagent-ui
           port: 80
