@@ -1,0 +1,19 @@
+# manifests/monitoring/unpoller-values.yaml
+# Values for unpoller
+
+# UniFi Controller credentials will be passed in via the setup script.
+# unifi:
+#   controller:
+#     url: https://unifi.yourdomain.com
+#     user: unifipoller
+#     pass: your_password_here
+
+# Create a ServiceMonitor for Prometheus to scrape metrics.
+prometheus:
+  serviceMonitor:
+    enabled: true
+
+# Automatically import Grafana dashboards.
+grafana:
+  dashboards:
+    enabled: true

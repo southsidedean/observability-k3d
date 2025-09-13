@@ -112,12 +112,15 @@ helm upgrade -i loki grafana/loki-stack \
     --wait \
     --kube-context $KUBECTX_NAME
 
+# Install unpoller for UniFi metrics
 echo "Installing unpoller for UniFi metrics..."
-helm upgrade -i unpoller unpoller/unpoller \
-    --namespace $MONITORING_NAMESPACE \
-    -f manifests/monitoring/unpoller-values.yaml \
-    --wait \
-    --kube-context $KUBECTX_NAME
+kubectl apply -f manifests/monitoring/unpoller.yaml
+
+# helm upgrade -i unpoller unpoller/unpoller \
+#    --namespace $MONITORING_NAMESPACE \
+#    -f manifests/monitoring/unpoller-values.yaml \
+#    --wait \
+#    --kube-context $KUBECTX_NAME
 
 #helm upgrade -i unpoller unifi-poller/unpoller \
 #    --namespace $MONITORING_NAMESPACE \
