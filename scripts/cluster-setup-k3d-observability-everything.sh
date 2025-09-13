@@ -115,7 +115,7 @@ helm upgrade -i loki grafana/loki-stack \
 echo "Installing unpoller for UniFi metrics..."
 helm upgrade -i unpoller unpoller/unpoller \
     --namespace $MONITORING_NAMESPACE \
-    -f "manifests/monitoring/unpoller-values.yaml" \
+    -f manifests/monitoring/unpoller-values.yaml \
     --set "unpoller.unifi.controller.url=$UNIFI_CONTROLLER_URL" \
     --set "unpoller.unifi.controller.user=$UNIFI_CONTROLLER_USER" \
     --set "unpoller.unifi.controller.pass=$UNIFI_CONTROLLER_PASS" \
