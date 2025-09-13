@@ -86,7 +86,7 @@ echo "This may take a few minutes."
 # Add Helm repos
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 helm repo add grafana https://grafana.github.io/helm-charts
-helm repo add unpoller https://unpoller.github.io/helm-charts
+helm repo add unpoller https://unpoller.github.io/helm-chart
 helm repo update
 
 # Install kube-prometheus-stack
