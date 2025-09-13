@@ -12,10 +12,6 @@ loki:
     size: 10Gi
 
 promtail:
-  # Configuration for receiving syslog
-  syslog:
-    port: 1514
-    containerPort: 1514
   config:
     snippets:
       # Syslog receiver configuration
@@ -39,9 +35,9 @@ promtail:
   # Expose the syslog port via a Service
   extraPorts:
     syslog:
-      name: syslog-tcp
+      name: syslog-udp
       port: 1514 # This port must match SYSLOG_PORT in vars.sh
-      protocol: TCP
+      protocol: UDP
       targetPort: 1514
 
 # The setup script creates a LoadBalancer service via k3d port-mapping.
