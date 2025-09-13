@@ -86,7 +86,7 @@ echo "This may take a few minutes."
 # Add Helm repos
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 helm repo add grafana https://grafana.github.io/helm-charts
-helm repo add unpoller https://unpoller.github.io/helm-chart
+helm repo add unifi-poller https://unpoller.github.io/helm-chart
 helm repo update
 
 # Install kube-prometheus-stack
@@ -113,7 +113,7 @@ helm upgrade -i loki grafana/loki-stack \
     --kube-context $KUBECTX_NAME
 
 echo "Installing unpoller for UniFi metrics..."
-helm upgrade -i unpoller unpoller/unpoller \
+helm upgrade -i unpoller unifi-poller/unpoller \
     --namespace $MONITORING_NAMESPACE \
     -f manifests/monitoring/unpoller-values.yaml \
     --set "unpoller.unifi.controller.url=$UNIFI_CONTROLLER_URL" \
