@@ -13,9 +13,9 @@ loki:
 
 promtail:
   # Configuration for receiving syslog
-  syslog:
-    port: 1514
-    containerPort: 1514
+  #syslog:
+  #  port: 1514
+  #  containerPort: 1514
   config:
     snippets:
       # Syslog receiver configuration
@@ -41,6 +41,7 @@ promtail:
     syslog:
       name: syslog-tcp
       port: 1514 # This port must match SYSLOG_PORT in vars.sh
+      containerPort: 1514
       protocol: TCP
       targetPort: 1514
 
