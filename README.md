@@ -54,20 +54,27 @@ This script will:
 - Deploy the full observability stack (Prometheus, Grafana, Loki, Unpoller).
 - Apply custom monitoring rules and gateway routes.
 
+#### Other Scripts
+
+- **Destroy Cluster:** To tear down the cluster and its resources, use `scripts/cluster-destroy-k3d.sh`.
+- **Naked Cluster:** For advanced users who want to build their own setup, `scripts/cluster-setup-k3d-naked.sh` creates a cluster with `k3d` but does not deploy any of the observability or `kagent` components.
+
 To destroy the cluster, use the `scripts/cluster-destroy-k3d.sh` script.
 
 ### Accessing Services
 
-Once the script is complete, you can access the services:
+Once the script is complete, you can access the services via the `kgateway` ingress running on `localhost:7001`:
 
 - **Grafana:** `http://localhost:7001/grafana`
   - **Login:** `admin` / password set in `GRAFANA_ADMIN_PASSWORD` from `vars.sh`.
 - **kagent UI:** `http://localhost:7001/kagent`
 - **Syslog:** Your host machine will listen for syslog messages on UDP port `1514` (or as configured in `SYSLOG_PORT`). Configure your devices (like UniFi gear or Ubuntu servers) to send logs to `udp://<your_host_ip>:1514`.
 
-### Querying Syslog Data
+### Monitoring Capabilities
 
-The system is configured to separate logs from each device. In Grafana's "Explore" view with the Loki data source, you can query for logs from a specific host using its hostname or IP address.
+#### Querying Syslog Data in Grafana
+
+The system is configured to separate logs from each device. In Grafana's "Explore" view with the Loki data source, you can query for logs from a specific host using its `host` label.
 
 For example, to see logs from a device named `unifi-dream-machine`, use the following LogQL query:
 
@@ -75,7 +82,7 @@ For example, to see logs from a device named `unifi-dream-machine`, use the foll
 
 ### Monitoring External Hosts (e.g., Ubuntu Servers)
 
-This stack is pre-configured to monitor external Linux hosts using `node-exporter`.
+This stack is pre-configured to monitor external Linux hosts using Prometheus `node-exporter`.
 
 1.  **Install Node Exporter:** On each Ubuntu server you want to monitor, install and enable the `node-exporter` service.
     ```bash
@@ -90,42 +97,30 @@ This stack is pre-configured to monitor external Linux hosts using `node-exporte
 3.  **Re-run the setup script:** Execute `./scripts/cluster-setup-k3d-observability-everything.sh` again to apply the new configuration.
 
 Once complete, the "Node Exporter Full" dashboard will be populated with metrics from your servers, and the new host-level alerts will be active.
-
-### UniFi Dashboards
+#### UniFi Dashboards
 
 The `unpoller` component automatically installs a comprehensive set of Grafana dashboards for your UniFi devices. Look for dashboards with "UniFi" in the title in your Grafana instance.
 
 ### Repository Structure
 
 ```bash
-.
+observability-k3d/
 ├── README.md
 ├── cluster-k3d
 │   └── k3d-cluster.yaml
-├── manifests/
+├── manifests
 │   ├── dashboards
-│   │   ├── blackbox-exporter-dashboard.yaml # Dashboard for Probes
-│   │   ├── kustomization.yaml
-│   │   └── node-exporter-dashboard.yaml   # Dashboard for Linux Hosts
+│   │   ├── blackbox-exporter-dashboard.yaml
+│   │   └── node-exporter-dashboard.yaml
 │   ├── http-listener.yaml
 │   ├── kagent-httproute.yaml
 │   ├── monitoring
 │   │   ├── alerts
-│   │   │   ├── kustomization.yaml
-│   │   │   ├── k8s-resource-alerts.yaml
-│   │   │   ├── node-exporter-alerts.yaml
-│   │   │   ├── prometheus-rules.yaml
-│   │   │   └── unifi-prometheus-rules.yaml
 │   │   ├── grafana-httproute.yaml
 │   │   ├── kube-prometheus-stack-values.yaml
 │   │   ├── loki-stack-values.yaml
 │   │   ├── probes
-│   │   │   ├── probe-dns.yaml
-│   │   │   ├── probe-gateway.yaml
-│   │   │   ├── probe-k8s-apiserver.yaml
-│   │   │   └── probe-websites.yaml
 │   │   └── unpoller-values.yaml
-│   └── registries.yaml
 ├── scripts
 │   ├── cluster-destroy-k3d.sh
 │   ├── cluster-setup-k3d-naked.sh
