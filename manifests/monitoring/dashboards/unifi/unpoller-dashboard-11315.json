@@ -1,0 +1,23 @@
+{
+  "title": "Client Insights (placeholder until vendor script runs)",
+  "uid": "client-insights",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "panels": [
+    {
+      "type": "text",
+      "title": "Pending Download",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 3
+      },
+      "options": {
+        "content": "Run scripts/vendor-unifi-dashboards.sh to fetch the official dashboard JSON.",
+        "mode": "markdown"
+      }
+    }
+  ]
+}

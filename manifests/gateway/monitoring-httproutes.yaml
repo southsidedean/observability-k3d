@@ -1,0 +1,124 @@
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: HTTPRoute
+metadata:
+  name: grafana-route
+  namespace: monitoring
+spec:
+  parentRefs:
+    - name: http
+      namespace: kgateway
+  hostnames: ["localhost"]
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /grafana
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path:
+              type: ReplacePrefixMatch
+              replacement: /
+      backendRefs:
+        - name: grafana
+          port: 80
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: HTTPRoute
+metadata:
+  name: prometheus-route
+  namespace: monitoring
+spec:
+  parentRefs:
+    - name: http
+      namespace: kgateway
+  hostnames: ["localhost"]
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /prometheus
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path:
+              type: ReplacePrefixMatch
+              replacement: /
+      backendRefs:
+        - name: kube-prometheus-stack-prometheus
+          port: 9090
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: HTTPRoute
+metadata:
+  name: alertmanager-route
+  namespace: monitoring
+spec:
+  parentRefs:
+    - name: http
+      namespace: kgateway
+  hostnames: ["localhost"]
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /alertmanager
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path:
+              type: ReplacePrefixMatch
+              replacement: /
+      backendRefs:
+        - name: kube-prometheus-stack-alertmanager
+          port: 9093
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: HTTPRoute
+metadata:
+  name: loki-route
+  namespace: monitoring
+spec:
+  parentRefs:
+    - name: http
+      namespace: kgateway
+  hostnames: ["localhost"]
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /loki
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path:
+              type: ReplacePrefixMatch
+              replacement: /
+      backendRefs:
+        - name: loki-stack
+          port: 3100
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: HTTPRoute
+metadata:
+  name: unpoller-route
+  namespace: monitoring
+spec:
+  parentRefs:
+    - name: http
+      namespace: kgateway
+  hostnames: ["localhost"]
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /unpoller
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path:
+              type: ReplacePrefixMatch
+              replacement: /
+      backendRefs:
+        - name: unpoller
+          port: 9130

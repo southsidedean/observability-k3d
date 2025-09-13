@@ -1,0 +1,20 @@
+grafana:
+  adminUser: admin
+  adminPassword: admin
+  service:
+    type: ClusterIP
+  persistence:
+    enabled: true
+    storageClassName: local-path
+    size: 10Gi
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      labelValue: "1"
+      searchNamespace: ALL
+    datasources:
+      enabled: true
+  env:
+    GF_SERVER_ROOT_URL: "%(protocol)s://%(domain)s/grafana/"
+    GF_SERVER_SERVE_FROM_SUB_PATH: "true"
