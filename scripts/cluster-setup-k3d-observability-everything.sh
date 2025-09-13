@@ -116,11 +116,17 @@ echo "Installing unpoller for UniFi metrics..."
 helm upgrade -i unpoller unifi-poller/unpoller \
     --namespace $MONITORING_NAMESPACE \
     -f manifests/monitoring/unpoller-values.yaml \
+    --wait \
+    --kube-context $KUBECTX_NAME
+
+#helm upgrade -i unpoller unifi-poller/unpoller \
+#    --namespace $MONITORING_NAMESPACE \
+#    -f manifests/monitoring/unpoller-values.yaml \
 #    --set "unifi.url=$UNIFI_CONTROLLER_URL" \
 #    --set "unifi.user=$UNIFI_CONTROLLER_USER" \
 #    --set "unifi.pass=$UNIFI_CONTROLLER_PASS" \
-    --wait \
-    --kube-context $KUBECTX_NAME
+#    --wait \
+#    --kube-context $KUBECTX_NAME
 
 echo "Observability stack installation complete. Current status:"
 kubectl get all -n $MONITORING_NAMESPACE --context $KUBECTX_NAME
