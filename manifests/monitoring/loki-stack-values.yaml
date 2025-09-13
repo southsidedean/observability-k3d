@@ -13,6 +13,9 @@ loki:
 
 promtail:
   # Configuration for receiving syslog
+  syslog:
+    port: 1514
+    containerPort: 1514
   config:
     snippets:
       # Syslog receiver configuration
