@@ -116,9 +116,9 @@ echo "Installing unpoller for UniFi metrics..."
 helm upgrade -i unpoller unifi-poller/unpoller \
     --namespace $MONITORING_NAMESPACE \
     -f manifests/monitoring/unpoller-values.yaml \
-    --set "unifi.url=$UNIFI_CONTROLLER_URL" \
-    --set "unifi.user=$UNIFI_CONTROLLER_USER" \
-    --set "unifi.pass=$UNIFI_CONTROLLER_PASS" \
+#    --set "unifi.url=$UNIFI_CONTROLLER_URL" \
+#    --set "unifi.user=$UNIFI_CONTROLLER_USER" \
+#    --set "unifi.pass=$UNIFI_CONTROLLER_PASS" \
     --wait \
     --kube-context $KUBECTX_NAME
 
