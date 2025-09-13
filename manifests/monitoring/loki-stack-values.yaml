@@ -36,9 +36,9 @@ promtail:
   # Expose the syslog port via a Service
   extraPorts:
     syslog:
-      name: syslog-udp
+      name: syslog-tcp
       port: 1514 # This port must match SYSLOG_PORT in vars.sh
-      protocol: UDP
+      protocol: TCP
       targetPort: 1514
 
 # The setup script creates a LoadBalancer service via k3d port-mapping.
