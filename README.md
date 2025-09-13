@@ -68,7 +68,7 @@ Once the script is complete, you can access the services via the `kgateway` ingr
 - **Grafana:** `http://localhost:7001/grafana`
   - **Login:** `admin` / password set in `GRAFANA_ADMIN_PASSWORD` from `vars.sh`.
 - **kagent UI:** `http://localhost:7001/kagent`
-- **Syslog:** Your host machine will listen for syslog messages on UDP port `1514` (or as configured in `SYSLOG_PORT`). Configure your devices (like UniFi gear or Ubuntu servers) to send logs to `udp://<your_host_ip>:1514`.
+- **Syslog:** Your host machine will listen for syslog messages on TCP port `1514` (or as configured in `SYSLOG_PORT`). Configure your devices (like UniFi gear or Ubuntu servers) to send logs to `tcp://<your_host_ip>:1514`.
 
 ### Monitoring Capabilities
 

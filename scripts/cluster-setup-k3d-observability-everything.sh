@@ -42,7 +42,7 @@ k3d cluster create $CLUSTER_NAME \
     -c cluster-k3d/k3d-cluster.yaml \
     --port 7001:80@loadbalancer \
     --port 7401:443@loadbalancer \
-    --port "$SYSLOG_PORT:$SYSLOG_PORT/udp@loadbalancer" \
+    --port "$SYSLOG_PORT:$SYSLOG_PORT/tcp@loadbalancer" \
     --volume "$PERSISTENT_DATA_PATH:/var/lib/rancher/k3s/storage@all" \
     --api-port 0.0.0.0:7601
 k3d cluster list
@@ -178,8 +178,8 @@ echo
 echo "Grafana should be available at http://localhost:7001/grafana"
 echo "Login with user 'admin' and password '$GRAFANA_ADMIN_PASSWORD'."
 echo
-echo "Syslog is exposed on UDP port $SYSLOG_PORT on your host."
-echo "Configure your devices to send syslog to udp://<your_host_ip>:$SYSLOG_PORT"
+echo "Syslog is exposed on TCP port $SYSLOG_PORT on your host."
+echo "Configure your devices to send syslog to tcp://<your_host_ip>:$SYSLOG_PORT"
 echo "UniFi dashboards have been added to Grafana."
 
 exit 0
