@@ -27,4 +27,5 @@ export UNIFI_CONTROLLER_URL="https://unifi.yourdomain.com" # CHANGE THIS to your
 export UNIFI_CONTROLLER_USER="unifipoller"                 # CHANGE THIS to a read-only user on your controller
 export UNIFI_CONTROLLER_PASS="your_password_here"          # CHANGE THIS to the user's password
 
-export SYSLOG_PORT=1514
+export SYSLOG_PORT_TCP=30114
+export SYSLOG_PORT_UDP=30115
