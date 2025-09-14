@@ -30,11 +30,11 @@ source vars.sh
 k3d cluster delete $CLUSTER_NAME
 
 # Create local directory for persistent data if it doesn't exist
-echo "Creating local directory for persistent data in $PERSISTENT_DATA_PATH..."
+#echo "Creating local directory for persistent data in $PERSISTENT_DATA_PATH..."
 # The user running this script needs write permissions to the parent directory of PERSISTENT_DATA_PATH.
 # If this path is in a privileged location (e.g., /media), you may need to create it manually with 'sudo' first.
-mkdir -p $PERSISTENT_DATA_PATH
-echo
+#mkdir -p $PERSISTENT_DATA_PATH
+#echo
 
 # Create the k3d cluster
 
@@ -80,49 +80,49 @@ echo
 
 # --- Observability Stack ---
 
-echo "Installing Observability Stack (Prometheus, Grafana, Loki)..."
-echo "This may take a few minutes."
+#echo "Installing Observability Stack (Prometheus, Grafana, Loki)..."
+#echo "This may take a few minutes."
 
 # ChatGPT Stuff Start
 
 # Namespace
-kubectl apply -f manifests/monitoring/unifi/namespace.yaml
+#kubectl apply -f manifests/monitoring/unifi/namespace.yaml
 
 # Patch local-path-provisioner to use host directory
-echo "Patching local-path-provisioner to use /media/content/observability-k3d/local-path-storage ..."
-kubectl apply -f manifests/storage/local-path-config-patch.yaml
+#echo "Patching local-path-provisioner to use /media/content/observability-k3d/local-path-storage ..."
+#kubectl apply -f manifests/storage/local-path-config-patch.yaml
 
 # Add helm repos
-helm repo add grafana https://grafana.github.io/helm-charts >/dev/null 2>&1 || true
-helm repo add prometheus-community https://prometheus-community.github.io/helm-charts >/dev/null 2>&1 || true
-helm repo add grafana-loki https://grafana.github.io/helm-charts >/dev/null 2>&1 || true
-helm repo update
+#helm repo add grafana https://grafana.github.io/helm-charts >/dev/null 2>&1 || true
+#helm repo add prometheus-community https://prometheus-community.github.io/helm-charts >/dev/null 2>&1 || true
+#helm repo add grafana-loki https://grafana.github.io/helm-charts >/dev/null 2>&1 || true
+#helm repo update
 
 # Deploy Prometheus stack
-helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
-  --namespace monitoring --create-namespace \
-  -f manifests/monitoring/prometheus-values.yaml
+#helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
+#  --namespace monitoring --create-namespace \
+#  -f manifests/monitoring/prometheus-values.yaml
 
 # Deploy Loki+Promtail
-helm upgrade --install loki-stack grafana/loki-stack \
-  --namespace monitoring \
-  -f manifests/monitoring/loki-stack-values.yaml
+#helm upgrade --install loki-stack grafana/loki-stack \
+#  --namespace monitoring \
+#  -f manifests/monitoring/loki-stack-values.yaml
 
 # Deploy Grafana (standalone, since kube-prom-stack grafana is disabled)
-helm upgrade --install grafana grafana/grafana \
-  --namespace monitoring \
-  -f manifests/grafana-values.yaml
+#helm upgrade --install grafana grafana/grafana \
+#  --namespace monitoring \
+#  -f manifests/grafana-values.yaml
 
 # Vendor dashboards (fetch JSONs) then kustomize apply to create ConfigMaps
-scripts/vendor-unifi-dashboards.sh
+#scripts/vendor-unifi-dashboards.sh
 
 # Unpoller resources + dashboard configmaps
-kubectl apply -k manifests/monitoring
+#kubectl apply -k manifests/monitoring
 
 # kgateway routes
-kubectl apply -f manifests/gateway/monitoring-httproutes.yaml
+#kubectl apply -f manifests/gateway/monitoring-httproutes.yaml
 
-echo "Done. Visit http://localhost:7001/grafana (admin/admin)"
+#echo "Done. Visit http://localhost:7001/grafana (admin/admin)"
 
 # ChatGPT Stuff End
 
@@ -174,11 +174,11 @@ echo "Done. Visit http://localhost:7001/grafana (admin/admin)"
 #    --wait \
 #    --kube-context $KUBECTX_NAME
 
-echo "Observability stack installation complete. Current status:"
-kubectl get all -n $MONITORING_NAMESPACE --context $KUBECTX_NAME
-echo "You can watch the status with: watch -n 1 kubectl get all -n $MONITORING_NAMESPACE --context $KUBECTX_NAME"
-echo "It may take a few minutes for all pods to become ready."
-echo
+#echo "Observability stack installation complete. Current status:"
+#kubectl get all -n $MONITORING_NAMESPACE --context $KUBECTX_NAME
+#echo "You can watch the status with: watch -n 1 kubectl get all -n $MONITORING_NAMESPACE --context $KUBECTX_NAME"
+#echo "It may take a few minutes for all pods to become ready."
+#echo
 
 # Install the Kubernetes Gateway API CRDs
 
@@ -204,10 +204,10 @@ echo
 
 # Create an HTTP listener
 
-kubectl apply -f manifests/http-listener.yaml
-echo
-kubectl get gateways -A
-echo
+#kubectl apply -f manifests/http-listener.yaml
+#echo
+#kubectl get gateways -A
+#echo
 
 # Create an HTTPRoute for 'kagent'
 
@@ -227,11 +227,46 @@ echo
 #kubectl get httproute -A
 #echo
 
-echo "Grafana should be available at http://localhost:7001/grafana"
-echo "Login with user 'admin' and password '$GRAFANA_ADMIN_PASSWORD'."
-echo
-echo "Syslog is exposed on TCP port $SYSLOG_PORT on your host."
-echo "Configure your devices to send syslog to tcp://<your_host_ip>:$SYSLOG_PORT"
-echo "UniFi dashboards have been added to Grafana."
+#echo "Grafana should be available at http://localhost:7001/grafana"
+#echo "Login with user 'admin' and password '$GRAFANA_ADMIN_PASSWORD'."
+#echo
+#echo "Syslog is exposed on TCP port $SYSLOG_PORT on your host."
+#echo "Configure your devices to send syslog to tcp://<your_host_ip>:$SYSLOG_PORT"
+#echo "UniFi dashboards have been added to Grafana."
 
+# Deploy observability stack
+# Create Unpoller secret
+
+./extras/create-unifi-secret.sh $UNIFI_CONTROLLER_USER $UNIFI_CONTROLLER_PASS
+
+# Helm stuff first
+
+NS=monitoring
+
+kubectl create namespace "$NS" --dry-run=client -o yaml | kubectl apply -f -
+kubectl apply -f monitoring/storage.yaml
+
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo add grafana https://grafana.github.io/helm-charts
+helm repo update
+
+helm upgrade --install kube-prometheus prometheus-community/kube-prometheus-stack \
+  -n "$NS" \
+  -f monitoring/helm/kube-prometheus-stack-values.yaml
+
+kubectl wait --for=condition=Established crd/prometheusrules.monitoring.coreos.com --timeout=180s || true
+kubectl wait --for=condition=Established crd/servicemonitors.monitoring.coreos.com --timeout=180s || true
+kubectl wait --for=condition=Established crd/probes.monitoring.coreos.com --timeout=180s || true
+kubectl wait --for=condition=Established crd/alertmanagers.monitoring.coreos.com --timeout=180s || true
+
+helm upgrade --install loki grafana/loki-stack \
+  -n "$NS" \
+  -f monitoring/loki-stack-values.yaml
+
+helm upgrade --install blackbox prometheus-community/prometheus-blackbox-exporter \
+  -n "$NS"
+
+echo "Done. Next: kubectl apply -k monitoring/"
+
+# 
 exit 0
