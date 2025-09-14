@@ -3,30 +3,9 @@ kind: PrometheusRule
 metadata:
   name: security-alerts
   namespace: monitoring
+  labels:
+    release: kube-prometheus
 spec:
   groups:
     - name: security.rules
-      rules:
-        - alert: SSHBruteForce
-          expr: |
-            sum by(instance) (count_over_time({app="sshd"} |= "Failed password" [5m])) > 10
-          for: 5m
-          labels:
-            severity: critical
-          annotations:
-            summary: "🚨 SSH brute force detected on {{ $labels.instance }}"
-            description: |
-              More than 10 failed SSH login attempts in 5m window.
-              Possible brute force attack.
-        
-        - alert: SudoAuthFailures
-          expr: |
-            sum by(instance) (count_over_time({app="sudo"} |= "authentication failure" [5m])) > 5
-          for: 5m
-          labels:
-            severity: warning
-          annotations:
-            summary: "⚠️ Sudo authentication failures on {{ $labels.instance }}"
-            description: |
-              More than 5 sudo authentication failures detected in 5m window.
-              Possible privilege escalation attempts.
+      rules: []

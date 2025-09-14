@@ -3,6 +3,8 @@ kind: PrometheusRule
 metadata:
   name: homelab-rules
   namespace: monitoring
+  labels:
+    release: kube-prometheus
 spec:
   groups:
     - name: system.rules
