@@ -22,6 +22,11 @@ grafana:
     accessModes: ["ReadWriteOnce"]
     size: 10Gi
     existingClaim: grafana-pvc
+  podSecurityContext:
+    fsGroup: 472
+  containerSecurityContext:
+    runAsUser: 472
+    runAsGroup: 472
 
 prometheus:
   prometheusSpec:
@@ -34,3 +39,7 @@ prometheus:
           resources:
             requests:
               storage: 20Gi
+    securityContext:
+      fsGroup: 65534
+      runAsUser: 65534
+      runAsGroup: 65534
