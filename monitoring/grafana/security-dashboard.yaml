@@ -1,0 +1,72 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: security-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  security-dashboard.json: |
+    {
+      "id": null,
+      "title": "Security Dashboard",
+      "tags": ["security", "logs"],
+      "timezone": "browser",
+      "schemaVersion": 30,
+      "version": 1,
+      "panels": [
+        {
+          "type": "timeseries",
+          "title": "Failed SSH Logins",
+          "targets": [
+            {
+              "datasource": {"type": "loki", "uid": "loki"},
+              "expr": "count_over_time({app=\\\"sshd\\\"} |= \\\"Failed password\\\" [5m])",
+              "legendFormat": "SSH Failed Passwords"
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "Sudo Authentication Failures",
+          "targets": [
+            {
+              "datasource": {"type": "loki", "uid": "loki"},
+              "expr": "count_over_time({app=\\\"sudo\\\"} |= \\\"authentication failure\\\" [5m])",
+              "legendFormat": "Sudo Failures"
+            }
+          ]
+        },
+        {
+          "type": "logs",
+          "title": "Recent SSH Login Failures",
+          "targets": [
+            {
+              "datasource": {"type": "loki", "uid": "loki"},
+              "expr": "{app=\\\"sshd\\\"} |= \\\"Failed password\\\""
+            }
+          ]
+        },
+        {
+          "type": "logs",
+          "title": "Recent Sudo Failures",
+          "targets": [
+            {
+              "datasource": {"type": "loki", "uid": "loki"},
+              "expr": "{app=\\\"sudo\\\"} |= \\\"authentication failure\\\""
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "Security Alerts (Prometheus)",
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "expr": "ALERTS{alertstate=\\\"firing\\\", severity=\\\"critical\\\"}",
+              "legendFormat": "{{alertname}}"
+            }
+          ]
+        }
+      ]
+    }

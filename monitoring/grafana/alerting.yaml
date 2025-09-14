@@ -1,0 +1,48 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-alerting
+  namespace: monitoring
+  labels:
+    grafana_alert: "1"
+data:
+  contactpoints.yaml: |
+    apiVersion: 1
+    contactPoints:
+      - orgId: 1
+        name: default-email
+        receivers:
+          - uid: email-receiver
+            type: email
+            settings:
+              addresses: "alerts@example.com"
+
+      - orgId: 1
+        name: slack-notifications
+        receivers:
+          - uid: slack-receiver
+            type: slack
+            settings:
+              url: "https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX"
+              recipient: "#alerts"
+              username: "Grafana"
+              icon_emoji: ":rotating_light:"
+
+  notificationpolicies.yaml: |
+    apiVersion: 1
+    policies:
+      - orgId: 1
+        receiver: slack-notifications
+        group_by: ["alertname"]
+        group_wait: 30s
+        group_interval: 5m
+        repeat_interval: 1h
+        routes:
+          - receiver: default-email
+            matchers:
+              - severity = "critical"
+          - receiver: slack-notifications
+            matchers:
+              - severity = "warning"
+          - receiver: slack-notifications
+            matchers: []

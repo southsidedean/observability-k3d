@@ -1,0 +1,191 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  node-exporter-dashboard.json: |
+    {
+      "id": null,
+      "title": "Node Exporter / System Metrics",
+      "tags": ["infrastructure"],
+      "timezone": "browser",
+      "schemaVersion": 30,
+      "version": 1,
+      "links": [
+        {
+          "title": "View Active Alerts",
+          "url": "/d/active-alerts",
+          "type": "dashboard"
+        }
+      ],
+      "panels": [
+        {
+          "type": "timeseries",
+          "title": "CPU Usage",
+          "targets": [
+            {
+              "expr": "100 - (avg by(instance)(irate(node_cpu_seconds_total{mode=\\\"idle\\\"}[5m])) * 100)",
+              "legendFormat": "{{instance}}"
+            }
+          ],
+          "links": [
+            {
+              "title": "View Active Alerts",
+              "url": "/d/active-alerts",
+              "targetBlank": true
+            }
+          ],
+          "annotations": {
+            "list": [
+              {
+                "name": "CPU Alerts",
+                "datasource": {"type": "prometheus", "uid": "prometheus"},
+                "expr": "ALERTS{alertstate=\\\"firing\\\", alertname=\\\"High CPU Usage\\\"}",
+                "iconColor": "red",
+                "titleFormat": "🔥 {{alertname}}",
+                "textFormat": "Severity: {{severity}}"
+              },
+              {
+                "name": "SSH Brute Force",
+                "datasource": {"type": "loki", "uid": "loki"},
+                "expr": "{app=\\\"sshd\\\"} |= \\\"Failed password\\\"",
+                "iconColor": "purple",
+                "titleFormat": "🔐 SSH Failed Login",
+                "textFormat": "Detected failed SSH attempt"
+              },
+              {
+                "name": "Sudo Failures",
+                "datasource": {"type": "loki", "uid": "loki"},
+                "expr": "{app=\\\"sudo\\\"} |= \\\"authentication failure\\\"",
+                "iconColor": "orange",
+                "titleFormat": "⚠️ Sudo Failure",
+                "textFormat": "Authentication failure in sudo logs"
+              }
+            ]
+          }
+        },
+        {
+          "type": "timeseries",
+          "title": "Memory Usage",
+          "targets": [
+            {
+              "expr": "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100",
+              "legendFormat": "{{instance}}"
+            }
+          ],
+          "annotations": {
+            "list": [
+              {
+                "name": "Memory Alerts",
+                "datasource": {"type": "prometheus", "uid": "prometheus"},
+                "expr": "ALERTS{alertstate=\\\"firing\\\", alertname=\\\"High Memory Usage\\\"}",
+                "iconColor": "orange",
+                "titleFormat": "⚠️ {{alertname}}",
+                "textFormat": "Severity: {{severity}}"
+              },
+              {
+                "name": "SSH Brute Force",
+                "datasource": {"type": "loki", "uid": "loki"},
+                "expr": "{app=\\\"sshd\\\"} |= \\\"Failed password\\\"",
+                "iconColor": "purple",
+                "titleFormat": "🔐 SSH Failed Login",
+                "textFormat": "Detected failed SSH attempt"
+              },
+              {
+                "name": "Sudo Failures",
+                "datasource": {"type": "loki", "uid": "loki"},
+                "expr": "{app=\\\"sudo\\\"} |= \\\"authentication failure\\\"",
+                "iconColor": "orange",
+                "titleFormat": "⚠️ Sudo Failure",
+                "textFormat": "Authentication failure in sudo logs"
+              }
+            ]
+          }
+        },
+        {
+          "type": "timeseries",
+          "title": "Disk Usage",
+          "targets": [
+            {
+              "expr": "(node_filesystem_size_bytes{fstype!~\\\"tmpfs|overlay\\\"} - node_filesystem_free_bytes{fstype!~\\\"tmpfs|overlay\\\"}) / node_filesystem_size_bytes{fstype!~\\\"tmpfs|overlay\\\"} * 100",
+              "legendFormat": "{{instance}} {{mountpoint}}"
+            }
+          ]
+        }
+      ]
+    }
+  loki-logs-overview.json: |
+    {
+      "id": null,
+      "title": "Loki / Syslog Overview",
+      "tags": ["logs"],
+      "schemaVersion": 30,
+      "version": 1,
+      "links": [
+        {
+          "title": "View Active Alerts",
+          "url": "/d/active-alerts",
+          "type": "dashboard"
+        }
+      ],
+      "panels": [
+        {
+          "type": "table",
+          "title": "Recent Syslog Messages",
+          "targets": [
+            {
+              "datasource": {"type": "loki", "uid": "loki"},
+              "expr": "{job=\\\"syslog\\\"} |~ \".*\"",
+              "refId": "A"
+            }
+          ],
+          "links": [
+            {
+              "title": "View Active Alerts",
+              "url": "/d/active-alerts",
+              "targetBlank": true
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "Log Volume (msg/sec)",
+          "targets": [
+            {
+              "datasource": {"type": "loki", "uid": "loki"},
+              "expr": "rate({job=\\\"syslog\\\"}[1m])"
+            }
+          ]
+        }
+      ]
+    }
+  active-alerts.json: |
+    {
+      "id": null,
+      "title": "Active Alerts",
+      "tags": ["alerts", "monitoring"],
+      "schemaVersion": 30,
+      "version": 1,
+      "panels": [
+        {
+          "type": "table",
+          "title": "Currently Firing Alerts",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [
+            {
+              "expr": "ALERTS{alertstate=\\\"firing\\\"}",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "options": {"showHeader": true}
+        }
+      ],
+      "links": [
+        {"title": "Back to System Metrics", "url": "/d/node-exporter-dashboard", "type": "dashboard"},
+        {"title": "Back to Logs Overview", "url": "/d/loki-logs-overview", "type": "dashboard"}
+      ]
+    }

@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: unpoller
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: unpoller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: unpoller
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: unpoller
+    spec:
+      containers:
+      - name: unpoller
+        image: ghcr.io/unpoller/unpoller:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+          - name: metrics
+            containerPort: 9130
+        env:
+          - name: UP_UNIFI_DEFAULT_URL
+            value: "https://unifi-controller:8443"
+          - name: UP_UNIFI_DEFAULT_VERIFY_SSL
+            value: "false"
+          - name: UP_PROMETHEUS_HTTP_LISTEN
+            value: "0.0.0.0:9130"
+          - name: UP_UNIFI_DYNAMIC
+            value: "false"
+          - name: UP_UNIFI_DEFAULT_USER
+            valueFrom:
+              secretKeyRef:
+                name: unifi-credentials
+                key: username
+          - name: UP_UNIFI_DEFAULT_PASS
+            valueFrom:
+              secretKeyRef:
+                name: unifi-credentials
+                key: password
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
