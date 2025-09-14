@@ -21,8 +21,7 @@ metadata:
 spec:
   parentRefs:
     - name: observability-gateway
-  hostnames:
-    - "grafana.local"
+  hostnames: [ "grafana.local" ]
   rules:
     - backendRefs:
         - name: kube-prometheus-grafana
@@ -36,8 +35,7 @@ metadata:
 spec:
   parentRefs:
     - name: observability-gateway
-  hostnames:
-    - "prometheus.local"
+  hostnames: [ "prometheus.local" ]
   rules:
     - backendRefs:
         - name: prometheus-operated
@@ -51,8 +49,7 @@ metadata:
 spec:
   parentRefs:
     - name: observability-gateway
-  hostnames:
-    - "alertmanager.local"
+  hostnames: [ "alertmanager.local" ]
   rules:
     - backendRefs:
         - name: alertmanager-operated
@@ -66,8 +63,7 @@ metadata:
 spec:
   parentRefs:
     - name: observability-gateway
-  hostnames:
-    - "loki.local"
+  hostnames: [ "loki.local" ]
   rules:
     - backendRefs:
         - name: loki

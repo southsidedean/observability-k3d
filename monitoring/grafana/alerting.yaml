@@ -16,7 +16,6 @@ data:
             type: email
             settings:
               addresses: "alerts@example.com"
-
       - orgId: 1
         name: slack-notifications
         receivers:
@@ -27,7 +26,6 @@ data:
               recipient: "#alerts"
               username: "Grafana"
               icon_emoji: ":rotating_light:"
-
   notificationpolicies.yaml: |
     apiVersion: 1
     policies:
@@ -39,10 +37,8 @@ data:
         repeat_interval: 1h
         routes:
           - receiver: default-email
-            matchers:
-              - severity = "critical"
+            matchers: [ 'severity = "critical"' ]
           - receiver: slack-notifications
-            matchers:
-              - severity = "warning"
+            matchers: [ 'severity = "warning"' ]
           - receiver: slack-notifications
             matchers: []

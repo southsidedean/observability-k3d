@@ -10,8 +10,7 @@ spec:
     matchLabels:
       app.kubernetes.io/name: unpoller
   namespaceSelector:
-    matchNames:
-      - monitoring
+    matchNames: [ "monitoring" ]
   endpoints:
     - port: metrics
       interval: 30s

@@ -34,19 +34,13 @@ data:
                 model:
                   type: threshold
                   conditions:
-                    - evaluator:
-                        params: [85]
-                        type: gt
-                      operator:
-                        type: and
-                      query:
-                        params: [A]
-                      reducer:
-                        type: avg
+                    - evaluator: { params: [85], type: gt }
+                      operator: { type: and }
+                      query: { params: [A] }
+                      reducer: { type: avg }
             annotations:
               summary: "High CPU on {{ $labels.instance }}"
               description: "CPU usage > 85% for 5m"
-
           - uid: high-mem
             title: High Memory Usage
             condition: C
@@ -67,19 +61,13 @@ data:
                 model:
                   type: threshold
                   conditions:
-                    - evaluator:
-                        params: [90]
-                        type: gt
-                      operator:
-                        type: and
-                      query:
-                        params: [A]
-                      reducer:
-                        type: avg
+                    - evaluator: { params: [90], type: gt }
+                      operator: { type: and }
+                      query: { params: [A] }
+                      reducer: { type: avg }
             annotations:
               summary: "High memory on {{ $labels.instance }}"
               description: "Memory usage > 90% for 5m"
-
       - orgId: 1
         name: log-alerts
         folder: Security
@@ -105,19 +93,13 @@ data:
                 model:
                   type: threshold
                   conditions:
-                    - evaluator:
-                        params: [10]
-                        type: gt
-                      operator:
-                        type: and
-                      query:
-                        params: [A]
-                      reducer:
-                        type: last
+                    - evaluator: { params: [10], type: gt }
+                      operator: { type: and }
+                      query: { params: [A] }
+                      reducer: { type: last }
             annotations:
               summary: "SSH brute force attempt on {{ $labels.host }}"
               description: ">10 failed SSH logins in 5 minutes."
-
           - uid: sudo-failure
             title: Sudo Authentication Failures
             condition: C
@@ -138,15 +120,10 @@ data:
                 model:
                   type: threshold
                   conditions:
-                    - evaluator:
-                        params: [5]
-                        type: gt
-                      operator:
-                        type: and
-                      query:
-                        params: [A]
-                      reducer:
-                        type: last
+                    - evaluator: { params: [5], type: gt }
+                      operator: { type: and }
+                      query: { params: [A] }
+                      reducer: { type: last }
             annotations:
               summary: "Excessive sudo failures on {{ $labels.host }}"
               description: "More than 5 sudo failures in 10 minutes."

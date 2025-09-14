@@ -1,0 +1,21 @@
+grafana:
+  enabled: true
+  persistence:
+    enabled: true
+    type: pvc
+    storageClassName: ""
+    accessModes: ["ReadWriteOnce"]
+    size: 10Gi
+    existingClaim: grafana-pvc
+
+prometheus:
+  prometheusSpec:
+    retention: 15d
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: ""
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 20Gi
