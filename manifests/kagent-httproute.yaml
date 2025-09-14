@@ -11,7 +11,7 @@ spec:
   - matches:
     -  path:
         type: PathPrefix
-        value: /kagent
+        value: /
     backendRefs:
     - name: kagent-ui
       port: 80
