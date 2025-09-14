@@ -1,12 +1,9 @@
 grafana:
+  enabled: true
   adminUser: admin
   adminPassword: admin
   service:
     type: ClusterIP
-  persistence:
-    enabled: true
-    storageClassName: local-path
-    size: 10Gi
   sidecar:
     dashboards:
       enabled: true
@@ -18,3 +15,15 @@ grafana:
   env:
     GF_SERVER_ROOT_URL: "%(protocol)s://%(domain)s/grafana/"
     GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+  persistence:
+    enabled: true
+    type: pvc
+    storageClassName: "local-path"
+    accessModes: ["ReadWriteOnce"]
+    size: 10Gi
+    existingClaim: grafana-pvc
+  podSecurityContext:
+    fsGroup: 472
+  containerSecurityContext:
+    runAsUser: 472
+    runAsGroup: 472

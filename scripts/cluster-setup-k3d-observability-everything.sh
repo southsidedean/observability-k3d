@@ -212,8 +212,8 @@ echo
 
 # Create an HTTPRoute for 'kagent'
 
-kubectl apply -f manifests/ingress/kagent-httproute.yaml
-echo
+#kubectl apply -f manifests/ingress/kagent-httproute.yaml
+#echo
 
 # Apply custom monitoring resources
 #echo "Applying custom monitoring resources (Probes, Alerts, Dashboards)..."
@@ -275,6 +275,6 @@ echo "Done. Next: kubectl apply -k manifests/monitoring/"
 # Deploy monioring stack
 
 kubectl apply -k manifests/monitoring/
-kubectl apply -f manifests/ingress/kgateway.yaml
+kubectl apply -k manifests/ingress/
 
 exit 0

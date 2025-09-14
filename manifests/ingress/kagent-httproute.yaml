@@ -11,7 +11,7 @@ spec:
   - matches:
     -  path:
         type: PathPrefix
-        value: /
+        value: /kagent
     filters:
       - type: URLRewrite
         urlRewrite:
