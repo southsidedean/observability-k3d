@@ -260,7 +260,7 @@ kubectl wait --for=condition=Established crd/alertmanagers.monitoring.coreos.com
 
 helm upgrade --install loki grafana/loki-stack \
   -n "$MONITORING_NAMESPACE" \
-  -f manifests/monitoring/loki-stack-values.yaml
+  -f manifests/monitoring/helm/loki-stack-values.yaml
 
 helm upgrade --install blackbox prometheus-community/prometheus-blackbox-exporter \
   -n "$MONITORING_NAMESPACE"
@@ -268,7 +268,7 @@ helm upgrade --install blackbox prometheus-community/prometheus-blackbox-exporte
 # Deploy Grafana (standalone, since kube-prom-stack grafana is disabled)
 helm upgrade --install grafana grafana/grafana \
   --namespace monitoring \
-  -f manifests/grafana-values.yaml
+  -f manifestsmonitoring/helm/grafana-values.yaml
 
 echo "Done. Next: kubectl apply -k manifests/monitoring/"
 
