@@ -1,5 +1,20 @@
 grafana:
   enabled: true
+  adminUser: admin
+  adminPassword: admin
+  service:
+    type: ClusterIP
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      labelValue: "1"
+      searchNamespace: ALL
+    datasources:
+      enabled: true
+  env:
+    GF_SERVER_ROOT_URL: "%(protocol)s://%(domain)s/grafana/"
+    GF_SERVER_SERVE_FROM_SUB_PATH: "true"
   persistence:
     enabled: true
     type: pvc
