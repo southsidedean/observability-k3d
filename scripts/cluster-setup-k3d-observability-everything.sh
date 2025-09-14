@@ -268,7 +268,7 @@ helm upgrade --install blackbox prometheus-community/prometheus-blackbox-exporte
 # Deploy Grafana (standalone, since kube-prom-stack grafana is disabled)
 helm upgrade --install grafana grafana/grafana \
   --namespace monitoring \
-  -f manifestsmonitoring/helm/grafana-values.yaml
+  -f manifests/monitoring/helm/grafana-values.yaml
 
 echo "Done. Next: kubectl apply -k manifests/monitoring/"
 
