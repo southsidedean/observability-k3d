@@ -81,8 +81,8 @@ echo
 
 # --- Observability Stack ---
 
-#echo "Installing Observability Stack (Prometheus, Grafana, Loki)..."
-#echo "This may take a few minutes."
+echo "Installing Observability Stack (Prometheus, Grafana, Loki)..."
+echo "This may take a few minutes."
 
 # ChatGPT Stuff Start
 
@@ -264,6 +264,11 @@ helm upgrade --install loki grafana/loki-stack \
 
 helm upgrade --install blackbox prometheus-community/prometheus-blackbox-exporter \
   -n "$MONITORING_NAMESPACE"
+
+# Deploy Grafana (standalone, since kube-prom-stack grafana is disabled)
+helm upgrade --install grafana grafana/grafana \
+  --namespace monitoring \
+  -f manifests/grafana-values.yaml
 
 echo "Done. Next: kubectl apply -k manifests/monitoring/"
 
