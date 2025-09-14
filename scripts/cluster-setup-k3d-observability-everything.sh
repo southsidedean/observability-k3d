@@ -44,7 +44,7 @@ k3d cluster create $CLUSTER_NAME \
     --port 7401:443@loadbalancer \
     --port "$SYSLOG_PORT_TCP:$SYSLOG_PORT_TCP/tcp@loadbalancer" \
     --port "$SYSLOG_PORT_UDP:$SYSLOG_PORT_UDP/udp@loadbalancer" \
-    --volume "$PERSISTENT_DATA_PATH:/var/lib/rancher/k3s/storage@all" \
+    --volume "$PERSISTENT_DATA_PATH:$PERSISTENT_DATA_PATH@all" \
     --api-port 0.0.0.0:7601
 k3d cluster list
 
