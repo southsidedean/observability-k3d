@@ -3,7 +3,7 @@ grafana:
   persistence:
     enabled: true
     type: pvc
-    storageClassName: ""
+    storageClassName: "local-path"
     accessModes: ["ReadWriteOnce"]
     size: 10Gi
     existingClaim: grafana-pvc
@@ -14,7 +14,7 @@ prometheus:
     storageSpec:
       volumeClaimTemplate:
         spec:
-          storageClassName: ""
+          storageClassName: "local-path"
           accessModes: ["ReadWriteOnce"]
           resources:
             requests:

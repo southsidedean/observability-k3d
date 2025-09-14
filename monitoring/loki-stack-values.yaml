@@ -5,6 +5,7 @@ loki:
     enabled: true
     size: 10Gi
     existingClaim: loki-pvc
+    storageClassName: "local-path"
 
 promtail:
   enabled: true
