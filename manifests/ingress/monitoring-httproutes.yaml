@@ -6,7 +6,7 @@ metadata:
 spec:
   parentRefs:
     - name: http
-      namespace: kgateway
+      namespace: kgateway-system
   rules:
     - matches:
         - path:
@@ -43,7 +43,7 @@ spec:
               type: ReplacePrefixMatch
               replacePrefixMatch: /
       backendRefs:
-        - name: kube-prometheus-stack-prometheus
+        - name: kube-prometheus-prometheus
           port: 9090
 ---
 apiVersion: gateway.networking.k8s.io/v1
@@ -54,7 +54,7 @@ metadata:
 spec:
   parentRefs:
     - name: http
-      namespace: kgateway
+      namespace: kgateway-system
   rules:
     - matches:
         - path:
@@ -67,7 +67,7 @@ spec:
               type: ReplacePrefixMatch
               replacePrefixMatch: /
       backendRefs:
-        - name: kube-prometheus-stack-alertmanager
+        - name: kube-prometheus-alertmanager
           port: 9093
 ---
 apiVersion: gateway.networking.k8s.io/v1
@@ -78,7 +78,8 @@ metadata:
 spec:
   parentRefs:
     - name: http
-      namespace: kgateway
+      namespace: kgateway-system
+      namespace: kgateway-system
   rules:
     - matches:
         - path:

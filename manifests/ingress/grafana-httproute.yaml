@@ -5,19 +5,13 @@ metadata:
   namespace: monitoring
 spec:
   parentRefs:
-    - name: http
-      namespace: kgateway
+    - name: http-gateway
+      namespace: kgateway-system
   rules:
     - matches:
         - path:
             type: PathPrefix
             value: /grafana
-      filters:
-        - type: URLRewrite
-          urlRewrite:
-            path:
-              type: ReplacePrefixMatch
-              replacePrefixMatch: /
       backendRefs:
         - name: grafana
           port: 80
