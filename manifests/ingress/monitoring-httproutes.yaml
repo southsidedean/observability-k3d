@@ -17,7 +17,7 @@ spec:
           urlRewrite:
             path:
               type: ReplacePrefixMatch
-              replacement: /
+              replacePrefixMatch: /
       backendRefs:
         - name: grafana
           port: 80
@@ -41,7 +41,7 @@ spec:
           urlRewrite:
             path:
               type: ReplacePrefixMatch
-              replacement: /
+              replacePrefixMatch: /
       backendRefs:
         - name: kube-prometheus-stack-prometheus
           port: 9090
@@ -65,7 +65,7 @@ spec:
           urlRewrite:
             path:
               type: ReplacePrefixMatch
-              replacement: /
+              replacePrefixMatch: /
       backendRefs:
         - name: kube-prometheus-stack-alertmanager
           port: 9093
@@ -89,7 +89,7 @@ spec:
           urlRewrite:
             path:
               type: ReplacePrefixMatch
-              replacement: /
+              replacePrefixMatch: /
       backendRefs:
         - name: loki
           port: 3100
@@ -113,7 +113,7 @@ spec:
           urlRewrite:
             path:
               type: ReplacePrefixMatch
-              replacement: /
+              replacePrefixMatch: /
       backendRefs:
         - name: unpoller
           port: 9130
