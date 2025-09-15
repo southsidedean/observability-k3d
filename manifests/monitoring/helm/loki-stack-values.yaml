@@ -11,7 +11,18 @@ loki:
   securityContext:
     runAsUser: 10001
     runAsGroup: 10001
-
+  # The ruler component queries the query-frontend to evaluate rules.
+  # In a single-binary setup, both are in the same pod. We need to explicitly
+  # tell the ruler to query itself using the correct service name ('loki').
+  # This overrides a chart default that can sometimes be incorrect.
+  config:
+    ruler:
+      query_frontend_address: 'loki.monitoring.svc.cluster.local:3100'
+    # The following is the default for single-binary mode and ensures
+    # Loki doesn't try to discover other non-existent pods.
+    ring:
+      kvstore:
+        store: inmemory
 promtail:
   enabled: true
   config:
