@@ -1,3 +1,6 @@
+grafana:
+  enabled: false
+
 prometheus:
   prometheusSpec:
     retention: 15d

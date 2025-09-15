@@ -250,7 +250,7 @@ helm repo add grafana https://grafana.github.io/helm-charts
 helm repo update
 
 helm upgrade --install kube-prometheus prometheus-community/kube-prometheus-stack \
-  -n "$kubectl create namespace "$MONITORING_NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -" \
+  --namespace "$MONITORING_NAMESPACE" \
   -f manifests/monitoring/helm/kube-prometheus-stack-values.yaml
 
 kubectl wait --for=condition=Established crd/prometheusrules.monitoring.coreos.com --timeout=180s || true
