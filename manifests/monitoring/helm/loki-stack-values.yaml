@@ -18,11 +18,11 @@ loki:
   # config:
   #   ruler:
   #     query_frontend_address: 'loki.monitoring.svc.cluster.local:3100'
-    # The following is the default for single-binary mode and ensures
-    # Loki doesn't try to discover other non-existent pods.
-    ring:
-      kvstore:
-        store: inmemory
+  # The following is the default for single-binary mode and ensures
+  # Loki doesn't try to discover other non-existent pods.
+  ring:
+    kvstore:
+      store: inmemory
 promtail:
   enabled: true
   config:
