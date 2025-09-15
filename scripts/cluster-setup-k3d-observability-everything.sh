@@ -29,13 +29,6 @@ source vars.sh
 
 k3d cluster delete $CLUSTER_NAME
 
-# Create local directory for persistent data if it doesn't exist
-#echo "Creating local directory for persistent data in $PERSISTENT_DATA_PATH..."
-# The user running this script needs write permissions to the parent directory of PERSISTENT_DATA_PATH.
-# If this path is in a privileged location (e.g., /media), you may need to create it manually with 'sudo' first.
-#mkdir -p $PERSISTENT_DATA_PATH
-#echo
-
 # Create the k3d cluster
 
 k3d cluster create $CLUSTER_NAME \
@@ -84,38 +77,8 @@ echo
 echo "Installing Observability Stack (Prometheus, Grafana, Loki)..."
 echo "This may take a few minutes."
 
-# ChatGPT Stuff Start
-
-# Namespace
-#kubectl apply -f manifests/monitoring/unifi/namespace.yaml
-
-# Patch local-path-provisioner to use host directory
-#echo "Patching local-path-provisioner to use /media/content/observability-k3d/local-path-storage ..."
-#kubectl apply -f manifests/storage/local-path-config-patch.yaml
-
-# Add helm repos
-#helm repo add grafana https://grafana.github.io/helm-charts >/dev/null 2>&1 || true
-#helm repo add prometheus-community https://prometheus-community.github.io/helm-charts >/dev/null 2>&1 || true
-#helm repo add grafana-loki https://grafana.github.io/helm-charts >/dev/null 2>&1 || true
-#helm repo update
-
-# Deploy Prometheus stack
-#helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
-#  --namespace monitoring --create-namespace \
-#  -f manifests/monitoring/prometheus-values.yaml
-
-# Deploy Loki+Promtail
-#helm upgrade --install loki-stack grafana/loki-stack \
-#  --namespace monitoring \
-#  -f manifests/monitoring/loki-stack-values.yaml
-
-# Deploy Grafana (standalone, since kube-prom-stack grafana is disabled)
-#helm upgrade --install grafana grafana/grafana \
-#  --namespace monitoring \
-#  -f manifests/grafana-values.yaml
-
 # Vendor dashboards (fetch JSONs) then kustomize apply to create ConfigMaps
-#scripts/vendor-unifi-dashboards.sh
+scripts/vendor-unifi-dashboards.sh
 
 # Unpoller resources + dashboard configmaps
 #kubectl apply -k manifests/monitoring
@@ -175,12 +138,6 @@ echo "This may take a few minutes."
 #    --wait \
 #    --kube-context $KUBECTX_NAME
 
-#echo "Observability stack installation complete. Current status:"
-#kubectl get all -n $MONITORING_NAMESPACE --context $KUBECTX_NAME
-#echo "You can watch the status with: watch -n 1 kubectl get all -n $MONITORING_NAMESPACE --context $KUBECTX_NAME"
-#echo "It may take a few minutes for all pods to become ready."
-#echo
-
 # Install the Kubernetes Gateway API CRDs
 
 kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/${GATEWAY_API_VERSION}/standard-install.yaml
@@ -203,37 +160,10 @@ kubectl get all -n $KGATEWAY_NAMESPACE
 echo "You can watch the status with: watch -n 1 kubectl get all -n $KGATEWAY_NAMESPACE"
 echo
 
-# Create an HTTP listener
-
-#kubectl apply -f manifests/http-listener.yaml
-#echo
-#kubectl get gateways -A
-#echo
-
-# Create an HTTPRoute for 'kagent'
-
-#kubectl apply -f manifests/ingress/kagent-httproute.yaml
-#echo
-
-# Apply custom monitoring resources
-#echo "Applying custom monitoring resources (Probes, Alerts, Dashboards)..."
-#kubectl apply -k manifests/monitoring/probes --context $KUBECTX_NAME
-#kubectl apply -k manifests/monitoring/alerts --context $KUBECTX_NAME
-#kubectl apply -k manifests/monitoring/dashboards --context $KUBECTX_NAME
-# Create an HTTPRoute for 'grafana'
-
-#kubectl apply -f manifests/monitoring/grafana-httproute.yaml
-#echo
-
-#kubectl get httproute -A
-#echo
-
-#echo "Grafana should be available at http://localhost:7001/grafana"
-#echo "Login with user 'admin' and password '$GRAFANA_ADMIN_PASSWORD'."
-#echo
-#echo "Syslog is exposed on TCP port $SYSLOG_PORT on your host."
-#echo "Configure your devices to send syslog to tcp://<your_host_ip>:$SYSLOG_PORT"
-#echo "UniFi dashboards have been added to Grafana."
+echo "Grafana should be available at http://localhost:7001/grafana"
+echo "Login with user 'admin' and password '$GRAFANA_ADMIN_PASSWORD'."
+echo
+echo "UniFi dashboards have been added to Grafana."
 
 # Deploy observability stack
 # Create Unpoller secret
