@@ -17,7 +17,7 @@ spec:
           urlRewrite:
             path:
               type: ReplacePrefixMatch
-              replacePrefixMatch: /grafana/
+              replacePrefixMatch: /
       backendRefs:
         - name: grafana
           port: 80
