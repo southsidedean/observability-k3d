@@ -6,14 +6,27 @@ resources:
   - custom-dashboards.yaml
 
 configMapGenerator:
-- name: unifi-dashboards
-  files:
-  - unifi/unpoller-dashboard-11310.json
-  - unifi/unpoller-dashboard-11311.json
-  - unifi/unpoller-dashboard-11312.json
-  - unifi/unpoller-dashboard-11313.json
-  - unifi/unpoller-dashboard-11314.json
-  - unifi/unpoller-dashboard-11315.json
+- name: unifi-dashboard-11310
+  files: [unifi/unpoller-dashboard-11310.json]
   options:
-    labels:
-      grafana_dashboard: "1"
+    labels: { grafana_dashboard: "1" }
+- name: unifi-dashboard-11311
+  files: [unifi/unpoller-dashboard-11311.json]
+  options:
+    labels: { grafana_dashboard: "1" }
+- name: unifi-dashboard-11312
+  files: [unifi/unpoller-dashboard-11312.json]
+  options:
+    labels: { grafana_dashboard: "1" }
+- name: unifi-dashboard-11313
+  files: [unifi/unpoller-dashboard-11313.json]
+  options:
+    labels: { grafana_dashboard: "1" }
+- name: unifi-dashboard-11314
+  files: [unifi/unpoller-dashboard-11314.json]
+  options:
+    labels: { grafana_dashboard: "1" }
+- name: unifi-dashboard-11315
+  files: [unifi/unpoller-dashboard-11315.json]
+  options:
+    labels: { grafana_dashboard: "1" }
