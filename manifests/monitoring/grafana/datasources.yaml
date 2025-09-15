@@ -10,6 +10,7 @@ data:
     apiVersion: 1
     datasources:
       - name: Prometheus
+        uid: prometheus
         type: prometheus
         url: http://kube-prometheus-prometheus:9090
         access: proxy
@@ -20,6 +21,7 @@ data:
             - name: "trace_id"
               datasourceUid: "loki" # Allows jumping from metrics to logs
       - name: Loki
+        uid: loki
         type: loki
         url: http://loki:3100
         access: proxy
