@@ -17,7 +17,7 @@ spec:
         urlRewrite:
           path:
             type: ReplaceFullPath
-            replacePrefixMatch: /
+            replaceFullPath: /
     backendRefs:
     - name: kagent-ui
       port: 80
