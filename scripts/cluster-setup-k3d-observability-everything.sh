@@ -204,7 +204,7 @@ echo "Done. Next: kubectl apply -k manifests/monitoring/"
 
 # Deploy monioring stack
 
-kubectl apply -k manifests/monitoring/
-kubectl apply -k manifests/ingress/
+kubectl apply --server-side -k manifests/monitoring/
+kubectl apply --server-side -k manifests/ingress/
 
 exit 0
