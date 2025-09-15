@@ -9,6 +9,9 @@ sidecar:
     searchNamespace: ALL
   datasources:
     enabled: true
+    label: grafana_datasource
+    labelValue: "1"
+    searchNamespace: ALL
 env:
   GF_SERVER_ROOT_URL: "/grafana/"
   GF_SERVER_SERVE_FROM_SUB_PATH: "true"
