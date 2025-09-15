@@ -11,12 +11,21 @@ data:
     datasources:
       - name: Prometheus
         type: prometheus
+        url: http://kube-prometheus-prometheus:9090
         access: proxy
-        uid: prometheus
-        url: http://prometheus-operated.monitoring.svc:9090
         isDefault: true
+        jsonData:
+          httpMethod: POST
+          exemplarTraceIdDestinations:
+            - name: "trace_id"
+              datasourceUid: "loki" # Allows jumping from metrics to logs
       - name: Loki
         type: loki
+        url: http://loki:3100
         access: proxy
-        uid: loki
-        url: http://loki.monitoring.svc:3100
+        jsonData:
+          derivedFields:
+            - datasourceUid: 'prometheus'
+              matcherRegex: 'traceId=(\w+)'
+              name: 'TraceID'
+              url: '$${__value.raw}' # Allows jumping from logs to traces/metrics
