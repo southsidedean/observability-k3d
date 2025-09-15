@@ -24,8 +24,12 @@ for id in "${IDS[@]}"; do
   fi
 
   echo "Fetching dashboard ${id} rev ${REV} ..."
-  curl -fsSL "https://grafana.com/api/dashboards/${id}/revisions/${REV}/download" \
-    -o "${DASH_DIR}/unpoller-dashboard-${id}.json"
+  DASH_FILE="${DASH_DIR}/unpoller-dashboard-${id}.json"
+  curl -fsSL "https://grafana.com/api/dashboards/${id}/revisions/${REV}/download" -o "$DASH_FILE"
+
+  echo "Patching dashboard ${id} to use correct prometheus datasource..."
+  # Use sed to replace the placeholder datasource variable with the hardcoded 'prometheus' uid.
+  sed -i.bak 's/${DS_PROMETHEUS}/prometheus/g' "$DASH_FILE" && rm "$DASH_FILE.bak"
 
   # Ensure a small JSON exists (basic validation)
   test -s "${DASH_DIR}/unpoller-dashboard-${id}.json"
