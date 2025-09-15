@@ -24,7 +24,10 @@ spec:
             containerPort: 9130
         env:
           - name: UP_UNIFI_DEFAULT_URL
-            value: "https://unifi-controller:443"
+            valueFrom:
+              secretKeyRef:
+                name: unifi-credentials
+                key: url
           - name: UP_UNIFI_DEFAULT_VERIFY_SSL
             value: "false"
           - name: UP_PROMETHEUS_HTTP_LISTEN

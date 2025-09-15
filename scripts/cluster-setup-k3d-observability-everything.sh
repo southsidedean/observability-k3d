@@ -88,7 +88,12 @@ kubectl apply -f manifests/monitoring/storage.yaml
 echo
 
 echo "Creating UniFi Poller secret..."
-./extras/create-unifi-secret.sh "$UNIFI_CONTROLLER_USER" "$UNIFI_CONTROLLER_PASS"
+kubectl create secret generic unifi-credentials \
+  --namespace "$MONITORING_NAMESPACE" \
+  --from-literal=username="$UNIFI_CONTROLLER_USER" \
+  --from-literal=password="$UNIFI_CONTROLLER_PASS" \
+  --from-literal=url="$UNIFI_CONTROLLER_URL" \
+  --dry-run=client -o yaml | kubectl apply -f -
 echo
 
 echo "Adding Helm repositories..."
