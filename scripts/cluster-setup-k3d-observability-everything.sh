@@ -104,7 +104,8 @@ kubectl apply -f manifests/monitoring/grafana/datasources.yaml
 
 helm upgrade --install kube-prometheus prometheus-community/kube-prometheus-stack \
   --namespace "$MONITORING_NAMESPACE" \
-  -f manifests/monitoring/helm/kube-prometheus-stack-values.yaml
+  -f manifests/monitoring/helm/kube-prometheus-stack-values.yaml \
+  --wait --timeout 10m
 
 echo "Waiting for Prometheus CRDs to be established..."
 kubectl wait --for=condition=Established crd/prometheusrules.monitoring.coreos.com --timeout=180s || true
@@ -114,14 +115,17 @@ kubectl wait --for=condition=Established crd/alertmanagers.monitoring.coreos.com
 
 helm upgrade --install loki grafana/loki-stack \
   -n "$MONITORING_NAMESPACE" \
-  -f manifests/monitoring/helm/loki-stack-values.yaml
+  -f manifests/monitoring/helm/loki-stack-values.yaml \
+  --wait --timeout 10m
 
 helm upgrade --install blackbox prometheus-community/prometheus-blackbox-exporter \
-  -n "$MONITORING_NAMESPACE"
+  -n "$MONITORING_NAMESPACE" \
+  --wait --timeout 5m
 
 helm upgrade --install grafana grafana/grafana \
   --namespace monitoring \
-  -f manifests/monitoring/helm/grafana-values.yaml
+  -f manifests/monitoring/helm/grafana-values.yaml \
+  --wait --timeout 5m
 echo
 
 # --- Dashboards & Kustomize Overlays ---
