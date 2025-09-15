@@ -99,9 +99,6 @@ echo
 
 echo "Installing Prometheus, Loki, Blackbox Exporter, and Grafana via Helm..."
 
-echo "Pre-applying Grafana datasource ConfigMap to avoid race condition..."
-kubectl apply -f manifests/monitoring/grafana/datasources.yaml
-
 helm upgrade --install kube-prometheus prometheus-community/kube-prometheus-stack \
   --namespace "$MONITORING_NAMESPACE" \
   -f manifests/monitoring/helm/kube-prometheus-stack-values.yaml \
