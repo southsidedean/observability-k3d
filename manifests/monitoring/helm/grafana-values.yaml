@@ -1,29 +1,26 @@
-grafana:
-  enabled: true
-  adminUser: admin
-  adminPassword: admin
-  service:
-    type: ClusterIP
-  sidecar:
-    dashboards:
-      enabled: true
-      label: grafana_dashboard
-      labelValue: "1"
-      searchNamespace: ALL
-    datasources:
-      enabled: true
-  env:
-    GF_SERVER_ROOT_URL: "/grafana/"
-    GF_SERVER_SERVE_FROM_SUB_PATH: "true"
-  persistence:
+adminPassword: admin
+service:
+  type: ClusterIP
+sidecar:
+  dashboards:
     enabled: true
-    type: pvc
-    storageClassName: "local-path"
-    accessModes: ["ReadWriteOnce"]
-    size: 10Gi
-    existingClaim: grafana-pvc
-  podSecurityContext:
-    fsGroup: 472
-  containerSecurityContext:
-    runAsUser: 472
-    runAsGroup: 472
+    label: grafana_dashboard
+    labelValue: "1"
+    searchNamespace: ALL
+  datasources:
+    enabled: true
+env:
+  GF_SERVER_ROOT_URL: "/grafana/"
+  GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+persistence:
+  enabled: true
+  type: pvc
+  storageClassName: "local-path"
+  accessModes: ["ReadWriteOnce"]
+  size: 10Gi
+  existingClaim: grafana-pvc
+podSecurityContext:
+  fsGroup: 472
+securityContext:
+  runAsUser: 472
+  runAsGroup: 472
