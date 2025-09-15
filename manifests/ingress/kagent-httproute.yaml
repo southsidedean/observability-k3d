@@ -12,12 +12,6 @@ spec:
     -  path:
         type: PathPrefix
         value: /kagent
-    filters:
-      - type: URLRewrite
-        urlRewrite:
-          path:
-            type: ReplaceFullPath
-            replaceFullPath: /
     backendRefs:
     - name: kagent-ui
       port: 80
