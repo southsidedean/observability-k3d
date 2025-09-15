@@ -7,7 +7,7 @@ datasources:
       - name: Prometheus
         uid: prometheus
         type: prometheus
-        url: http://kube-prometheus-prometheus:9090
+        url: http://kube-prometheus-kube-prome-prometheus:9090
         access: proxy
         isDefault: true
         jsonData:
