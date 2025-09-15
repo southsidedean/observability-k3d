@@ -9,24 +9,30 @@ configMapGenerator:
 - name: unifi-dashboard-11310
   files: [unifi/unpoller-dashboard-11310.json]
   options:
+    disableNameSuffixHash: true
     labels: { grafana_dashboard: "1" }
 - name: unifi-dashboard-11311
   files: [unifi/unpoller-dashboard-11311.json]
   options:
+    disableNameSuffixHash: true
     labels: { grafana_dashboard: "1" }
 - name: unifi-dashboard-11312
   files: [unifi/unpoller-dashboard-11312.json]
   options:
+    disableNameSuffixHash: true
     labels: { grafana_dashboard: "1" }
 - name: unifi-dashboard-11313
   files: [unifi/unpoller-dashboard-11313.json]
   options:
+    disableNameSuffixHash: true
     labels: { grafana_dashboard: "1" }
 - name: unifi-dashboard-11314
   files: [unifi/unpoller-dashboard-11314.json]
   options:
+    disableNameSuffixHash: true
     labels: { grafana_dashboard: "1" }
 - name: unifi-dashboard-11315
   files: [unifi/unpoller-dashboard-11315.json]
   options:
+    disableNameSuffixHash: true
     labels: { grafana_dashboard: "1" }
