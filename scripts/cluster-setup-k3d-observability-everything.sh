@@ -5,7 +5,7 @@
 # Last edit: 9/12/2025
 
 # --- Helper Functions ---
-set -euo pipefail
+#set -euo pipefail
 
 check_command() {
     if ! command -v "$1" &> /dev/null; then
