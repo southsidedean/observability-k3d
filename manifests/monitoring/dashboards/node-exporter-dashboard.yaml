@@ -78,7 +78,7 @@ data:
           "dashes": false,
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "description": "The average CPU load on the host.",
           "fieldConfig": {
@@ -173,7 +173,7 @@ data:
           "targets": [
             {
               "exemplar": true,
-              "expr": "avg without (cpu) (rate(node_cpu_seconds_total{job=\"node\",mode=\"idle\",instance=~\"$node\"}[$__rate_interval]))",
+              "expr": "avg without (cpu) (rate(node_cpu_seconds_total{job=\"node-exporter\",mode=\"idle\",instance=~\"$node\"}[$__rate_interval]))",
               "format": "time_series",
               "instant": false,
               "interval": "",
@@ -229,7 +229,7 @@ data:
           "dashes": false,
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "description": "The average CPU load on the host.",
           "fieldConfig": {
@@ -324,7 +324,7 @@ data:
           "targets": [
             {
               "exemplar": true,
-              "expr": "avg without (cpu) (rate(node_cpu_seconds_total{job=\"node\",mode!=\"idle\",instance=~\"$node\"}[$__rate_interval]))",
+              "expr": "avg without (cpu) (rate(node_cpu_seconds_total{job=\"node-exporter\",mode!=\"idle\",instance=~\"$node\"}[$__rate_interval]))",
               "format": "time_series",
               "instant": false,
               "interval": "",
@@ -393,7 +393,7 @@ data:
           "dashes": false,
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "description": "The average CPU load on the host.",
           "fieldConfig": {
@@ -488,7 +488,7 @@ data:
           "targets": [
             {
               "exemplar": true,
-              "expr": "avg by (instance) (irate(node_cpu_seconds_total{job=\"node\",instance=~\"$node\"}[$__rate_interval]))",
+              "expr": "avg by (instance) (irate(node_cpu_seconds_total{job=\"node-exporter\",instance=~\"$node\"}[$__rate_interval]))",
               "format": "time_series",
               "instant": false,
               "interval": "",
@@ -544,7 +544,7 @@ data:
           "dashes": false,
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "description": "The average CPU load on the host.",
           "fieldConfig": {
@@ -639,7 +639,7 @@ data:
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum by (instance, mode) (rate(node_cpu_seconds_total{job=\"node\",instance=~\"$node\"}[$__rate_interval]))",
+              "expr": "sum by (instance, mode) (rate(node_cpu_seconds_total{job=\"node-exporter\",instance=~\"$node\"}[$__rate_interval]))",
               "format": "time_series",
               "instant": false,
               "interval": "",
@@ -708,7 +708,7 @@ data:
           "dashes": false,
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "description": "The memory usage of the host.",
           "fieldConfig": {
@@ -804,7 +804,7 @@ data:
           "targets": [
             {
               "exemplar": true,
-              "expr": "node_memory_MemTotal_bytes{job=\"node\",instance=~\"$node\"} - node_memory_MemFree_bytes{job=\"node\",instance=~\"$node\"} - node_memory_Buffers_bytes{job=\"node\",instance=~\"$node\"} - node_memory_Cached_bytes{job=\"node\",instance=~\"$node\"}",
+              "expr": "node_memory_MemTotal_bytes{job=\"node-exporter\",instance=~\"$node\"} - node_memory_MemFree_bytes{job=\"node-exporter\",instance=~\"$node\"} - node_memory_Buffers_bytes{job=\"node-exporter\",instance=~\"$node\"} - node_memory_Cached_bytes{job=\"node-exporter\",instance=~\"$node\"}",
               "format": "time_series",
               "instant": false,
               "interval": "",
@@ -860,7 +860,7 @@ data:
           "dashes": false,
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "description": "The memory usage of the host.",
           "fieldConfig": {
@@ -956,7 +956,7 @@ data:
           "targets": [
             {
               "exemplar": true,
-              "expr": "node_memory_MemAvailable_bytes{job=\"node\",instance=~\"$node\"}",
+              "expr": "node_memory_MemAvailable_bytes{job=\"node-exporter\",instance=~\"$node\"}",
               "format": "time_series",
               "instant": false,
               "interval": "",
@@ -1025,7 +1025,7 @@ data:
           "dashes": false,
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "description": "The disk space usage of the host.",
           "fieldConfig": {
@@ -1121,7 +1121,7 @@ data:
           "targets": [
             {
               "exemplar": true,
-              "expr": "100 - ((node_filesystem_avail_bytes{job=\"node\",instance=~\"$node\",fstype!~\"tmpfs|squashfs\"} * 100) / node_filesystem_size_bytes{job=\"node\",instance=~\"$node\",fstype!~\"tmpfs|squashfs\"})",
+              "expr": "100 - ((node_filesystem_avail_bytes{job=\"node-exporter\",instance=~\"$node\",fstype!~\"tmpfs|squashfs\"} * 100) / node_filesystem_size_bytes{job=\"node-exporter\",instance=~\"$node\",fstype!~\"tmpfs|squashfs\"})",
               "format": "time_series",
               "instant": false,
               "interval": "",
@@ -1190,7 +1190,7 @@ data:
           "dashes": false,
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "description": "The disk I/O usage of the host.",
           "fieldConfig": {
@@ -1286,7 +1286,7 @@ data:
           "targets": [
             {
               "exemplar": true,
-              "expr": "irate(node_disk_read_bytes_total{job=\"node\",instance=~\"$node\"}[$__rate_interval])",
+              "expr": "irate(node_disk_read_bytes_total{job=\"node-exporter\",instance=~\"$node\"}[$__rate_interval])",
               "format": "time_series",
               "instant": false,
               "interval": "",
@@ -1342,7 +1342,7 @@ data:
           "dashes": false,
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "description": "The disk I/O usage of the host.",
           "fieldConfig": {
@@ -1438,7 +1438,7 @@ data:
           "targets": [
             {
               "exemplar": true,
-              "expr": "irate(node_disk_written_bytes_total{job=\"node\",instance=~\"$node\"}[$__rate_interval])",
+              "expr": "irate(node_disk_written_bytes_total{job=\"node-exporter\",instance=~\"$node\"}[$__rate_interval])",
               "format": "time_series",
               "instant": false,
               "interval": "",
@@ -1507,7 +1507,7 @@ data:
           "dashes": false,
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "description": "The network traffic of the host.",
           "fieldConfig": {
@@ -1603,7 +1603,7 @@ data:
           "targets": [
             {
               "exemplar": true,
-              "expr": "irate(node_network_receive_bytes_total{job=\"node\",instance=~\"$node\",device!~\"lo\"}[$__rate_interval])",
+              "expr": "irate(node_network_receive_bytes_total{job=\"node-exporter\",instance=~\"$node\",device!~\"lo\"}[$__rate_interval])",
               "format": "time_series",
               "instant": false,
               "interval": "",
@@ -1659,7 +1659,7 @@ data:
           "dashes": false,
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "description": "The network traffic of the host.",
           "fieldConfig": {
@@ -1755,7 +1755,7 @@ data:
           "targets": [
             {
               "exemplar": true,
-              "expr": "irate(node_network_transmit_bytes_total{job=\"node\",instance=~\"$node\",device!~\"lo\"}[$__rate_interval])",
+              "expr": "irate(node_network_transmit_bytes_total{job=\"node-exporter\",instance=~\"$node\",device!~\"lo\"}[$__rate_interval])",
               "format": "time_series",
               "instant": false,
               "interval": "",
@@ -1828,7 +1828,7 @@ data:
           ],
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "fieldConfig": {
             "defaults": {
@@ -1908,7 +1908,7 @@ data:
           "targets": [
             {
               "exemplar": true,
-              "expr": "node_time_seconds{job=\"node\",instance=~\"$node\"} - node_boot_time_seconds{job=\"node\",instance=~\"$node\"}",
+              "expr": "node_time_seconds{job=\"node-exporter\",instance=~\"$node\"} - node_boot_time_seconds{job=\"node-exporter\",instance=~\"$node\"}",
               "format": "time_series",
               "instant": true,
               "interval": "",
@@ -1942,7 +1942,7 @@ data:
           ],
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "fieldConfig": {
             "defaults": {
@@ -2022,7 +2022,7 @@ data:
           "targets": [
             {
               "exemplar": true,
-              "expr": "node_load1{job=\"node\",instance=~\"$node\"}",
+              "expr": "node_load1{job=\"node-exporter\",instance=~\"$node\"}",
               "format": "time_series",
               "instant": true,
               "interval": "",
@@ -2056,7 +2056,7 @@ data:
           ],
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "fieldConfig": {
             "defaults": {
@@ -2136,7 +2136,7 @@ data:
           "targets": [
             {
               "exemplar": true,
-              "expr": "node_load5{job=\"node\",instance=~\"$node\"}",
+              "expr": "node_load5{job=\"node-exporter\",instance=~\"$node\"}",
               "format": "time_series",
               "instant": true,
               "interval": "",
@@ -2170,7 +2170,7 @@ data:
           ],
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus"
           },
           "fieldConfig": {
             "defaults": {
@@ -2250,7 +2250,7 @@ data:
           "targets": [
             {
               "exemplar": true,
-              "expr": "node_load15{job=\"node\",instance=~\"$node\"}",
+              "expr": "node_load15{job=\"node-exporter\",instance=~\"$node\"}",
               "format": "time_series",
               "instant": true,
               "interval": "",
@@ -2287,7 +2287,7 @@ data:
             "current": {},
             "datasource": {
               "type": "prometheus",
-              "uid": "${DS_PROMETHEUS}"
+              "uid": "prometheus"
             },
             "definition": "label_values(node_uname_info, instance)",
             "hide": 0,

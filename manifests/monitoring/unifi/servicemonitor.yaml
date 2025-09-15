@@ -9,8 +9,7 @@ spec:
   selector:
     matchLabels:
       app.kubernetes.io/name: unpoller
-  namespaceSelector:
-    matchNames: [ "monitoring" ]
   endpoints:
-    - port: metrics
-      interval: 30s
+  - port: metrics
+    path: /metrics
+    interval: 30s
