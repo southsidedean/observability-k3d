@@ -24,13 +24,15 @@ spec:
             containerPort: 9130
         env:
           - name: UP_UNIFI_DEFAULT_URL
-            value: "https://unifi-controller:8443"
+            value: "https://unifi-controller:443"
           - name: UP_UNIFI_DEFAULT_VERIFY_SSL
             value: "false"
           - name: UP_PROMETHEUS_HTTP_LISTEN
             value: "0.0.0.0:9130"
           - name: UP_UNIFI_DYNAMIC
             value: "false"
+          - name: UP_UNIFI_DEFAULT_SAVE_DPI
+            value: "true"
           - name: UP_UNIFI_DEFAULT_USER
             valueFrom:
               secretKeyRef:
