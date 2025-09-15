@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: additional-scrape-configs
+stringData:
+  prometheus-additional.yaml: |
+    - job_name: 'node-exporter'
+      scrape_interval: 15s
+      static_configs:
+        - targets:
+          # Add the IP addresses of your Linux and MacOS hosts here
+          # - '<your_linux_host_ip>:9100'
+          # - '<your_macos_host_ip>:9100'
+          - '192.168.1.10:9100' # Example

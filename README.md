@@ -80,19 +80,25 @@ For example, to see logs from a device named `unifi-dream-machine`, use the foll
 
 `{job="syslog", host="unifi-dream-machine"}`
 
-### Monitoring External Hosts (e.g., Ubuntu Servers)
+### Monitoring External Hosts (e.g., Linux/MacOS)
 
 This stack is pre-configured to monitor external Linux hosts using Prometheus `node-exporter`.
 
-1.  **Install Node Exporter:** On each Ubuntu server you want to monitor, install and enable the `node-exporter` service.
+1.  **Install Node Exporter:** On each host you want to monitor, install and run `node_exporter`.
+    - **For Linux (Debian/Ubuntu):**
     ```bash
     sudo apt-get install prometheus-node-exporter
     sudo systemctl start node-exporter
     sudo systemctl enable node-exporter
     ```
-    Verify it's running by visiting `http://<your_ubuntu_ip>:9100/metrics`.
+    - **For MacOS (using Homebrew):**
+    ```bash
+    brew install node_exporter
+    brew services start node_exporter
+    ```
+    Verify it's running by visiting `http://<your_host_ip>:9100/metrics`.
 
-2.  **Configure Prometheus:** Open `manifests/monitoring/kube-prometheus-stack-values.yaml`. Find the `additionalScrapeConfigs` section and add the IP addresses and port (`9100`) of your Ubuntu servers to the `targets` list.
+2.  **Configure Prometheus:** Open `manifests/monitoring/prometheus/additional-scrape-configs.yaml`. Find the `targets` list and add the IP addresses and port (`:9100`) of your hosts.
 
 3.  **Re-run the setup script:** Execute `./scripts/cluster-setup-k3d-observability-everything.sh` again to apply the new configuration.
 
