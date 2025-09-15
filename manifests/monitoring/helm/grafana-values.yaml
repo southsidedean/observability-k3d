@@ -24,3 +24,5 @@ podSecurityContext:
 securityContext:
   runAsUser: 472
   runAsGroup: 472
+initChownData:
+  enabled: false
