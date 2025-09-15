@@ -14,8 +14,8 @@ for id in "${IDS[@]}"; do
 
   # Discover latest revision if not pinned
   if [[ "$REV" == "latest" ]]; then
-    REV=$(curl -fsSL "https://grafana.com/api/dashboards/${id}/revisions" | \
-      jq -r '.[-1].revision // .items[-1].revision')
+    REV=$(curl -fsSL "https://grafana.com/api/dashboards/${id}/revisions" |
+      jq -r '.items[-1].revision')
   fi
 
   if [[ -z "$REV" || "$REV" == "null" ]]; then
