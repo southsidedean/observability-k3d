@@ -9,4 +9,5 @@ resources:
   - probes/
   - alerts/
   - grafana/
+  - dashboards/
   - unifi/

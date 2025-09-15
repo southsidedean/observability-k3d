@@ -3,7 +3,6 @@ kind: Kustomization
 
 resources:
   - datasources.yaml
-  - dashboards.yaml
   - security-dashboard.yaml
   - alerts.yaml
   - alerting.yaml

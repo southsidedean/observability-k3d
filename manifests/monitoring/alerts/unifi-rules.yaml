@@ -1,0 +1,37 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: unifi-rules
+  namespace: monitoring
+  labels:
+    release: kube-prometheus
+spec:
+  groups:
+    - name: unifi.rules
+      rules:
+        - alert: UniFiDeviceOffline
+          expr: unifi_device_state{state="0"} == 1 or unifi_device_state{state="2"} == 1
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: 'UniFi device offline: {{ $labels.name }}'
+            description: 'UniFi device {{ $labels.name }} ({{ $labels.model }}) at site {{ $labels.site_name }} has been offline or disconnected for 5 minutes.'
+
+        - alert: UniFiDeviceHighCpu
+          expr: unifi_device_cpu > 85
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: 'High CPU on UniFi device: {{ $labels.name }}'
+            description: 'UniFi device {{ $labels.name }} ({{ $labels.model }}) is reporting CPU usage over 85% for 10 minutes.'
+
+        - alert: UniFiDeviceHighMemory
+          expr: unifi_device_mem > 85
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: 'High Memory on UniFi device: {{ $labels.name }}'
+            description: 'UniFi device {{ $labels.name }} ({{ $labels.model }}) is reporting memory usage over 85% for 10 minutes.'

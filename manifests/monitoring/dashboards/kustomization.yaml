@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - node-exporter-dashboard.yaml
+  - custom-dashboards.yaml
+
+configMapGenerator:
+- name: unifi-dashboards
+  files:
+  - unifi/unpoller-dashboard-11310.json
+  - unifi/unpoller-dashboard-11311.json
+  - unifi/unpoller-dashboard-11312.json
+  - unifi/unpoller-dashboard-11313.json
+  - unifi/unpoller-dashboard-11314.json
+  - unifi/unpoller-dashboard-11315.json
+  options:
+    labels:
+      grafana_dashboard: "1"
