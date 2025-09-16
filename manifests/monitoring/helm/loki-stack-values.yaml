@@ -1,0 +1,78 @@
+loki:
+  enabled: true
+  isDefault: true
+  persistence:
+    enabled: true
+    size: 10Gi
+    existingClaim: loki-pvc
+    storageClassName: "local-path"
+  podSecurityContext:
+    fsGroup: 10001
+  securityContext:
+    runAsUser: 10001
+    runAsGroup: 10001
+  # The ruler component queries the query-frontend to evaluate rules.
+  # In a single-binary setup, both are in the same pod. We need to explicitly
+  # tell the ruler to query itself using the correct service name ('loki').
+  # This overrides a chart default that can sometimes be incorrect.
+  # config:
+  #   ruler:
+  #     query_frontend_address: 'loki.monitoring.svc.cluster.local:3100'
+  # The following is the default for single-binary mode and ensures
+  # Loki doesn't try to discover other non-existent pods.
+  ring:
+    kvstore:
+      store: inmemory
+promtail:
+  enabled: true
+  config:
+    server:
+      http_listen_port: 3101
+      grpc_listen_port: 0
+
+    positions:
+      filename: /run/promtail/positions.yaml
+
+    clients:
+      - url: http://loki:3100/loki/api/v1/push
+
+    scrape_configs:
+      - job_name: syslog
+        syslog:
+          listen_address: 0.0.0.0:1514
+          idle_timeout: 60s
+          label_structured_data: yes
+          labels:
+            job: "syslog"
+        relabel_configs:
+          - source_labels: ['__syslog_message_hostname']
+            target_label: 'host'
+          - source_labels: ['__syslog_message_app_name']
+            target_label: 'app'
+
+  extraPorts:
+    syslog-tcp:
+      enabled: true
+      containerPort: 1514
+      protocol: TCP
+      service:
+        enabled: true
+        type: NodePort
+        nodePort: 30114
+    syslog-udp:
+      enabled: true
+      containerPort: 1514
+      protocol: UDP
+      service:
+        enabled: true
+        type: NodePort
+        nodePort: 30115
+
+grafana:
+  enabled: false
+
+prometheus:
+  enabled: false
+
+fluent-bit:
+  enabled: false

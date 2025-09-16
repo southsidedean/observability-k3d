@@ -8,6 +8,10 @@ spec:
     - name: http-gateway
       namespace: kgateway-system
   rules:
-    - backendRefs:
-        - name: kagent-ui
-          port: 80
+  - matches:
+    -  path:
+        type: PathPrefix
+        value: /
+    backendRefs:
+    - name: kagent-ui
+      port: 80

@@ -1,0 +1,56 @@
+adminPassword: admin
+
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        uid: prometheus
+        type: prometheus
+        url: http://kube-prometheus-kube-prome-prometheus:9090
+        access: proxy
+        isDefault: true
+        jsonData:
+          httpMethod: POST
+          exemplarTraceIdDestinations:
+            - name: "trace_id"
+              datasourceUid: "loki"
+      - name: Loki
+        uid: loki
+        type: loki
+        url: http://loki:3100
+        access: proxy
+        jsonData:
+          derivedFields:
+            - datasourceUid: 'prometheus'
+              matcherRegex: 'traceId=(\w+)'
+              name: 'TraceID'
+              url: '$${__value.raw}'
+
+service:
+  type: ClusterIP
+sidecar:
+  dashboards:
+    enabled: true
+    label: grafana_dashboard
+    labelValue: "1"
+    searchNamespace: ALL
+  datasources:
+    enabled: false
+env:
+  GF_SERVER_ROOT_URL: "/grafana/"
+  GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+persistence:
+  enabled: true
+  type: pvc
+  storageClassName: "local-path"
+  accessModes: ["ReadWriteOnce"]
+  size: 10Gi
+  existingClaim: grafana-pvc
+podSecurityContext:
+  fsGroup: 472
+securityContext:
+  runAsUser: 472
+  runAsGroup: 472
+initChownData:
+  enabled: false

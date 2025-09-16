@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: unpoller
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: unpoller
+spec:
+  ports:
+    - name: metrics
+      port: 9130
+      targetPort: metrics
+  selector:
+    app.kubernetes.io/name: unpoller
+  type: ClusterIP

@@ -1,0 +1,129 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-alerts
+  namespace: monitoring
+  labels:
+    grafana_alert: "1"
+data:
+  alerts.yaml: |
+    apiVersion: 1
+    groups:
+      - orgId: 1
+        name: system-alerts
+        folder: Infrastructure
+        interval: 1m
+        rules:
+          - uid: high-cpu
+            title: High CPU Usage
+            condition: C
+            labels:
+              severity: critical
+            data:
+              - refId: A
+                datasourceUid: prometheus
+                model:
+                  expr: 100 - (avg by(instance)(irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)
+                  legendFormat: "{{instance}}"
+                  format: time_series
+              - refId: B
+                relativeTimeRange:
+                  from: 300
+                  to: 0
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  conditions:
+                    - evaluator: { params: [85], type: gt }
+                      operator: { type: and }
+                      query: { params: [A] }
+                      reducer: { type: avg }
+            annotations:
+              summary: "High CPU on {{ $labels.instance }}"
+              description: "CPU usage > 85% for 5m"
+          - uid: high-mem
+            title: High Memory Usage
+            condition: C
+            labels:
+              severity: warning
+            data:
+              - refId: A
+                datasourceUid: prometheus
+                model:
+                  expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100
+                  legendFormat: "{{instance}}"
+                  format: time_series
+              - refId: B
+                relativeTimeRange:
+                  from: 300
+                  to: 0
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  conditions:
+                    - evaluator: { params: [90], type: gt }
+                      operator: { type: and }
+                      query: { params: [A] }
+                      reducer: { type: avg }
+            annotations:
+              summary: "High memory on {{ $labels.instance }}"
+              description: "Memory usage > 90% for 5m"
+      - orgId: 1
+        name: log-alerts
+        folder: Security
+        interval: 1m
+        rules:
+          - uid: ssh-bruteforce
+            title: SSH Brute Force Detected
+            condition: C
+            labels:
+              severity: critical
+            data:
+              - refId: A
+                datasourceUid: loki
+                model:
+                  expr: count_over_time({app="sshd"} |= "Failed password"[5m])
+                  legendFormat: "failed logins"
+                  format: time_series
+              - refId: B
+                relativeTimeRange:
+                  from: 300
+                  to: 0
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  conditions:
+                    - evaluator: { params: [10], type: gt }
+                      operator: { type: and }
+                      query: { params: [A] }
+                      reducer: { type: last }
+            annotations:
+              summary: "SSH brute force attempt on {{ $labels.host }}"
+              description: ">10 failed SSH logins in 5 minutes."
+          - uid: sudo-failure
+            title: Sudo Authentication Failures
+            condition: C
+            labels:
+              severity: warning
+            data:
+              - refId: A
+                datasourceUid: loki
+                model:
+                  expr: count_over_time({app="sudo"} |= "authentication failure"[10m])
+                  legendFormat: "sudo failures"
+                  format: time_series
+              - refId: B
+                relativeTimeRange:
+                  from: 600
+                  to: 0
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  conditions:
+                    - evaluator: { params: [5], type: gt }
+                      operator: { type: and }
+                      query: { params: [A] }
+                      reducer: { type: last }
+            annotations:
+              summary: "Excessive sudo failures on {{ $labels.host }}"
+              description: "More than 5 sudo failures in 10 minutes."

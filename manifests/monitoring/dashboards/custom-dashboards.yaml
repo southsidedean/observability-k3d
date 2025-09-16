@@ -1,0 +1,61 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-custom-dashboards
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  loki-logs-overview.json: |
+    {
+      "id": null,
+      "title": "Loki / Syslog Overview",
+      "tags": ["logs"],
+      "schemaVersion": 30,
+      "version": 1,
+      "links": [
+        { "title": "View Active Alerts", "url": "/d/active-alerts", "type": "dashboard" }
+      ],
+      "panels": [
+        {
+          "type": "table",
+          "title": "Recent Syslog Messages",
+          "targets": [
+            { "datasource": {"type": "loki", "uid": "loki"}, "expr": "{job=\\\"syslog\\\"} |~ \".*\"", "refId": "A" }
+          ],
+          "links": [
+            { "title": "View Active Alerts", "url": "/d/active-alerts", "targetBlank": true }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "Log Volume (msg/sec)",
+          "targets": [
+            { "datasource": {"type": "loki", "uid": "loki"}, "expr": "rate({job=\\\"syslog\\\"}[1m])" }
+          ]
+        }
+      ]
+    }
+  active-alerts.json: |
+    {
+      "id": null,
+      "title": "Active Alerts",
+      "tags": ["alerts", "monitoring"],
+      "schemaVersion": 30,
+      "version": 1,
+      "panels": [
+        {
+          "type": "table",
+          "title": "Currently Firing Alerts",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [
+            { "expr": "ALERTS{alertstate=\\\"firing\\\"}", "instant": true, "refId": "A" }
+          ],
+          "options": {"showHeader": true}
+        }
+      ],
+      "links": [
+        {"title": "Back to System Metrics", "url": "/d/node-exporter-dashboard", "type": "dashboard"},
+        {"title": "Back to Logs Overview", "url": "/d/loki-logs-overview", "type": "dashboard"}
+      ]
+    }
