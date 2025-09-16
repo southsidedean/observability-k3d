@@ -1,6 +1,8 @@
 loki:
   enabled: true
   isDefault: true
+  limits_config:
+    volume_enabled: true
   persistence:
     enabled: true
     size: 10Gi
