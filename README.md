@@ -96,67 +96,10 @@ This stack is pre-configured to monitor external Linux hosts using Prometheus `n
     brew install node_exporter
     brew services start node_exporter
     ```
-    Verify it's running by visiting `http://<your_host_ip>:9100/metrics`.
+    Verify it's running by checking `http://<your_host_ip>:9100/metrics`.
 
 2.  **Configure Prometheus:** Open `manifests/monitoring/prometheus/additional-scrape-configs.yaml`. Find the `targets` list and add the IP addresses and port (`:9100`) of your hosts.
 
 3.  **Re-run the setup script:** Execute `./scripts/cluster-setup-k3d-observability-everything.sh` again to apply the new configuration.
 
-Once complete, the "Node Exporter Full" dashboard will be populated with metrics from your servers, and the new host-level alerts will be active.
-#### UniFi Dashboards
-
-The `unpoller` component automatically installs a comprehensive set of Grafana dashboards for your UniFi devices. Look for dashboards with "UniFi" in the title in your Grafana instance.
-
-### Repository Structure
-
-```bash
-observability-k3d/
-├── README.md
-├── cluster-k3d
-│   └── k3d-cluster.yaml
-├── manifests
-│   ├── dashboards
-│   │   ├── blackbox-exporter-dashboard.yaml
-│   │   └── node-exporter-dashboard.yaml
-│   ├── http-listener.yaml
-│   ├── kagent-httproute.yaml
-│   ├── monitoring
-│   │   ├── alerts
-│   │   ├── grafana-httproute.yaml
-│   │   ├── kube-prometheus-stack-values.yaml
-│   │   ├── loki-stack-values.yaml
-│   │   ├── probes
-│   │   └── unpoller-values.yaml
-├── scripts
-│   ├── cluster-destroy-k3d.sh
-│   ├── cluster-setup-k3d-naked.sh
-│   └── cluster-setup-k3d-observability-everything.sh
-└── vars.sh
-```
-
-If you want to tweak the variables for the scripts, look in the `vars.sh` file.
-
-You should use the included scripts to create cluster(s) for local testing:
-
-```bash
-scripts
-├── cluster-destroy-k3d.sh
-├── cluster-setup-k3d-kagent-everything.sh
-└── cluster-setup-k3d-naked.sh
-```
-
-Several options exist for deploying cluster(s):
-
-- One or more clusters (configure in `vars.sh`), with kagent and kgateway deployed (`cluster-setup-k3d-kagent-everything.sh`)
-- A "naked" cluster, no kagent or kgateway (`cluster-setup-k3d-naked.sh`)
-  - You'll need to deploy kagent and the "extras" yourself
-  - Great for building your own!
-- A script to tear down your cluster(s).
-
-### About kagent
-
-The `kagent` dashboard can be accessed on your local machine, via `http://localhost:7001` or `http://$IP_ADDRESS:7001`.
-
-# Summary
-
-Write a summary.
+The "Node Exporter Full" dashboard will now be populated with metrics from your servers.
