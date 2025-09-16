@@ -3,7 +3,7 @@
 # Environment variables for the sandbox
 #
 # Tom Dean
-# Last edit: 9/12/2025
+# Last edit: 9/15/2025
 #
 # Set variables here and then execute or source script
 # Do this before executing any sandbox scripts
@@ -14,9 +14,9 @@ export CLUSTER_NETWORK=observability-network
 export PERSISTENT_DATA_PATH="/media/content/observability-k3d"
 export MONITORING_NAMESPACE=monitoring
 export KAGENT_NAMESPACE=kagent
-export KAGENT_VERSION=0.6.11
+export KAGENT_VERSION=0.6.12
 export OPENAI_API_KEY=""
-export KGATEWAY_VERSION="2.1.0-main"
+export KGATEWAY_VERSION="2.0.4"
 export KGATEWAY_NAMESPACE=kgateway-system
 export GATEWAY_API_VERSION="v1.3.0"
 export GRAFANA_ADMIN_PASSWORD="prom-operator"

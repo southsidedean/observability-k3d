@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+# cvendor-unifi-dashboards.sh
+# Automates import of UniFi dashboards.
+# Tom Dean
+# Last edit: 9/15/2025
+
 set -euo pipefail
 
 DASH_DIR="manifests/monitoring/dashboards/unifi"
