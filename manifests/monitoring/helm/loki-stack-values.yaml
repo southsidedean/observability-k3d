@@ -1,6 +1,8 @@
 loki:
   enabled: true
   isDefault: true
+  pattern_ingester:
+    enabled: true
   limits_config:
     volume_enabled: true
   persistence:
