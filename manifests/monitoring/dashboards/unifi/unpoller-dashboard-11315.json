@@ -1226,7 +1226,7 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "${DS_PROMETHEUS}",
-      "description": "Bandwidth usage per wireless devices as reported by the UAPs. Rx is on the negative axis. Does not include amazon devices.",
+      "description": "Bandwidth usage per wireless devices as reported by the UAPs. Rx is on the negative axis. Does not include roku devices.",
       "fieldConfig": {
         "defaults": {
           "custom": {}
@@ -1342,7 +1342,7 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "${DS_PROMETHEUS}",
-      "description": "Wired TX / RX bytes per second (calculated in 30 second buckets). Rx is on the negative axis. Does not include amazon and camera devices. Unaffected by the AP setting.",
+      "description": "Wired TX / RX bytes per second (calculated in 30 second buckets). Rx is on the negative axis. Does not include roku and camera devices. Unaffected by the AP setting.",
       "fieldConfig": {
         "defaults": {
           "custom": {}
@@ -1458,7 +1458,7 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "${DS_PROMETHEUS}",
-      "description": "Amazon Devices TX / RX bytes per second. Rx is on the negative axis. My home network has a ton of Amazon devices, so I broke them out separately. If you don't have Amazon devices, or they have different names, you can edit the query to use a different name. e = wired, w = wireless",
+      "description": "Roku Devices TX / RX bytes per second. Rx is on the negative axis. My home network has a ton of Roku devices, so I broke them out separately. If you don't have Roku devices, or they have different names, you can edit the query to use a different name. e = wired, w = wireless",
       "fieldConfig": {
         "defaults": {
           "custom": {}
@@ -1511,28 +1511,28 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum by ($Identifier) (rate(unpoller_client_transmit_bytes_total{name=~\"^amazon.*\", name=~\"$Wireless\", site_name=~\"$Site\", ap_name=~\"$AP\"}[$__interval]))",
+          "expr": "sum by ($Identifier) (rate(unpoller_client_transmit_bytes_total{name=~\"^roku.*\", name=~\"$Wireless\", site_name=~\"$Site\", ap_name=~\"$AP\"}[$__interval]))",
           "hide": false,
           "interval": "$Smooth",
           "legendFormat": "w {{name}} {{mac}} Tx",
           "refId": "A"
         },
         {
-          "expr": "sum by ($Identifier) (rate(unpoller_client_receive_bytes_total{name=~\"^amazon.*\", name=~\"$Wireless\", site_name=~\"$Site\", ap_name=~\"$AP\"}[$__interval]))",
+          "expr": "sum by ($Identifier) (rate(unpoller_client_receive_bytes_total{name=~\"^roku.*\", name=~\"$Wireless\", site_name=~\"$Site\", ap_name=~\"$AP\"}[$__interval]))",
           "hide": false,
           "interval": "$Smooth",
           "legendFormat": "w {{name}} {{mac}} Rx",
           "refId": "B"
         },
         {
-          "expr": "sum by ($Identifier) (rate(unpoller_client_transmit_bytes_total{name=~\"^amazon.*\", name=~\"$Wired\", site_name=~\"$Site\", sw_name=~\"$Switch\"}[$__interval]))",
+          "expr": "sum by ($Identifier) (rate(unpoller_client_transmit_bytes_total{name=~\"^roku.*\", name=~\"$Wired\", site_name=~\"$Site\", sw_name=~\"$Switch\"}[$__interval]))",
           "hide": false,
           "interval": "$Smooth",
           "legendFormat": "e {{name}} {{mac}} Tx",
           "refId": "C"
         },
         {
-          "expr": "sum by ($Identifier) (rate(unpoller_client_receive_bytes_total{name=~\"^amazon.*\", name=~\"$Wired\", site_name=~\"$Site\", sw_name=~\"$Switch\"}[$__interval]))",
+          "expr": "sum by ($Identifier) (rate(unpoller_client_receive_bytes_total{name=~\"^roku.*\", name=~\"$Wired\", site_name=~\"$Site\", sw_name=~\"$Switch\"}[$__interval]))",
           "hide": false,
           "interval": "$Smooth",
           "legendFormat": "e {{name}} {{mac}} Rx",
