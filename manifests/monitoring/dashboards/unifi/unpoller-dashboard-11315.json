@@ -1226,7 +1226,7 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "${DS_PROMETHEUS}",
-      "description": "Bandwidth usage per wireless devices as reported by the UAPs. Rx is on the negative axis. Does not include roku devices.",
+      "description": "Bandwidth usage per wireless devices as reported by the UAPs. Rx is on the negative axis. Does not include Roku devices.",
       "fieldConfig": {
         "defaults": {
           "custom": {}
@@ -1342,7 +1342,7 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "${DS_PROMETHEUS}",
-      "description": "Wired TX / RX bytes per second (calculated in 30 second buckets). Rx is on the negative axis. Does not include roku and camera devices. Unaffected by the AP setting.",
+      "description": "Wired TX / RX bytes per second (calculated in 30 second buckets). Rx is on the negative axis. Does not include Roku and camera devices. Unaffected by the AP setting.",
       "fieldConfig": {
         "defaults": {
           "custom": {}
