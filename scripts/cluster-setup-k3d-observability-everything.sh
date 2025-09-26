@@ -2,7 +2,7 @@
 # cluster-setup-k3d-observability-everything.sh
 # Automates the creation of a k3d cluster with a full observability stack.
 # Tom Dean
-# Last edit: 9/15/2025
+# Last edit: 9/24/2025
 
 #set -euo pipefail
 
