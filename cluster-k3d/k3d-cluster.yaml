@@ -20,14 +20,14 @@ ports:
     nodeFilters:
       - server:*
       - agent:*
-    port: $SYSLOG_PORT_UDP:$SYSLOG_PORT_UDP
+  - port: $SYSLOG_PORT_UDP:$SYSLOG_PORT_UDP
     nodeFilters:
       - server:*
       - agent:*
-    port: 7001:80
+  - port: 7001:80
     nodeFilters:
       - loadbalancer
-    port: 7401:443
+  - port: 7401:443
     nodeFilters:
       - loadbalancer
 volumes:
