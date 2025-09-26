@@ -1,7 +1,7 @@
-# k3d-medium.yaml
+# k3d-cluster.yaml
 # Cluster configuration using k3d
 # Tom Dean
-# Last edit: 9/12/2025
+# Last edit: 9/24/2025
 #
 # k3d configuration docs:
 # https://k3d.io/stable/usage/configfile/
@@ -12,12 +12,26 @@ servers: 1
 agents: 3
 network: $CLUSTER_NETWORK
 image: $K3S_VERSION
+kubeAPI:
+  hostIP: "0.0.0.0"
+  hostPort: "7601"
 ports:
   - port: $SYSLOG_PORT_TCP:$SYSLOG_PORT_TCP
     nodeFilters:
       - server:*
       - agent:*
     port: $SYSLOG_PORT_UDP:$SYSLOG_PORT_UDP
+    nodeFilters:
+      - server:*
+      - agent:*
+    port: 7001:80
+    nodeFilters:
+      - loadbalancer
+    port: 7401:443
+    nodeFilters:
+      - loadbalancer
+volumes:
+  - volume: $PERSISTENT_DATA_PATH:$PERSISTENT_DATA_PATH
     nodeFilters:
       - server:*
       - agent:*

@@ -33,13 +33,13 @@ k3d cluster delete $CLUSTER_NAME
 
 echo "Creating new k3d cluster..."
 k3d cluster create $CLUSTER_NAME \
-    -c cluster-k3d/k3d-cluster.yaml \
-    --port 7001:80@loadbalancer \
-    --port 7401:443@loadbalancer \
+    -c cluster-k3d/k3d-cluster.yaml
+#    --port 7001:80@loadbalancer \
+#    --port 7401:443@loadbalancer \
 #    --port "$SYSLOG_PORT_TCP:$SYSLOG_PORT_TCP/tcp@all" \
 #    --port "$SYSLOG_PORT_UDP:$SYSLOG_PORT_UDP/udp@all" \
-    --volume "$PERSISTENT_DATA_PATH:$PERSISTENT_DATA_PATH@all" \
-    --api-port 0.0.0.0:7601
+#    --volume "$PERSISTENT_DATA_PATH:$PERSISTENT_DATA_PATH@all" \
+#    --api-port 0.0.0.0:7601
 k3d cluster list
 echo
 
