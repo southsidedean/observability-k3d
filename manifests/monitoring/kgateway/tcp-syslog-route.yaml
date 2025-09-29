@@ -12,6 +12,6 @@ spec:
       sectionName: tcp-syslog
   rules:
     - backendRefs:
-        - name: loki
+        - name: loki-promtail-syslog-tcp
           namespace: monitoring
-          port: 30114
+          port: 1514
