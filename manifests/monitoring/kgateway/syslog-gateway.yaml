@@ -12,6 +12,7 @@ spec:
     port: 30114  # External port for TCP syslog
     name: tcp-syslog
     allowedRoutes:
-      namespaces: All
+      namespaces:
+        from: "All"
       kinds:
       - kind: TCPRoute
