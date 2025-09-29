@@ -62,7 +62,7 @@ promtail:
       service:
         enabled: true
         type: ClusterIP
-        nodePort: 30114
+#        nodePort: 30114
 #    syslog-udp:
 #      enabled: true
 #      containerPort: 1514
