@@ -53,7 +53,7 @@ echo
 # --- Core Components & CRDs ---
 echo "--- [3/7] Installing Core Components (Gateway API, kagent, kgateway)..."
 echo "Installing Gateway API CRDs..."
-kubectl apply -f "https://github.com/kubernetes-sigs/gateway-api/releases/download/${GATEWAY_API_VERSION}/standard-install.yaml"
+kubectl apply -f "https://github.com/kubernetes-sigs/gateway-api/releases/download/${GATEWAY_API_VERSION}/experimental-install.yaml"
 echo
 
 echo "Installing kagent CLI tool..."
