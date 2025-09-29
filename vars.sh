@@ -20,7 +20,7 @@ export KGATEWAY_VERSION="2.1.0"
 export KGATEWAY_NAMESPACE=kgateway-system
 export GATEWAY_API_VERSION="v1.3.0"
 export GRAFANA_ADMIN_PASSWORD="prom-operator"
-export K3S_VERSION="rancher/k3s:v1.33.5-k3s"
+export K3S_VERSION="rancher/k3s:v1.33.5-k3s1"
 
 # --- UniFi Poller Settings ---
 export UNIFI_CONTROLLER_URL="https://unifi.yourdomain.com" # CHANGE THIS to your UniFi controller URL
