@@ -2,7 +2,7 @@ apiVersion: gateway.networking.k8s.io/v1alpha2
 kind: TCPRoute
 metadata:
   name: tcp-syslog-route
-  namespace: kgateway-system
+  namespace: monitoring
   labels:
     app: syslog
 spec:

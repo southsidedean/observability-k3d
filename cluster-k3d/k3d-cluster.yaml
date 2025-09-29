@@ -17,7 +17,7 @@ kubeAPI:
   hostIP: "0.0.0.0"
   hostPort: "7601"
 ports:
-  - port: $SYSLOG_PORT_TCP:$SYSLOG_PORT_TCP/tcp
+  - port: 30114:30114/tcp
     nodeFilters:
       - loadbalancer
   - port: 7001:80
