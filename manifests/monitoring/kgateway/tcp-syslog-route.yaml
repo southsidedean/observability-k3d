@@ -15,4 +15,3 @@ spec:
         - name: loki-promtail-syslog-tcp
           namespace: monitoring
           port: 1514
-          protocol: TCP
