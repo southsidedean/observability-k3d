@@ -1,7 +1,8 @@
 # k3d-cluster.yaml
+# k3d-cluster.yaml
 # Cluster configuration using k3d
 # Tom Dean
-# Last edit: 9/24/2025
+# Last edit: 9/29/2025
 #
 # k3d configuration docs:
 # https://k3d.io/stable/usage/configfile/
@@ -18,12 +19,7 @@ kubeAPI:
 ports:
   - port: $SYSLOG_PORT_TCP:$SYSLOG_PORT_TCP/tcp
     nodeFilters:
-      - server:*
-      - agent:*
-  - port: $SYSLOG_PORT_UDP:$SYSLOG_PORT_UDP/udp
-    nodeFilters:
-      - server:*
-      - agent:*
+      - loadbalancer
   - port: 7001:80
     nodeFilters:
       - loadbalancer

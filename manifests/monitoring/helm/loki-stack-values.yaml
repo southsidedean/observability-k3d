@@ -61,16 +61,16 @@ promtail:
       protocol: TCP
       service:
         enabled: true
-        type: NodePort
+        type: ClusterIP
         nodePort: 30114
-    syslog-udp:
-      enabled: true
-      containerPort: 1514
-      protocol: UDP
-      service:
-        enabled: true
-        type: NodePort
-        nodePort: 30115
+#    syslog-udp:
+#      enabled: true
+#      containerPort: 1514
+#      protocol: UDP
+#      service:
+#        enabled: true
+#        type: NodePort
+#        nodePort: 30115
 
 grafana:
   enabled: false

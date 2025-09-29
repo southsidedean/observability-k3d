@@ -3,7 +3,7 @@
 # Environment variables for the sandbox
 #
 # Tom Dean
-# Last edit: 9/15/2025
+# Last edit: 9/29/2025
 #
 # Set variables here and then execute or source script
 # Do this before executing any sandbox scripts
@@ -28,4 +28,3 @@ export UNIFI_CONTROLLER_USER="unifipoller"                 # CHANGE THIS to a re
 export UNIFI_CONTROLLER_PASS="your_password_here"          # CHANGE THIS to the user's password
 
 export SYSLOG_PORT_TCP=30114
-export SYSLOG_PORT_UDP=30115

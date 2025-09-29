@@ -1,0 +1,16 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: syslog-gateway
+  namespace: kgateway-system
+  labels:
+    app: syslog
+spec:
+  gatewayClassName: kgateway
+  listeners:
+  - protocol: TCP
+    port: 30114  # External port for TCP syslog
+    name: tcp-syslog
+    allowedRoutes:
+      kinds:
+      - kind: TCPRoute
