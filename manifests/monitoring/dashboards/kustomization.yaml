@@ -36,43 +36,43 @@ configMapGenerator:
   options:
     disableNameSuffixHash: true
     labels: { grafana_dashboard: "1" }
-- name: plex-container
-  files: [plex/container.json]
-  options:
-    disableNameSuffixHash: true
-    labels: { grafana_dashboard: "1" }
-- name: plex-gpu
-  files: [plex/gpu.json]
-  options:
-    disableNameSuffixHash: true
-    labels: { grafana_dashboard: "1" }
-- name: plex-media-server
-  files: [plex/media-server.json]
-  options:
-    disableNameSuffixHash: true
-    labels: { grafana_dashboard: "1" }
-- name: plex-streaming
-  files: [plex/plex-streaming.json]
-  options:
-    disableNameSuffixHash: true
-    labels: { grafana_dashboard: "1" }
-- name: plex-container
-  files: [plex/plex.json]
-  options:
-    disableNameSuffixHash: true
-    labels: { grafana_dashboard: "1" }
-- name: plex-server
-  files: [plex/server.json]
-  options:
-    disableNameSuffixHash: true
-    labels: { grafana_dashboard: "1" }
-- name: plex-storage
-  files: [plex/storage.json]
-  options:
-    disableNameSuffixHash: true
-    labels: { grafana_dashboard: "1" }
-- name: plex-thermals
-  files: [plex/thermals.json]
-  options:
-    disableNameSuffixHash: true
-    labels: { grafana_dashboard: "1" }
+#- name: plex-container
+#  files: [plex/container.json]
+#  options:
+#    disableNameSuffixHash: true
+#    labels: { grafana_dashboard: "1" }
+#- name: plex-gpu
+#  files: [plex/gpu.json]
+#  options:
+#    disableNameSuffixHash: true
+#    labels: { grafana_dashboard: "1" }
+#- name: plex-media-server
+#  files: [plex/media-server.json]
+#  options:
+#    disableNameSuffixHash: true
+#    labels: { grafana_dashboard: "1" }
+#- name: plex-streaming
+#  files: [plex/plex-streaming.json]
+#  options:
+#    disableNameSuffixHash: true
+#    labels: { grafana_dashboard: "1" }
+#- name: plex-container
+#  files: [plex/plex.json]
+#  options:
+#    disableNameSuffixHash: true
+#    labels: { grafana_dashboard: "1" }
+#- name: plex-server
+#  files: [plex/server.json]
+#  options:
+#    disableNameSuffixHash: true
+#    labels: { grafana_dashboard: "1" }
+#- name: plex-storage
+#  files: [plex/storage.json]
+#  options:
+#    disableNameSuffixHash: true
+#    labels: { grafana_dashboard: "1" }
+#- name: plex-thermals
+#  files: [plex/thermals.json]
+#  options:
+#    disableNameSuffixHash: true
+#    labels: { grafana_dashboard: "1" }
