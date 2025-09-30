@@ -23,9 +23,7 @@
   "links": [],
   "panels": [
     {
-      "datasource": {
-        "uid": "$datasource"
-      },
+      "datasource": "${DS_PROMETHEUS}",
       "fieldConfig": {
         "defaults": {
           "color": {

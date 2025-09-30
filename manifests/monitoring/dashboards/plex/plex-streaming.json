@@ -35,9 +35,7 @@
       "type": "row"
     },
     {
-      "datasource": {
-        "uid": "$datasource"
-      },
+      "datasource": "${DS_PROMETHEUS}",
       "description": "Total number of streams",
       "fieldConfig": {
         "defaults": {

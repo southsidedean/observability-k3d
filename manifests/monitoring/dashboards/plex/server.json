@@ -58,10 +58,7 @@
       "type": "row"
     },
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
+      "datasource": "${DS_PROMETHEUS}",
       "description": "Resource pressure via PSI",
       "fieldConfig": {
         "defaults": {
