@@ -4,6 +4,7 @@ kind: Kustomization
 resources:
   - node-exporter-dashboard.yaml
   - custom-dashboards.yaml
+  - plex/provider.yml
 
 configMapGenerator:
 - name: unifi-dashboard-11310
