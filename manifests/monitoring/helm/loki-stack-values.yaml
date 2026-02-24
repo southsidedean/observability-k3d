@@ -1,6 +1,5 @@
 loki:
   enabled: true
-  isDefault: true
   persistence:
     enabled: true
     size: 10Gi

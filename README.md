@@ -26,6 +26,7 @@ If you don't have the following, you're gonna have a bad time:
 - [The `kubectx` command](https://github.com/ahmetb/kubectx)
 - [The `curl` command](https://curl.se/download.html)
 - [The `jq` command](https://jqlang.github.io/jq/download/)
+- The `envsubst` command (part of [gettext](https://www.gnu.org/software/gettext/))
 - The contents of [this](https://github.com/southsidedean/observability-k3d) GitHub repository
 - Internet access to pull containers
 
