@@ -24,6 +24,7 @@ check_command kubectl
 check_command kubectx
 check_command curl
 check_command jq
+check_command envsubst
 check_command docker
 
 # Verify Docker is running
@@ -48,6 +49,14 @@ if [[ ${#missing[@]} -gt 0 ]]; then
     printf '  - %s\n' "${missing[@]}"
     exit 1
 fi
+
+if [[ "$PERSISTENT_DATA_PATH" == *" "* ]]; then
+    echo "Error: PERSISTENT_DATA_PATH must not contain spaces."
+    exit 1
+fi
+
+# Strip trailing slash from PERSISTENT_DATA_PATH
+PERSISTENT_DATA_PATH="${PERSISTENT_DATA_PATH%/}"
 
 # --- Cluster Setup ---
 echo "--- [2/7] Setting up k3d cluster: $CLUSTER_NAME..."
@@ -100,7 +109,7 @@ echo
 echo "--- [4/7] Deploying Observability Stack..."
 echo "Creating monitoring namespace and persistent volumes..."
 kubectl --context "$KUBECTX_NAME" create namespace "$MONITORING_NAMESPACE" --dry-run=client -o yaml | kubectl --context "$KUBECTX_NAME" apply -f -
-envsubst < manifests/monitoring/storage.yaml | kubectl --context "$KUBECTX_NAME" apply -f -
+envsubst '$PERSISTENT_DATA_PATH' < manifests/monitoring/storage.yaml | kubectl --context "$KUBECTX_NAME" apply --server-side -f -
 echo
 
 echo "Creating UniFi Poller secret..."

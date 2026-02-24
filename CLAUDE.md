@@ -33,7 +33,7 @@ kubectl apply -k manifests/ingress/
 ```
 
 ### Prerequisites (validated by setup script)
-k3d, Docker, Helm 3, kubectl, kubectx, curl, jq
+k3d, Docker, Helm 3, kubectl, kubectx, curl, jq, envsubst (gettext)
 
 ## Architecture
 
@@ -58,9 +58,9 @@ The setup script (`scripts/cluster-setup-k3d-observability-everything.sh`) orche
 - `kgateway-system` — Ingress controller
 
 ### Storage
-Persistent volumes use hostPath mounts to `$PERSISTENT_DATA_PATH` on the host (default `/media/content/observability-k3d/`):
+Persistent volumes use hostPath mounts to `$PERSISTENT_DATA_PATH` on the host (must be configured in `vars.sh`):
 - `grafana-pv` (10Gi), `loki-pv` (10Gi) — defined in `manifests/monitoring/storage.yaml` (templated with `$PERSISTENT_DATA_PATH`, expanded via `envsubst` at deploy time)
-- Prometheus PV is managed dynamically by the kube-prometheus-stack Helm chart via `local-path` StorageClass
+- Prometheus storage is managed dynamically by the kube-prometheus-stack Helm chart via `local-path` StorageClass (data lives inside k3d containers, not in `$PERSISTENT_DATA_PATH`)
 
 ### Ingress (Gateway API)
 - HTTP Gateway on port 80 (mapped to host 7001): routes for `/grafana` and `/kagent`

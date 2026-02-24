@@ -12,6 +12,11 @@ cd "$(dirname "$0")/.."
 # Set environment variables
 source vars.sh
 
+if [[ -z "$CLUSTER_NAME" ]]; then
+    echo "Error: CLUSTER_NAME is not set in vars.sh."
+    exit 1
+fi
+
 # Remove the k3d cluster
 k3d cluster delete "$CLUSTER_NAME"
 k3d cluster list
