@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# Standalone helper for rotating the UniFi credentials secret
+# outside of the full cluster setup flow.
+# The main setup script (cluster-setup-k3d-observability-everything.sh)
+# creates this secret automatically during initial deployment.
 set -euo pipefail
 NAMESPACE=${NAMESPACE:-monitoring}
 

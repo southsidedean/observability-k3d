@@ -8,12 +8,13 @@
 # macOS
 .DS_Store
 
-# Editor files
+# Editor and tool files
 *.swp
 *.swo
 *~
 .idea/
 .vscode/
+.claude/
 
 # Temporary files
 *.tmp

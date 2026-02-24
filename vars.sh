@@ -3,7 +3,6 @@
 # Environment variables for the sandbox
 #
 # Tom Dean
-# Last edit: 9/29/2025
 #
 # Set variables here and then execute or source script
 # Do this before executing any sandbox scripts

@@ -2,7 +2,6 @@
 # cluster-setup-k3d-observability-everything.sh
 # Automates the creation of a k3d cluster with a full observability stack.
 # Tom Dean
-# Last edit: 2/23/2026
 
 set -euo pipefail
 
@@ -55,6 +54,11 @@ if [[ "$PERSISTENT_DATA_PATH" == *" "* ]]; then
     exit 1
 fi
 
+if [[ ! -d "$PERSISTENT_DATA_PATH" ]]; then
+    echo "Error: PERSISTENT_DATA_PATH directory does not exist: $PERSISTENT_DATA_PATH"
+    exit 1
+fi
+
 # Strip trailing slash from PERSISTENT_DATA_PATH
 PERSISTENT_DATA_PATH="${PERSISTENT_DATA_PATH%/}"
 
@@ -82,23 +86,28 @@ echo "Installing Gateway API CRDs..."
 kubectl apply --context "$KUBECTX_NAME" -f "https://github.com/kubernetes-sigs/gateway-api/releases/download/${GATEWAY_API_VERSION}/experimental-install.yaml"
 echo
 
-echo "Installing kagent CLI tool..."
-curl https://raw.githubusercontent.com/kagent-dev/kagent/refs/heads/main/scripts/get-kagent | bash
-echo
+if [[ -n "$OPENAI_API_KEY" ]]; then
+  echo "Installing kagent CLI tool..."
+  curl https://raw.githubusercontent.com/kagent-dev/kagent/refs/heads/main/scripts/get-kagent | bash
+  echo
 
-echo "Installing kagent components via Helm..."
-helm upgrade -i kagent-crds oci://ghcr.io/kagent-dev/kagent/helm/kagent-crds \
-    --namespace "$KAGENT_NAMESPACE" \
-    --create-namespace \
-    --wait \
-    --kube-context "$KUBECTX_NAME"
+  echo "Installing kagent components via Helm..."
+  helm upgrade -i kagent-crds oci://ghcr.io/kagent-dev/kagent/helm/kagent-crds \
+      --namespace "$KAGENT_NAMESPACE" \
+      --create-namespace \
+      --wait \
+      --kube-context "$KUBECTX_NAME"
 
-helm upgrade -i kagent oci://ghcr.io/kagent-dev/kagent/helm/kagent \
-    --namespace "$KAGENT_NAMESPACE" \
-    --set-string providers.openAI.apiKey="$OPENAI_API_KEY" \
-    --wait \
-    --kube-context "$KUBECTX_NAME"
-echo
+  helm upgrade -i kagent oci://ghcr.io/kagent-dev/kagent/helm/kagent \
+      --namespace "$KAGENT_NAMESPACE" \
+      --set-string providers.openAI.apiKey="$OPENAI_API_KEY" \
+      --wait \
+      --kube-context "$KUBECTX_NAME"
+  echo
+else
+  echo "Skipping kagent installation (OPENAI_API_KEY not set in vars.sh)."
+  echo
+fi
 
 echo "Installing kgateway components via Helm..."
 helm upgrade -i --create-namespace --namespace "$KGATEWAY_NAMESPACE" --version "v${KGATEWAY_VERSION}" kgateway-crds oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds --set controller.image.pullPolicy=Always --wait --kube-context "$KUBECTX_NAME"
@@ -169,6 +178,9 @@ echo "--- [6/7] Applying Kustomize overlays for monitoring, kgateway, and ingres
 kubectl --context "$KUBECTX_NAME" apply --server-side -k manifests/monitoring/
 kubectl --context "$KUBECTX_NAME" apply --server-side -k manifests/monitoring/kgateway/
 kubectl --context "$KUBECTX_NAME" apply --server-side -k manifests/ingress/
+if [[ -n "$OPENAI_API_KEY" ]]; then
+  kubectl --context "$KUBECTX_NAME" apply --server-side -f manifests/ingress/kagent-httproute.yaml
+fi
 echo
 
 # --- Final Status ---
@@ -177,8 +189,10 @@ echo
 echo "Access services at http://localhost:7001"
 echo "  - Grafana: http://localhost:7001/grafana"
 echo "    - User: admin"
-echo "    - Pass: $GRAFANA_ADMIN_PASSWORD"
-echo "  - kagent UI: http://localhost:7001/kagent"
+echo "    - Pass: (set in vars.sh as GRAFANA_ADMIN_PASSWORD)"
+if [[ -n "$OPENAI_API_KEY" ]]; then
+  echo "  - kagent UI: http://localhost:7001/kagent"
+fi
 echo
 echo "Syslog is listening on:"
 echo "  - TCP: port $SYSLOG_PORT_TCP"

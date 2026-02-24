@@ -3,8 +3,9 @@ kind: Kustomization
 
 resources:
   - http-listener.yaml
-  - kagent-httproute.yaml
   - grafana-httproute.yaml
+  # kagent-httproute.yaml is applied conditionally by the setup script
+  # when OPENAI_API_KEY is set in vars.sh
 #  - loki-httproute.yaml
 #  - prometheus-httproute.yaml
 #  - alertmanager-httproute.yaml

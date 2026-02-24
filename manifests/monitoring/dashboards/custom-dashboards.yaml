@@ -24,7 +24,7 @@ data:
           "title": "Recent Syslog Messages",
           "gridPos": { "h": 12, "w": 24, "x": 0, "y": 0 },
           "targets": [
-            { "datasource": {"type": "loki", "uid": "loki"}, "expr": "{job=\"syslog\"} |~ \".*\"", "refId": "A" }
+            { "datasource": {"type": "loki", "uid": "loki"}, "expr": "{job=\"syslog\"}", "refId": "A" }
           ],
           "links": [
             { "title": "View Active Alerts", "url": "/d/active-alerts", "targetBlank": true }

@@ -2,7 +2,6 @@
 # cluster-destroy-k3d.sh
 # Automates cluster deletion and cleans up the kubectl contexts
 # Tom Dean
-# Last edit: 2/23/2026
 
 set -euo pipefail
 
@@ -14,6 +13,11 @@ source vars.sh
 
 if [[ -z "$CLUSTER_NAME" ]]; then
     echo "Error: CLUSTER_NAME is not set in vars.sh."
+    exit 1
+fi
+
+if [[ -z "$KUBECTX_NAME" ]]; then
+    echo "Error: KUBECTX_NAME is not set in vars.sh."
     exit 1
 fi
 

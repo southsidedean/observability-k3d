@@ -2,7 +2,6 @@
 # vendor-unifi-dashboards.sh
 # Automates import of UniFi dashboards.
 # Tom Dean
-# Last edit: 2/23/2026
 
 set -euo pipefail
 
@@ -22,7 +21,7 @@ for id in "${IDS[@]}"; do
 
   # Discover latest revision if not pinned
   if [[ "$REV" == "latest" ]]; then
-    REV=$(curl -fsSL "https://grafana.com/api/dashboards/${id}/revisions" |
+    REV=$(curl -fsSL --retry 3 --max-time 30 "https://grafana.com/api/dashboards/${id}/revisions" |
       jq -r '.items[-1].revision')
   fi
 
@@ -33,7 +32,7 @@ for id in "${IDS[@]}"; do
 
   echo "Fetching dashboard ${id} rev ${REV} ..."
   DASH_FILE="${DASH_DIR}/unpoller-dashboard-${id}.json"
-  curl -fsSL "https://grafana.com/api/dashboards/${id}/revisions/${REV}/download" -o "$DASH_FILE"
+  curl -fsSL --retry 3 --max-time 30 "https://grafana.com/api/dashboards/${id}/revisions/${REV}/download" -o "$DASH_FILE"
 
   echo "Patching dashboard ${id} to use correct prometheus datasource..."
   # Use sed to replace the placeholder datasource variable with the hardcoded 'prometheus' uid.
