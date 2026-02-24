@@ -1,5 +1,3 @@
-adminPassword: admin
-
 datasources:
   datasources.yaml:
     apiVersion: 1
@@ -36,9 +34,17 @@ sidecar:
     labelValue: "1"
     searchNamespace: ALL
   datasources:
-    enabled: false
+    enabled: true
+    label: grafana_datasource
+    labelValue: "1"
+    searchNamespace: ALL
+  alerts:
+    enabled: true
+    label: grafana_alert
+    labelValue: "1"
+    searchNamespace: ALL
 env:
-  GF_SERVER_ROOT_URL: "/grafana/"
+  GF_SERVER_ROOT_URL: "http://localhost:7001/grafana/"
   GF_SERVER_SERVE_FROM_SUB_PATH: "true"
 persistence:
   enabled: true

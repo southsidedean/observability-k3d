@@ -11,7 +11,7 @@ A Kubernetes observability stack for home lab environments, deployed on k3d (Kub
 ### Cluster Lifecycle
 ```bash
 # Full cluster setup (7-stage pipeline: prereqs → cluster → core → observability → dashboards → kustomize → status)
-source vars.sh && ./scripts/cluster-setup-k3d-observability-everything.sh
+./scripts/cluster-setup-k3d-observability-everything.sh
 
 # Destroy cluster
 ./scripts/cluster-destroy-k3d.sh
@@ -33,7 +33,7 @@ kubectl apply -k manifests/ingress/
 ```
 
 ### Prerequisites (validated by setup script)
-k3d, Docker, Helm 3, kubectl, kubectx, curl
+k3d, Docker, Helm 3, kubectl, kubectx, curl, jq
 
 ## Architecture
 
@@ -59,8 +59,9 @@ The setup script (`scripts/cluster-setup-k3d-observability-everything.sh`) orche
 
 ### Storage
 Persistent volumes use hostPath mounts to `$PERSISTENT_DATA_PATH` on the host (default `/media/content/observability-k3d/`):
-- `grafana-pv` (10Gi), `prometheus-pv` (20Gi), `loki-pv` (10Gi)
-- Defined in `manifests/monitoring/storage.yaml`
+- `grafana-pv` (10Gi), `loki-pv` (10Gi) — defined in `manifests/monitoring/storage.yaml`
+- Prometheus PV is managed dynamically by the kube-prometheus-stack Helm chart via `local-path` StorageClass
+- **Note:** The PV paths in `storage.yaml` are hardcoded — if you change `PERSISTENT_DATA_PATH` in `vars.sh`, you must also update the paths in `storage.yaml`
 
 ### Ingress (Gateway API)
 - HTTP Gateway on port 80 (mapped to host 7001): routes for `/grafana` and `/kagent`
@@ -72,7 +73,7 @@ External hosts forward syslog → host:30114 (TCP) → kgateway TCPRoute → Pro
 
 ### Dashboards
 - `manifests/monitoring/dashboards/unifi/` — Vendored from Grafana.com (IDs 11310-11315), auto-patched by `scripts/vendor-unifi-dashboards.sh`
-- `manifests/monitoring/dashboards/plex/` — Plex media server dashboards (container, GPU, streaming, thermals, etc.)
+- `manifests/monitoring/dashboards/plex/` — Plex media server dashboards (currently disabled — uncomment entries in `dashboards/kustomization.yaml` to enable)
 - `manifests/monitoring/dashboards/custom-dashboards.yaml` — Loki overview and Active Alerts
 
 ### Alert Rules

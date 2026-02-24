@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
       - name: unpoller
-        image: ghcr.io/unpoller/unpoller:latest
+        image: ghcr.io/unpoller/unpoller:v2.11.2
         imagePullPolicy: IfNotPresent
         ports:
           - name: metrics

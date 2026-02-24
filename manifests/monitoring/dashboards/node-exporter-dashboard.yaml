@@ -1242,7 +1242,7 @@ data:
                   }
                 ]
               },
-              "unit": "iops"
+              "unit": "Bps"
             },
             "overrides": []
           },
@@ -1314,7 +1314,7 @@ data:
           },
           "yaxes": [
             {
-              "format": "iops",
+              "format": "Bps",
               "label": null,
               "logBase": 1,
               "max": null,
@@ -1394,7 +1394,7 @@ data:
                   }
                 ]
               },
-              "unit": "iops"
+              "unit": "Bps"
             },
             "overrides": []
           },
@@ -1466,7 +1466,7 @@ data:
           },
           "yaxes": [
             {
-              "format": "iops",
+              "format": "Bps",
               "label": null,
               "logBase": 1,
               "max": null,

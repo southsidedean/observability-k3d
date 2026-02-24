@@ -28,19 +28,6 @@ spec:
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: prometheus-pv
-spec:
-  capacity:
-    storage: 20Gi
-  accessModes:
-    - ReadWriteOnce
-  storageClassName: "local-path"
-  hostPath:
-    path: /media/content/observability-k3d/prometheus
----
-apiVersion: v1
-kind: PersistentVolume
-metadata:
   name: loki-pv
 spec:
   capacity:

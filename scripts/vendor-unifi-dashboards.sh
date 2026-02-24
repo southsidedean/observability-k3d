@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
-# cvendor-unifi-dashboards.sh
+# vendor-unifi-dashboards.sh
 # Automates import of UniFi dashboards.
 # Tom Dean
-# Last edit: 9/15/2025
+# Last edit: 2/23/2026
 
 set -euo pipefail
+
+# Ensure we run from the repository root
+cd "$(dirname "$0")/.."
 
 DASH_DIR="manifests/monitoring/dashboards/unifi"
 mkdir -p "$DASH_DIR"

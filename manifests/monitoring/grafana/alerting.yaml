@@ -15,14 +15,14 @@ data:
           - uid: email-receiver
             type: email
             settings:
-              addresses: "alerts@example.com"
+              addresses: "alerts@example.com"  # CHANGE THIS to your email address
       - orgId: 1
         name: slack-notifications
         receivers:
           - uid: slack-receiver
             type: slack
             settings:
-              url: "https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX"
+              url: "https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX"  # CHANGE THIS to your Slack webhook URL
               recipient: "#alerts"
               username: "Grafana"
               icon_emoji: ":rotating_light:"

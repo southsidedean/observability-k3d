@@ -9,6 +9,7 @@ data:
   loki-logs-overview.json: |
     {
       "id": null,
+      "uid": "loki-logs-overview",
       "title": "Loki / Syslog Overview",
       "tags": ["logs"],
       "schemaVersion": 30,
@@ -18,20 +19,24 @@ data:
       ],
       "panels": [
         {
+          "id": 1,
           "type": "table",
           "title": "Recent Syslog Messages",
+          "gridPos": { "h": 12, "w": 24, "x": 0, "y": 0 },
           "targets": [
-            { "datasource": {"type": "loki", "uid": "loki"}, "expr": "{job=\\\"syslog\\\"} |~ \".*\"", "refId": "A" }
+            { "datasource": {"type": "loki", "uid": "loki"}, "expr": "{job=\"syslog\"} |~ \".*\"", "refId": "A" }
           ],
           "links": [
             { "title": "View Active Alerts", "url": "/d/active-alerts", "targetBlank": true }
           ]
         },
         {
+          "id": 2,
           "type": "timeseries",
           "title": "Log Volume (msg/sec)",
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 12 },
           "targets": [
-            { "datasource": {"type": "loki", "uid": "loki"}, "expr": "rate({job=\\\"syslog\\\"}[1m])" }
+            { "datasource": {"type": "loki", "uid": "loki"}, "expr": "rate({job=\"syslog\"}[1m])" }
           ]
         }
       ]
@@ -39,23 +44,26 @@ data:
   active-alerts.json: |
     {
       "id": null,
+      "uid": "active-alerts",
       "title": "Active Alerts",
       "tags": ["alerts", "monitoring"],
       "schemaVersion": 30,
       "version": 1,
       "panels": [
         {
+          "id": 1,
           "type": "table",
           "title": "Currently Firing Alerts",
+          "gridPos": { "h": 16, "w": 24, "x": 0, "y": 0 },
           "datasource": {"type": "prometheus", "uid": "prometheus"},
           "targets": [
-            { "expr": "ALERTS{alertstate=\\\"firing\\\"}", "instant": true, "refId": "A" }
+            { "expr": "ALERTS{alertstate=\"firing\"}", "instant": true, "refId": "A" }
           ],
           "options": {"showHeader": true}
         }
       ],
       "links": [
-        {"title": "Back to System Metrics", "url": "/d/node-exporter-dashboard", "type": "dashboard"},
+        {"title": "Back to System Metrics", "url": "/d/ikY1j26Zz", "type": "dashboard"},
         {"title": "Back to Logs Overview", "url": "/d/loki-logs-overview", "type": "dashboard"}
       ]
     }

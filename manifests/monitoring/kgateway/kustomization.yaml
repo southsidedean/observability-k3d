@@ -4,4 +4,3 @@ kind: Kustomization
 resources:
   - syslog-gateway.yaml
   - tcp-syslog-route.yaml
-  - allow-syslog-route-to-loki.yaml

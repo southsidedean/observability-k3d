@@ -1,0 +1,19 @@
+# Backup files
+*.bak
+
+# Environment files
+.env
+.env.*
+
+# macOS
+.DS_Store
+
+# Editor files
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# Temporary files
+*.tmp

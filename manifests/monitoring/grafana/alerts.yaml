@@ -16,11 +16,14 @@ data:
         rules:
           - uid: high-cpu
             title: High CPU Usage
-            condition: C
+            condition: B
             labels:
               severity: critical
             data:
               - refId: A
+                relativeTimeRange:
+                  from: 300
+                  to: 0
                 datasourceUid: prometheus
                 model:
                   expr: 100 - (avg by(instance)(irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)
@@ -43,11 +46,14 @@ data:
               description: "CPU usage > 85% for 5m"
           - uid: high-mem
             title: High Memory Usage
-            condition: C
+            condition: B
             labels:
               severity: warning
             data:
               - refId: A
+                relativeTimeRange:
+                  from: 300
+                  to: 0
                 datasourceUid: prometheus
                 model:
                   expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100
@@ -75,11 +81,14 @@ data:
         rules:
           - uid: ssh-bruteforce
             title: SSH Brute Force Detected
-            condition: C
+            condition: B
             labels:
               severity: critical
             data:
               - refId: A
+                relativeTimeRange:
+                  from: 300
+                  to: 0
                 datasourceUid: loki
                 model:
                   expr: count_over_time({app="sshd"} |= "Failed password"[5m])
@@ -102,11 +111,14 @@ data:
               description: ">10 failed SSH logins in 5 minutes."
           - uid: sudo-failure
             title: Sudo Authentication Failures
-            condition: C
+            condition: B
             labels:
               severity: warning
             data:
               - refId: A
+                relativeTimeRange:
+                  from: 600
+                  to: 0
                 datasourceUid: loki
                 model:
                   expr: count_over_time({app="sudo"} |= "authentication failure"[10m])

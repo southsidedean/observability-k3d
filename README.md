@@ -25,7 +25,7 @@ If you don't have the following, you're gonna have a bad time:
 - [The `kubectl` command](https://kubernetes.io/docs/tasks/tools/)
 - [The `kubectx` command](https://github.com/ahmetb/kubectx)
 - [The `curl` command](https://curl.se/download.html)
-- The `watch` command
+- [The `jq` command](https://jqlang.github.io/jq/download/)
 - The contents of [this](https://github.com/southsidedean/observability-k3d) GitHub repository
 - Internet access to pull containers
 
@@ -48,7 +48,6 @@ The primary script `scripts/cluster-setup-k3d-observability-everything.sh` autom
     ./scripts/cluster-setup-k3d-observability-everything.sh
     ```
 This script will:
-- Create a local directory for persistent data.
 - Create a `k3d` cluster with the necessary ports and volume mounts.
 - Install `kagent` and `kgateway`.
 - Deploy the full observability stack (Prometheus, Grafana, Loki, Unpoller).
@@ -57,9 +56,7 @@ This script will:
 #### Other Scripts
 
 - **Destroy Cluster:** To tear down the cluster and its resources, use `scripts/cluster-destroy-k3d.sh`.
-- **Naked Cluster:** For advanced users who want to build their own setup, `scripts/cluster-setup-k3d-naked.sh` creates a cluster with `k3d` but does not deploy any of the observability or `kagent` components.
-
-To destroy the cluster, use the `scripts/cluster-destroy-k3d.sh` script.
+- **Vendor Dashboards:** To re-fetch UniFi dashboards from Grafana.com, use `scripts/vendor-unifi-dashboards.sh`.
 
 ### Accessing Services
 
@@ -68,7 +65,7 @@ Once the script is complete, you can access the services via the `kgateway` ingr
 - **Grafana:** `http://localhost:7001/grafana`
   - **Login:** `admin` / password set in `GRAFANA_ADMIN_PASSWORD` from `vars.sh`.
 - **kagent UI:** `http://localhost:7001/kagent`
-- **Syslog:** Your host machine will listen for syslog messages on TCP port `1514` (or as configured in `SYSLOG_PORT`). Configure your devices (like UniFi gear or Ubuntu servers) to send logs to `tcp://<your_host_ip>:1514`.
+- **Syslog:** Your host machine will listen for syslog messages on TCP port `30114` (or as configured in `SYSLOG_PORT_TCP` in `vars.sh`). Configure your devices (like UniFi gear or Ubuntu servers) to send logs to `tcp://<your_host_ip>:30114`.
 
 ### Monitoring Capabilities
 

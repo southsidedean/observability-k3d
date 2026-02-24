@@ -56,7 +56,7 @@ configMapGenerator:
 #  options:
 #    disableNameSuffixHash: true
 #    labels: { grafana_dashboard: "1" }
-#- name: plex-container
+#- name: plex-overview
 #  files: [plex/plex.json]
 #  options:
 #    disableNameSuffixHash: true
@@ -73,6 +73,11 @@ configMapGenerator:
 #    labels: { grafana_dashboard: "1" }
 #- name: plex-thermals
 #  files: [plex/thermals.json]
+#  options:
+#    disableNameSuffixHash: true
+#    labels: { grafana_dashboard: "1" }
+#- name: plex-media-server-overview
+#  files: [plex/media-server-overview.json]
 #  options:
 #    disableNameSuffixHash: true
 #    labels: { grafana_dashboard: "1" }

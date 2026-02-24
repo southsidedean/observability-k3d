@@ -11,4 +11,3 @@ resources:
   - grafana/
   - dashboards/
   - unifi/
-  - kgateway/

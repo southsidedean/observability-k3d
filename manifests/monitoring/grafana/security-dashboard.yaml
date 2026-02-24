@@ -9,6 +9,7 @@ data:
   security-dashboard.json: |
     {
       "id": null,
+      "uid": "security-overview",
       "title": "Security Dashboard",
       "tags": ["security", "logs"],
       "timezone": "browser",
@@ -16,38 +17,48 @@ data:
       "version": 1,
       "panels": [
         {
+          "id": 1,
           "type": "timeseries",
           "title": "Failed SSH Logins",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
           "targets": [
-            { "datasource": {"type": "loki", "uid": "loki"}, "expr": "count_over_time({app=\\\"sshd\\\"} |= \\\"Failed password\\\" [5m])", "legendFormat": "SSH Failed Passwords" }
+            { "datasource": {"type": "loki", "uid": "loki"}, "expr": "count_over_time({app=\"sshd\"} |= \"Failed password\" [5m])", "legendFormat": "SSH Failed Passwords" }
           ]
         },
         {
+          "id": 2,
           "type": "timeseries",
           "title": "Sudo Authentication Failures",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
           "targets": [
-            { "datasource": {"type": "loki", "uid": "loki"}, "expr": "count_over_time({app=\\\"sudo\\\"} |= \\\"authentication failure\\\" [5m])", "legendFormat": "Sudo Failures" }
+            { "datasource": {"type": "loki", "uid": "loki"}, "expr": "count_over_time({app=\"sudo\"} |= \"authentication failure\" [5m])", "legendFormat": "Sudo Failures" }
           ]
         },
         {
+          "id": 3,
           "type": "logs",
           "title": "Recent SSH Login Failures",
+          "gridPos": { "h": 10, "w": 12, "x": 0, "y": 8 },
           "targets": [
-            { "datasource": {"type": "loki", "uid": "loki"}, "expr": "{app=\\\"sshd\\\"} |= \\\"Failed password\\\"" }
+            { "datasource": {"type": "loki", "uid": "loki"}, "expr": "{app=\"sshd\"} |= \"Failed password\"" }
           ]
         },
         {
+          "id": 4,
           "type": "logs",
           "title": "Recent Sudo Failures",
+          "gridPos": { "h": 10, "w": 12, "x": 12, "y": 8 },
           "targets": [
-            { "datasource": {"type": "loki", "uid": "loki"}, "expr": "{app=\\\"sudo\\\"} |= \\\"authentication failure\\\"" }
+            { "datasource": {"type": "loki", "uid": "loki"}, "expr": "{app=\"sudo\"} |= \"authentication failure\"" }
           ]
         },
         {
+          "id": 5,
           "type": "timeseries",
           "title": "Security Alerts (Prometheus)",
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 18 },
           "targets": [
-            { "datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "ALERTS{alertstate=\\\"firing\\\", severity=\\\"critical\\\"}", "legendFormat": "{{alertname}}" }
+            { "datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "ALERTS{alertstate=\"firing\", severity=\"critical\"}", "legendFormat": "{{alertname}}" }
           ]
         }
       ]
