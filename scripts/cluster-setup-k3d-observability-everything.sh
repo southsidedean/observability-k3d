@@ -38,6 +38,17 @@ echo
 # Set environment variables
 source vars.sh
 
+# --- Validate Required Variables ---
+missing=()
+[[ -z "$PERSISTENT_DATA_PATH" ]] && missing+=("PERSISTENT_DATA_PATH")
+[[ -z "$CLUSTER_NAME" ]] && missing+=("CLUSTER_NAME")
+[[ -z "$K3S_VERSION" ]] && missing+=("K3S_VERSION")
+if [[ ${#missing[@]} -gt 0 ]]; then
+    echo "Error: The following required variables are not set in vars.sh:"
+    printf '  - %s\n' "${missing[@]}"
+    exit 1
+fi
+
 # --- Cluster Setup ---
 echo "--- [2/7] Setting up k3d cluster: $CLUSTER_NAME..."
 echo "Deleting existing cluster (if any)..."
@@ -89,7 +100,7 @@ echo
 echo "--- [4/7] Deploying Observability Stack..."
 echo "Creating monitoring namespace and persistent volumes..."
 kubectl --context "$KUBECTX_NAME" create namespace "$MONITORING_NAMESPACE" --dry-run=client -o yaml | kubectl --context "$KUBECTX_NAME" apply -f -
-kubectl --context "$KUBECTX_NAME" apply -f manifests/monitoring/storage.yaml
+envsubst < manifests/monitoring/storage.yaml | kubectl --context "$KUBECTX_NAME" apply -f -
 echo
 
 echo "Creating UniFi Poller secret..."

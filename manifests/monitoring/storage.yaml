@@ -9,7 +9,7 @@ spec:
     - ReadWriteOnce
   storageClassName: "local-path"
   hostPath:
-    path: /media/content/observability-k3d/grafana
+    path: $PERSISTENT_DATA_PATH/grafana
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -36,7 +36,7 @@ spec:
     - ReadWriteOnce
   storageClassName: "local-path"
   hostPath:
-    path: /media/content/observability-k3d/loki
+    path: $PERSISTENT_DATA_PATH/loki
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim

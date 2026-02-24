@@ -59,9 +59,8 @@ The setup script (`scripts/cluster-setup-k3d-observability-everything.sh`) orche
 
 ### Storage
 Persistent volumes use hostPath mounts to `$PERSISTENT_DATA_PATH` on the host (default `/media/content/observability-k3d/`):
-- `grafana-pv` (10Gi), `loki-pv` (10Gi) — defined in `manifests/monitoring/storage.yaml`
+- `grafana-pv` (10Gi), `loki-pv` (10Gi) — defined in `manifests/monitoring/storage.yaml` (templated with `$PERSISTENT_DATA_PATH`, expanded via `envsubst` at deploy time)
 - Prometheus PV is managed dynamically by the kube-prometheus-stack Helm chart via `local-path` StorageClass
-- **Note:** The PV paths in `storage.yaml` are hardcoded — if you change `PERSISTENT_DATA_PATH` in `vars.sh`, you must also update the paths in `storage.yaml`
 
 ### Ingress (Gateway API)
 - HTTP Gateway on port 80 (mapped to host 7001): routes for `/grafana` and `/kagent`

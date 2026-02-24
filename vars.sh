@@ -11,7 +11,7 @@
 export CLUSTER_NAME=observability-cluster
 export KUBECTX_NAME=observability-cluster
 export CLUSTER_NETWORK=observability-network
-export PERSISTENT_DATA_PATH=""
+export PERSISTENT_DATA_PATH=""  # CHANGE THIS to a local directory for persistent data (e.g., /media/content/observability-k3d)
 export MONITORING_NAMESPACE=monitoring
 export KAGENT_NAMESPACE=kagent
 export KAGENT_VERSION=0.7.17
