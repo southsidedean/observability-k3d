@@ -7,7 +7,11 @@ spec:
     storage: 10Gi
   accessModes:
     - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
   storageClassName: "local-path"
+  claimRef:
+    name: grafana-pvc
+    namespace: monitoring
   hostPath:
     path: $PERSISTENT_DATA_PATH/grafana
 ---
@@ -34,7 +38,11 @@ spec:
     storage: 10Gi
   accessModes:
     - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
   storageClassName: "local-path"
+  claimRef:
+    name: loki-pvc
+    namespace: monitoring
   hostPath:
     path: $PERSISTENT_DATA_PATH/loki
 ---

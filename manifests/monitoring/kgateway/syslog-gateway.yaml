@@ -9,7 +9,7 @@ spec:
   gatewayClassName: kgateway
   listeners:
   - protocol: TCP
-    port: 30114  # External port for TCP syslog
+    port: $SYSLOG_PORT_TCP  # External port for TCP syslog (expanded via envsubst)
     name: tcp-syslog
     allowedRoutes:
       namespaces:

@@ -82,7 +82,11 @@ kubectx
 echo
 
 # --- Core Components & CRDs ---
-echo "--- [3/7] Installing Core Components (Gateway API, kagent, kgateway)..."
+if [[ -n "$OPENAI_API_KEY" ]]; then
+  echo "--- [3/7] Installing Core Components (Gateway API, kagent, kgateway)..."
+else
+  echo "--- [3/7] Installing Core Components (Gateway API, kgateway)..."
+fi
 echo "Installing Gateway API CRDs..."
 kubectl apply --context "$KUBECTX_NAME" -f "https://github.com/kubernetes-sigs/gateway-api/releases/download/${GATEWAY_API_VERSION}/experimental-install.yaml"
 echo
@@ -164,12 +168,16 @@ helm upgrade --install blackbox prometheus-community/prometheus-blackbox-exporte
   --wait --timeout 5m \
   --kube-context "$KUBECTX_NAME"
 
+GRAFANA_TMP_VALUES=$(mktemp)
+trap "rm -f '$GRAFANA_TMP_VALUES'" EXIT
+printf 'adminPassword: "%s"\n' "$GRAFANA_ADMIN_PASSWORD" > "$GRAFANA_TMP_VALUES"
 helm upgrade --install grafana grafana/grafana \
   --namespace "$MONITORING_NAMESPACE" \
   -f manifests/monitoring/helm/grafana-values.yaml \
-  --set adminPassword="$GRAFANA_ADMIN_PASSWORD" \
+  -f "$GRAFANA_TMP_VALUES" \
   --wait --timeout 5m \
   --kube-context "$KUBECTX_NAME"
+rm -f "$GRAFANA_TMP_VALUES"
 echo
 
 # --- Dashboards & Kustomize Overlays ---
@@ -179,7 +187,8 @@ echo
 
 echo "--- [6/7] Applying Kustomize overlays for monitoring, kgateway, and ingress..."
 kubectl --context "$KUBECTX_NAME" apply --server-side -k manifests/monitoring/
-kubectl --context "$KUBECTX_NAME" apply --server-side -k manifests/monitoring/kgateway/
+envsubst '$SYSLOG_PORT_TCP' < manifests/monitoring/kgateway/syslog-gateway.yaml | kubectl --context "$KUBECTX_NAME" apply --server-side -f -
+kubectl --context "$KUBECTX_NAME" apply --server-side -f manifests/monitoring/kgateway/tcp-syslog-route.yaml
 kubectl --context "$KUBECTX_NAME" apply --server-side -k manifests/ingress/
 if [[ -n "$OPENAI_API_KEY" ]]; then
   kubectl --context "$KUBECTX_NAME" apply --server-side -f manifests/ingress/kagent-httproute.yaml
