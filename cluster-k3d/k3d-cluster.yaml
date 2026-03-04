@@ -1,7 +1,6 @@
 # k3d-cluster.yaml
 # Cluster configuration using k3d
 # Tom Dean
-# Last edit: 9/29/2025
 #
 # k3d configuration docs:
 # https://k3d.io/stable/usage/configfile/

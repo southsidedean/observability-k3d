@@ -63,7 +63,7 @@ data:
         }
       ],
       "links": [
-        {"title": "Back to System Metrics", "url": "/d/ikY1j26Zz", "type": "dashboard"},
+        {"title": "Back to System Metrics", "url": "/d/node-exporter-full", "type": "dashboard"},
         {"title": "Back to Logs Overview", "url": "/d/loki-logs-overview", "type": "dashboard"}
       ]
     }

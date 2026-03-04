@@ -50,7 +50,7 @@ The primary script `scripts/cluster-setup-k3d-observability-everything.sh` autom
     ```
 This script will:
 - Create a `k3d` cluster with the necessary ports and volume mounts.
-- Install `kagent` and `kgateway`.
+- Install `kgateway` for ingress, and optionally `kagent` (if `OPENAI_API_KEY` is set).
 - Deploy the full observability stack (Prometheus, Grafana, Loki, Unpoller).
 - Apply custom monitoring rules and gateway routes.
 
@@ -65,7 +65,7 @@ Once the script is complete, you can access the services via the `kgateway` ingr
 
 - **Grafana:** `http://localhost:7001/grafana`
   - **Login:** `admin` / password set in `GRAFANA_ADMIN_PASSWORD` from `vars.sh`.
-- **kagent UI:** `http://localhost:7001/kagent`
+- **kagent UI:** `http://localhost:7001/kagent` (only available if `OPENAI_API_KEY` is set)
 - **Syslog:** Your host machine will listen for syslog messages on TCP port `30114` (or as configured in `SYSLOG_PORT_TCP` in `vars.sh`). Configure your devices (like UniFi gear or Ubuntu servers) to send logs to `tcp://<your_host_ip>:30114`.
 
 ### Monitoring Capabilities

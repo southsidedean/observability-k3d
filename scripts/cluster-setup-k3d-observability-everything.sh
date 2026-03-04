@@ -42,6 +42,7 @@ source vars.sh
 missing=()
 [[ -z "$PERSISTENT_DATA_PATH" ]] && missing+=("PERSISTENT_DATA_PATH")
 [[ -z "$CLUSTER_NAME" ]] && missing+=("CLUSTER_NAME")
+[[ -z "$KUBECTX_NAME" ]] && missing+=("KUBECTX_NAME")
 [[ -z "$K3S_VERSION" ]] && missing+=("K3S_VERSION")
 if [[ ${#missing[@]} -gt 0 ]]; then
     echo "Error: The following required variables are not set in vars.sh:"
@@ -93,12 +94,14 @@ if [[ -n "$OPENAI_API_KEY" ]]; then
 
   echo "Installing kagent components via Helm..."
   helm upgrade -i kagent-crds oci://ghcr.io/kagent-dev/kagent/helm/kagent-crds \
+      --version "$KAGENT_VERSION" \
       --namespace "$KAGENT_NAMESPACE" \
       --create-namespace \
       --wait \
       --kube-context "$KUBECTX_NAME"
 
   helm upgrade -i kagent oci://ghcr.io/kagent-dev/kagent/helm/kagent \
+      --version "$KAGENT_VERSION" \
       --namespace "$KAGENT_NAMESPACE" \
       --set-string providers.openAI.apiKey="$OPENAI_API_KEY" \
       --wait \

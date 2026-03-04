@@ -4,4 +4,6 @@ kind: Kustomization
 resources:
   - security-dashboard.yaml
   - alerts.yaml
-  - alerting.yaml
+  # Uncomment after configuring real contact points in alerting.yaml
+  # (email address, Slack webhook URL)
+  # - alerting.yaml

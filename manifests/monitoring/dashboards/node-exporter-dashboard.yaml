@@ -8,6 +8,7 @@ metadata:
 data:
   node-exporter-full.json: |
     {
+      "uid": "node-exporter-full",
       "__inputs": [],
       "__requires": [
         {
