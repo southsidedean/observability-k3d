@@ -14,6 +14,8 @@ data:
       "tags": ["logs"],
       "schemaVersion": 30,
       "version": 1,
+      "time": { "from": "now-1h", "to": "now" },
+      "refresh": "30s",
       "links": [
         { "title": "View Active Alerts", "url": "/d/active-alerts", "type": "dashboard" }
       ],
@@ -49,6 +51,8 @@ data:
       "tags": ["alerts", "monitoring"],
       "schemaVersion": 30,
       "version": 1,
+      "time": { "from": "now-1h", "to": "now" },
+      "refresh": "30s",
       "panels": [
         {
           "id": 1,

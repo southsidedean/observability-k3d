@@ -12,14 +12,14 @@ if [[ $# -lt 3 ]]; then
   exit 1
 fi
 
-USER="$1"
-PASS="$2"
-URL="$3"
+UNIFI_USER="$1"
+UNIFI_PASS="$2"
+UNIFI_URL="$3"
 
 kubectl -n "$NAMESPACE" delete secret unifi-credentials --ignore-not-found
 kubectl -n "$NAMESPACE" create secret generic unifi-credentials \
-  --from-literal=username="$USER" \
-  --from-literal=password="$PASS" \
-  --from-literal=url="$URL"
+  --from-literal=username="$UNIFI_USER" \
+  --from-literal=password="$UNIFI_PASS" \
+  --from-literal=url="$UNIFI_URL"
 
 echo "Created secret 'unifi-credentials' in namespace $NAMESPACE"

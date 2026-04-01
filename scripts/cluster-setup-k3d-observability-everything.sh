@@ -104,12 +104,15 @@ if [[ -n "$OPENAI_API_KEY" ]]; then
       --wait \
       --kube-context "$KUBECTX_NAME"
 
+  KAGENT_TMP_VALUES=$(mktemp)
+  printf 'providers:\n  openAI:\n    apiKey: "%s"\n' "$OPENAI_API_KEY" > "$KAGENT_TMP_VALUES"
   helm upgrade -i kagent oci://ghcr.io/kagent-dev/kagent/helm/kagent \
       --version "$KAGENT_VERSION" \
       --namespace "$KAGENT_NAMESPACE" \
-      --set-string providers.openAI.apiKey="$OPENAI_API_KEY" \
+      -f "$KAGENT_TMP_VALUES" \
       --wait \
       --kube-context "$KUBECTX_NAME"
+  rm -f "$KAGENT_TMP_VALUES"
   echo
 else
   echo "Skipping kagent installation (OPENAI_API_KEY not set in vars.sh)."
