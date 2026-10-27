@@ -2,94 +2,131 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Project Overview
+## Roadmap
 
-A Kubernetes observability stack for home lab environments, deployed on k3d (Kubernetes in Docker). Shell scripts plus Helm values and Kustomize manifests stand up Prometheus, Grafana, Loki, Promtail, Blackbox Exporter, and Unpoller (UniFi metrics), with kgateway for ingress and optional kagent. There is no build step or test suite.
+The repository is being rebuilt as **ok3d** (short for observability-k3d), a home network
+operations center on k3d with AI agents. `PLAN.md` holds every decision, the roadmap from 0.3
+to 1.x, the CI and quality rules, and the open questions. Read it before starting work, and
+update it in the same pull request when a decision changes.
 
-## Key Commands
+- `v0.2.0` is the old stack's last version. Its files (below) stay until 0.4.0 replaces them.
+- Next is 0.3 (groundwork): CI, hooks, the two chart skeletons, the `ok3d` command, and the
+  first diagrams.
+- Before 1.0: a full independent review of every file (no spot checks) and an architectural
+  review, written up in `docs/reviews/1.0-review.md`.
+
+The user's servers, test VMs, and where production runs are in Claude's project memory, never
+in this repository.
+
+## Commands
+
+For the old stack, until 0.4:
 
 ```bash
 # Full deploy. Deletes and recreates the k3d cluster every run, by design: recreating
-# with newer versions is the upgrade path, and state survives on host folders (see Storage).
+# with newer versions is the upgrade path, and state survives on host folders.
 ./scripts/cluster-setup-k3d-observability-everything.sh
 
-# Destroy cluster
+# Destroy the cluster
 ./scripts/cluster-destroy-k3d.sh
 
-# Re-fetch UniFi dashboards from Grafana.com (pin a revision with GRAFANA_REVISION_<id>=N)
+# Re-fetch the UniFi dashboards from Grafana.com (pin a revision with GRAFANA_REVISION_<id>=N)
 ./scripts/vendor-unifi-dashboards.sh
 
 # Rotate the UniFi credentials secret without a full redeploy
 ./extras/create-unifi-secret.sh <user> <pass> <controller-url>
 ```
 
-### Applying manifest changes to a running cluster
-Mirror what the setup script does (server-side apply, explicit context):
-```bash
-source vars.sh
-kubectl --context "$KUBECTX_NAME" apply --server-side -k manifests/monitoring/   # prometheus, probes, alerts, grafana, dashboards, unifi
-kubectl --context "$KUBECTX_NAME" apply --server-side -k manifests/ingress/
+There are no tests yet. To check a change to the old manifests, render them with
+`kubectl kustomize manifests/monitoring/` and check the scripts with `bash -n scripts/*.sh`.
+From 0.3, `scripts/check.sh` runs every check that doesn't need a cluster.
 
-# These contain $VARS and must go through envsubst, NOT `kubectl apply -k`:
-envsubst '$PERSISTENT_DATA_PATH' < manifests/monitoring/storage.yaml | kubectl --context "$KUBECTX_NAME" apply --server-side -f -
-envsubst '$SYSLOG_PORT_TCP' < manifests/monitoring/kgateway/syslog-gateway.yaml | kubectl --context "$KUBECTX_NAME" apply --server-side -f -
-kubectl --context "$KUBECTX_NAME" apply --server-side -f manifests/monitoring/kgateway/tcp-syslog-route.yaml
+## Git and GitHub
 
-# Helm value changes: re-run the matching `helm upgrade --install` from the setup script
-```
+- `main` is protected: pull requests only, squash merges, no force-pushes, and the release
+  tags (`v*`) can't be moved or deleted. Actions are pinned by commit.
+- One branch per change, `gh pr create`, wait for the checks, squash merge. Merge or push only
+  when the user has said to.
+- Stage files by name. Never `git add -A`: untracked screenshots in `images/` would go in.
+  Check `git status --short` first.
+- Images: look at every one before committing, strip its metadata, and commit with
+  `IMAGES_CHECKED=1`. Screenshots come from `scripts/screenshots.sh` on the simulated
+  network, never from a real network.
+- Commit messages end with the Claude co-author line, and pull request bodies with the
+  Claude Code line.
+- Independent reviews: every pull request gets one before merging, and the user asks for a
+  bigger one before major merges. The brief says no spot checks, every file in scope read in
+  full, and a coverage table first.
+- CodeQL reads names, not values: a function or variable named like `*password*` or
+  `*secret*` (even a description of one) counts as a secret, and so does anything it flows
+  into, such as a log line. Choose names accordingly.
+- Releases: user-facing changes go under the next version in `CHANGELOG.md`, marked
+  unreleased. The release pull request sets the version and the date; then the signed tag,
+  `gh release create` with that changelog section as the notes, a check that both images were
+  published for amd64 and arm64 and scanned, and a "Start X.Y.Z.dev0" pull request.
 
-### Validating changes (no tests exist)
-```bash
-kubectl kustomize manifests/monitoring/   # render without applying
-bash -n scripts/*.sh                      # shell syntax check
-```
+## Privacy (public repository)
 
-## Architecture
+No host names, domains, personal email addresses, home paths, LAN addresses, account names,
+or ntfy topics in code, docs, screenshots, commit messages, pull request bodies, or release
+notes. Examples use stand-ins: `192.168.1.20`, `192.0.2.x`, `fd00::5`, `my-server.lan`,
+`noc.home.arpa`. The user's own names live in `.git/hooks/private-names`, which is never
+committed. Check pull request bodies and release notes against it before posting.
 
-### Deployment pipeline (`scripts/cluster-setup-k3d-observability-everything.sh`)
-1. Prereq checks (k3d, helm, kubectl, kubectx, curl, jq, envsubst, docker) and `vars.sh` validation (`PERSISTENT_DATA_PATH` must exist and contain no spaces)
-2. `k3d cluster delete` then create from `cluster-k3d/k3d-cluster.yaml` (1 server, 3 agents, traefik disabled). The k3d config references `$CLUSTER_NETWORK`, `$K3S_VERSION`, `$SYSLOG_PORT_TCP`, `$PERSISTENT_DATA_PATH`, so `vars.sh` must be sourced
-3. Gateway API CRDs (experimental channel, for TCPRoute), kgateway; kagent only if `OPENAI_API_KEY` is set
-4. `monitoring` namespace, PVs/PVCs, `unifi-credentials` secret, then Helm: kube-prometheus-stack → loki-stack → blackbox-exporter → grafana. Grafana is a separate chart, not the one bundled with kube-prometheus-stack
-5. `vendor-unifi-dashboards.sh`, which overwrites the committed JSON in `dashboards/unifi/` with the latest Grafana.com revisions on every deploy
-6. Kustomize/manifest apply (see commands above); `kagent-httproute.yaml` is applied only when `OPENAI_API_KEY` is set
-7. Print access URLs
+The user's own settings (`settings.yaml`, `devices.yaml`, `.env`, `local/`) are gitignored,
+and the repository carries a commented example of each.
 
-Secrets (Grafana admin password, OpenAI key) are passed to Helm via temp values files, never on the command line.
+## Docs
 
-### Configuration
-- **`vars.sh`**: all environment config (cluster name, versions, namespaces, credentials, ports, paths). Never hardcode these in scripts or manifests; use `envsubst` with an explicit variable list if a manifest needs one.
-- **Helm values**: `manifests/monitoring/helm/`
-- **Kustomize**: `manifests/monitoring/kustomization.yaml` aggregates prometheus, probes, alerts, grafana, dashboards, unifi (namespace forced to `monitoring`). `storage.yaml` and `kgateway/` are deliberately outside it because they need `envsubst`.
+- Readers have some computer skills but aren't experts: plain words, steps first, enough
+  context, no padding.
+- Each subject goes from easy to advanced: the simplest path, then the options, then the
+  advanced parts, then an "under the hood" page that describes the code as it is. Update an
+  under-the-hood page in the same pull request as the code it describes.
+- Use screenshots and diagrams wherever they help. Diagrams are Mermaid files in
+  `docs/diagrams/`, rendered to light and dark PNGs by `scripts/diagrams.sh`. Screenshots come
+  from `scripts/screenshots.sh`, which may stand up a VM or a container to take them. Every
+  image has alt text.
+- Everything a person reads goes through the `humanizer` skill before it's committed or
+  posted: docs, the README, `PLAN.md`, runbooks, the CHANGELOG, comments, commit messages,
+  pull request bodies, release notes, the Dashboard's text, and alert and notification text.
+  Do the humanizer pass last, after every other edit.
+- No em or en dashes. Check that examples are real before using them.
 
-### Host ports (k3d loadbalancer)
-- 7001 → HTTP Gateway (80): `/grafana`, `/kagent`
-- 7401 → 443, 7601 → Kubernetes API
-- `$SYSLOG_PORT_TCP` (30114) → syslog TCP Gateway
+## Code
 
-### Storage
-The cluster is disposable and the data is not: anything stateful must live under `$PERSISTENT_DATA_PATH` so a recreated cluster picks up where it left off.
-- `grafana-pv`, `loki-pv` (10Gi each): hostPath under `$PERSISTENT_DATA_PATH`, which k3d mounts into every node at the same path. Reclaim policy `Retain`, pre-bound to their PVCs.
-- Prometheus (20Gi, 15d retention) currently uses dynamic `local-path` storage inside the k3d containers, so its data is lost on recreate. The dedicated `prometheus-pv` that used to keep it on the host was removed in `2e1b018` and needs restoring.
+- Code and configuration are well commented. Each file starts by saying what it's for, and
+  comments say why wherever the code doesn't make it obvious. That covers scripts, Python,
+  chart templates, values files, the values schema (every setting has a description), settings
+  examples, alert rules (summary, description, runbook link), dashboards (each panel says what
+  it shows), and workflows. Match the surrounding file's style.
+- Tests come with every change. A bug fix starts with a test that fails without the fix.
+- Shell scripts are POSIX `sh`. The Dashboard, the helper, and the in-cluster tools are
+  Python.
+- All environment config lives in the user's settings files, never hardcoded in scripts.
 
-### Grafana wiring
-- Served from a sub-path (`GF_SERVER_ROOT_URL=http://localhost:7001/grafana/`, `SERVE_FROM_SUB_PATH`)
-- Sidecars load ConfigMaps from all namespaces by label: `grafana_dashboard: "1"`, `grafana_datasource: "1"`, `grafana_alert: "1"`
-- The Prometheus datasource has fixed `uid: prometheus`. Vendored UniFi dashboards depend on this: the vendor script rewrites `${DS_PROMETHEUS}` to `prometheus`. Changing the uid breaks them.
-- Grafana-managed alert rules live in `manifests/monitoring/grafana/alerts.yaml`; contact points (`alerting.yaml`) are commented out in its kustomization until real email/Slack settings are filled in.
+## The old stack (until 0.4)
 
-### Prometheus
-- Rules: `manifests/monitoring/alerts/` (PrometheusRule CRs for system and UniFi alerts)
-- Blackbox probes: `manifests/monitoring/probes/` (Probe CRs for DNS, gateway, websites)
-- External node-exporter targets: add IPs to the `additional-scrape-configs` Secret in `manifests/monitoring/prometheus/additional-scrape-configs.yaml` (wired in via `additionalScrapeConfigsSecret` in the Helm values)
-- Unpoller: `manifests/monitoring/unifi/` (Deployment, Service, ServiceMonitor), reads credentials from the `unifi-credentials` secret
+How the files from `v0.2.0` fit together:
 
-### Logs
-- Promtail (from loki-stack) scrapes all pod logs plus a syslog listener on 1514
-- Syslog path: external host → host:30114 TCP → kgateway TCPRoute → Promtail 1514 → Loki. Labels `host` and `app` come from the syslog hostname/app name. Query with `{job="syslog", host="<device>"}`. Example sender config: `extras/rsyslog-forward-example.conf`
+- `scripts/cluster-setup-k3d-observability-everything.sh` checks the prerequisites and
+  `vars.sh`, deletes and recreates the k3d cluster from `cluster-k3d/k3d-cluster.yaml`
+  (1 server, 3 agents, traefik off), installs the Gateway API CRDs and kgateway (and kagent
+  when `OPENAI_API_KEY` is set), then Helm's kube-prometheus-stack, loki-stack, the blackbox
+  exporter, and Grafana, then the vendored dashboards and the Kustomize overlays.
+- `vars.sh` holds every setting. `cluster-k3d/k3d-cluster.yaml` and two manifests
+  (`manifests/monitoring/storage.yaml` and `manifests/monitoring/kgateway/syslog-gateway.yaml`)
+  contain variables, so they go through `envsubst`, never `kubectl apply -k`.
+- Helm values are in `manifests/monitoring/helm/`. `manifests/monitoring/kustomization.yaml`
+  gathers the prometheus, probes, alerts, grafana, dashboards, and unifi overlays.
+- Host ports: 7001 is HTTP into the gateway (`/grafana`, `/kagent`), 7401 is HTTPS, 7601 is
+  the Kubernetes API, and 30114 is syslog over TCP.
+- Storage: Grafana and Loki use hostPath volumes under `$PERSISTENT_DATA_PATH`. Prometheus uses
+  `local-path` inside the k3d nodes, so its history is lost when the cluster is recreated.
+- Grafana is served from `/grafana`, loads dashboards, datasources, and alerts from ConfigMaps
+  by label, and has a fixed Prometheus datasource uid, `prometheus`, which the vendored UniFi
+  dashboards (Grafana.com IDs 11310 to 11315) depend on.
 
-### Dashboards (`manifests/monitoring/dashboards/`)
-- JSON files are turned into labeled ConfigMaps via `configMapGenerator` (`disableNameSuffixHash: true`); a new dashboard needs a generator entry
-- `unifi/`: vendored (Grafana.com IDs 11310–11315); change behavior in the vendor script, don't hand-edit the JSON
-- `plex/`: present but disabled (commented generator entries)
-- `custom-dashboards.yaml`, `node-exporter-dashboard.yaml`: hand-maintained ConfigMaps
+The review on 2026-10-27 found what's broken in it (no alert delivery, UniFi rules on metrics
+that don't exist, unscraped probes, syslog that never arrives). `PLAN.md` lists the findings.
+Fix forward in the rebuild, not in the old files.
