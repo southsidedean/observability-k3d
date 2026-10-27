@@ -1,3 +1,8 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/ok3d-logo-dark.svg">
+  <img src="images/ok3d-logo.svg" alt="ok3d logo: an amber pulse line above a row of device tiles" width="88">
+</picture>
+
 # observability-k3d
 
 ## Introduction
