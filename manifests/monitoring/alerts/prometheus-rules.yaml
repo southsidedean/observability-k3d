@@ -9,14 +9,14 @@ spec:
   groups:
     - name: system.rules
       rules:
-        - alert: NodeDown
-          expr: 'up == 0'
+        - alert: NodeExporterDown
+          expr: 'up{job="node-exporter"} == 0'
           for: 2m
           labels:
             severity: critical
           annotations:
-            summary: 'Node {{ $labels.instance }} down'
-            description: 'Prometheus target {{ $labels.job }} on {{ $labels.instance }} is not responding.'
+            summary: 'Node exporter down on {{ $labels.instance }}'
+            description: 'Node exporter on {{ $labels.instance }} has been unreachable for 2 minutes.'
 
         - alert: HighCPUUsage
           expr: '100 - (avg by(instance)(irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 85'

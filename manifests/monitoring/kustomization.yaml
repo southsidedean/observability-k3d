@@ -4,7 +4,6 @@ kind: Kustomization
 namespace: monitoring
 
 resources:
-  - storage.yaml
   - prometheus/
   - probes/
   - alerts/

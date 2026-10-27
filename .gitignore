@@ -1,0 +1,23 @@
+# Backup files
+*.bak
+
+# Environment files
+.env
+.env.*
+
+# macOS
+.DS_Store
+
+# Editor and tool files
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+.claude/
+
+# Temporary files
+*.tmp
+
+# Claude session file
+claude-session.txt

@@ -5,7 +5,7 @@ metadata:
   namespace: monitoring
 spec:
   interval: 30s
-  module: icmp_ping
+  module: icmp
   prober:
     url: blackbox-prometheus-blackbox-exporter.monitoring.svc.cluster.local:9115
   targets:
