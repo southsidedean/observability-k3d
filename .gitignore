@@ -19,5 +19,5 @@
 # Temporary files
 *.tmp
 
-# Claude session file
+# Claude files
 claude-session.txt
