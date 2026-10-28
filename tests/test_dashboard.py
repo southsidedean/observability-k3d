@@ -48,7 +48,6 @@ class Dashboard:
         context = ssl.create_default_context()
         context.check_hostname = False
         context.verify_mode = ssl.CERT_NONE
-    context.minimum_version = ssl.TLSVersion.TLSv1_2
         context.minimum_version = ssl.TLSVersion.TLSv1_2
         conn = http.client.HTTPSConnection("127.0.0.1", self.port, context=context, timeout=10)
         conn.request(method, path, body=body.encode() or None, headers=headers or {})
