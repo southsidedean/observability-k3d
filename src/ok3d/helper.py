@@ -82,6 +82,13 @@ SEEN = 100
 BACKUPS = 10
 # How often the outbox is looked at, in seconds.
 INTERVAL = 3.0
+# How often what the Dashboard shows is published again (publish()), in seconds, besides after
+# every request. The Dashboard treats the helper as running while it's fresh.
+PUBLISH_EVERY = 30.0
+# The .env lines whose names the Dashboard may see as set or not: all of .env.example's. Only
+# the names; a value is never published.
+ENV_SHOWN = ("OK3D_ADMIN_PASSWORD", "UNIFI_API_KEY", "NTFY_TOPIC", "NTFY_TOKEN", "SMTP_PASSWORD",
+             "DEADMAN_URL", "ANTHROPIC_API_KEY")  # fmt: skip
 
 
 class Refused(Exception):
@@ -478,6 +485,46 @@ def describe(request: Request) -> str:
     return f"{what} for {request.id}"
 
 
+def read_own_file(path: Path, limit: int) -> bytes | None:
+    """A file of yours in the ok3d checkout, if it's a plain file (not a link) of at most
+    limit bytes; None otherwise."""
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except OSError:
+        return None
+    with os.fdopen(fd, "rb") as f:
+        if not stat.S_ISREG(os.fstat(f.fileno()).st_mode):
+            return None
+        data = f.read(limit + 1)
+    return data if len(data) <= limit else None
+
+
+def publish(opened: Opened) -> None:
+    """What the Dashboard shows, written to the helper's folder, which it can read:
+    - current-settings.yaml and current-devices.yaml: copies of yours, which aren't secret,
+      so it can show them and you can change them there (missing when you have none).
+    - env-set: the names of the lines in .env that have a value, one per line. Never a value.
+    - alive: when this was last written, so the Dashboard knows the helper is running.
+    """
+    ok3d_dir = opened.folders.ok3d_dir
+    for name in ("settings.yaml", "devices.yaml"):
+        data = read_own_file(ok3d_dir / name, MAX_FILE)
+        if data is None:
+            with contextlib.suppress(FileNotFoundError):
+                os.unlink(f"current-{name}", dir_fd=opened.own)
+        else:
+            write_file(opened, f"current-{name}", data.decode("utf-8", errors="replace"))
+    env = read_own_file(ok3d_dir / ".env", 1024 * 1024) or b""
+    values: dict[bytes, bytes] = {}
+    for line in env.split(b"\n"):
+        key, sep, value = line.partition(b"=")
+        if sep:
+            values[key] = value.strip().strip(b"\"'")  # the last one counts, as for ./ok3d
+    set_names = [n for n in ENV_SHOWN if values.get(n.encode())]
+    write_file(opened, "env-set", "".join(f"{n}\n" for n in set_names))
+    write_file(opened, "alive", now_utc() + "\n")
+
+
 def watch(folders: Folders) -> None:
     """Looks for requests until stopped. A second helper on the same data root won't start."""
     opened = open_folders(folders)
@@ -487,6 +534,7 @@ def watch(folders: Folders) -> None:
     except BlockingIOError:
         raise SystemExit("ok3d-helper: another helper is already running for this data root") from None
     print(f"ok3d-helper: watching {folders.outbox}", flush=True)
+    published = 0.0
     while True:
         try:
             message = handle_once(opened)
@@ -494,6 +542,12 @@ def watch(folders: Folders) -> None:
             message = f"couldn't handle a request: {type(e).__name__}"
         if message:
             print(f"ok3d-helper: {message}", flush=True)
+        if message or time.monotonic() - published >= PUBLISH_EVERY:
+            try:
+                publish(opened)
+                published = time.monotonic()
+            except OSError as e:
+                print(f"ok3d-helper: couldn't publish for the Dashboard: {type(e).__name__}", flush=True)
         time.sleep(INTERVAL)
 
 
@@ -507,7 +561,9 @@ def main(argv: list[str] | None = None) -> None:
     if args.command == "watch":
         watch(folders)
     else:
-        print(handle_once(open_folders(folders)) or "ok3d-helper: no request")
+        opened = open_folders(folders)
+        print(handle_once(opened) or "ok3d-helper: no request")
+        publish(opened)
 
 
 if __name__ == "__main__":

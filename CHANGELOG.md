@@ -32,6 +32,11 @@
   copies of each file in `local/backups/`.
 - `./ok3d validate settings FILE` and `./ok3d validate devices FILE` check a file before it
   replaces yours, the way `./ok3d check` checks the ones in place.
+- The Dashboard's pages: Home, with **Check** and **Apply** (which stays off until a Check
+  finds no problems); **Settings** and **Devices**, to change and save your files; and
+  **Keys**, to set the UniFi key, the ntfy topic and token, and the mail password, showing
+  only whether each is set. Each sends one request at a time to the helper, and Home shows
+  the answer.
 
 ### Fixes
 

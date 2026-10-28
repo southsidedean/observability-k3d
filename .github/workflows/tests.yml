@@ -179,7 +179,7 @@ jobs:
           password=$(cat "$RUNNER_TEMP/state/password")
           curl -sk -c "$RUNNER_TEMP/jar" -o /dev/null -H "Origin: $url" \
             --data-urlencode "password=$password" "$url/sign-in"
-          curl -sk -b "$RUNNER_TEMP/jar" "$url/" | grep -q "No answer from the helper yet"
+          curl -sk -b "$RUNNER_TEMP/jar" "$url/" | grep -q "The helper's last answer"
           # The image's own user, when started without --user, isn't root either.
           test "$(docker run --rm --entrypoint id ok3d-dashboard:ci -u)" != 0
       - name: The Dashboard's log

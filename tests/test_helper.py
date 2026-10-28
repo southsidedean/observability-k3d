@@ -599,3 +599,48 @@ def test_the_lines_only_you_may_set_are_refused(h: helper.Opened, name: str) -> 
         "refused a request: the request names a .env line the helper doesn't set"
     )
     assert env.read_text() == f"{name}=mine\n"
+
+
+# What the helper publishes for the Dashboard.
+
+
+def test_it_publishes_copies_of_your_settings_and_devices(h: helper.Opened) -> None:
+    (h.folders.ok3d_dir / "settings.yaml").write_text(SETTINGS)
+    (h.folders.ok3d_dir / "devices.yaml").write_text("devices: []\n")
+    helper.publish(h)
+    assert (h.folders.own / "current-settings.yaml").read_text() == SETTINGS
+    assert (h.folders.own / "current-devices.yaml").read_text() == "devices: []\n"
+    assert stat.S_IMODE((h.folders.own / "current-settings.yaml").stat().st_mode) == 0o600
+    assert (h.folders.own / "alive").read_text().startswith("20")
+    # And forgets one you've removed.
+    (h.folders.ok3d_dir / "devices.yaml").unlink()
+    helper.publish(h)
+    assert not (h.folders.own / "current-devices.yaml").exists()
+
+
+def test_it_publishes_which_env_lines_are_set_and_never_a_value(h: helper.Opened) -> None:
+    (h.folders.ok3d_dir / ".env").write_text(
+        "UNIFI_API_KEY=k3y-value\nNTFY_TOPIC=\nNTFY_TOKEN=''\nSMTP_PASSWORD=old\nSMTP_PASSWORD=\n"
+        "OK3D_ADMIN_PASSWORD=\"adm1n\"\nOTHER=x\n"
+    )
+    helper.publish(h)
+    published = (h.folders.own / "env-set").read_text()
+    assert published.split() == ["OK3D_ADMIN_PASSWORD", "UNIFI_API_KEY"]
+    for value in ("k3y-value", "adm1n", "old"):
+        for name in os.listdir(h.folders.own):
+            path = h.folders.own / name
+            assert not path.is_file() or value not in path.read_text(errors="replace"), name
+
+
+def test_it_wont_publish_through_a_link(h: helper.Opened, tmp_path: Path) -> None:
+    secret = tmp_path / "secret.yaml"
+    secret.write_text("private: yes\n")
+    (h.folders.ok3d_dir / "settings.yaml").symlink_to(secret)
+    helper.publish(h)
+    assert not (h.folders.own / "current-settings.yaml").exists()
+
+
+def test_once_publishes_too(h: helper.Opened) -> None:
+    (h.folders.ok3d_dir / "settings.yaml").write_text(SETTINGS)
+    helper.main(["once", "--ok3d-dir", str(h.folders.ok3d_dir), "--data-root", str(h.folders.data_root)])
+    assert (h.folders.own / "current-settings.yaml").exists()

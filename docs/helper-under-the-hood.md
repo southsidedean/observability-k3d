@@ -190,6 +190,9 @@ temporary file first and renamed into place, so the page never reads half of one
 | `output` | Everything `ok3d` printed for the last request, written as it runs |
 | `seen` | The ids of the last 100 requests, so none runs twice |
 | `staged-settings.yaml`, `staged-devices.yaml` | A file the Dashboard sent, only while `./ok3d validate` checks it |
+| `current-settings.yaml`, `current-devices.yaml` | Copies of yours, for the Dashboard to show; missing when you have none, and never copied through a link |
+| `env-set` | The names of the lines in `.env` that have a value, one per line. Never a value |
+| `alive` | When it last wrote these: every 30 seconds, and after every request |
 | `lock` | Held while the helper runs, so a second one on the same data root won't start |
 
 In the ok3d checkout: `settings.yaml`, `devices.yaml`, and `.env` when you save them, and
