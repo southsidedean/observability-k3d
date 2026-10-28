@@ -2,24 +2,29 @@
 
 How the Dashboard is built, as the code stands. It's arriving in parts during 0.5: so far it
 has its sign-in and four pages (Home, with Check and Apply; Settings; Devices; and Keys). The
-installer that sets it all up comes next. To see how a request reaches the server, read
+installer (`./ok3d install`, and `install.sh` for `curl | sh`) sets it all up. To see how a request reaches the server, read
 [the helper under the hood](helper-under-the-hood.md).
 
 ## Where it runs
 
 The Dashboard runs in a container on the server, outside the k3d cluster, so it keeps
 working when the cluster is down or being made again. Its image is
-`ghcr.io/southsidedean/ok3d-dashboard`, built for amd64 and arm64. The installer starts it
-like this:
+`ghcr.io/southsidedean/ok3d-dashboard`, built for amd64 and arm64. `./ok3d install` starts it
+like this (with your data root, domain, and port), every time it runs:
 
 ```sh
-docker run -d --name ok3d-dashboard --restart unless-stopped \
+docker run --detach --name ok3d-dashboard --restart unless-stopped \
   --user "$(id -u):$(id -g)" --read-only --cap-drop ALL --security-opt no-new-privileges \
-  -p 8444:8444 \
-  -v /srv/ok3d/dashboard:/state \
-  -v /srv/ok3d/helper:/helper:ro \
-  ghcr.io/southsidedean/ok3d-dashboard:0.5.0
+  --publish 0.0.0.0:8444:8444 \
+  --volume /srv/ok3d/dashboard:/state \
+  --volume /srv/ok3d/helper:/helper:ro \
+  ghcr.io/southsidedean/ok3d-dashboard:0.5.0 --origin https://dashboard.noc.home.arpa:8444
 ```
+
+Its address is `https://dashboard.<domain>:<cluster.ports.dashboard>`, a name under the same
+`*.<domain>` you point at the server for the other pages. The image is this release's, or
+`main` for a checkout of main; `OK3D_DASHBOARD_IMAGE` names another, such as one built on the
+server to try a change.
 
 - `--user`: it runs as you, so it can read the helper's answers and its own password files,
   which are readable only by you. Without it, the image runs as a user with no rights to
@@ -28,6 +33,7 @@ docker run -d --name ok3d-dashboard --restart unless-stopped \
   gain any privilege.
 - `/state` is `<data root>/dashboard`: its password, its certificate, and the outbox where it
   leaves requests for the helper.
+- `--origin`: its own address, so it accepts forms only from pages it served there.
 - `/helper` is `<data root>/helper`, read-only: the helper's answers.
 
 It gets no Docker socket and nothing else from the server.
@@ -136,6 +142,32 @@ with a note to wait. If the outbox can't be written, the page says so and sends 
 - **Keys** checks a value the way the helper will (one line of letters, digits, and symbols,
   with no spaces, quotes, backslashes, `$`, or backticks), so a value the helper would
   refuse is never sent. A value is never shown back, not even in an error.
+
+## What ./ok3d install does
+
+`./ok3d install` needs Linux with systemd, and runs as you, never as root. It's safe to run
+again: it brings each part up to date. In order, it:
+
+1. Reads your settings, and checks the data root is there and yours.
+2. Makes `dashboard/`, `dashboard/outbox/`, and `helper/` in the data root, readable only by
+   you.
+3. Makes ok3d's certificate authority if there's none (the same one the pages use).
+4. Issues the Dashboard's certificate from it, for `dashboard.<domain>`, valid for 397 days
+   (browsers accept at most 398), into `dashboard/tls/`. It keeps the one there until it's
+   within 30 days of running out.
+5. Writes the helper's service, `~/.config/systemd/user/ok3d-helper.service`, from
+   `deploy/ok3d-helper.service` with this checkout's paths, then enables and restarts it, so
+   it runs this checkout's code. Without `loginctl enable-linger`, a user's services stop when
+   they log out and don't start at boot, so it says to run `sudo loginctl enable-linger <you>`
+   when that's off.
+6. Makes the Dashboard's container again (above).
+7. Waits for the Dashboard to make its password, then prints the address and the password.
+
+`install.sh`, for `curl -fsSL .../install.sh | sh`, comes before it: it checks out the newest
+release (or `OK3D_VERSION`) into `~/ok3d` (or `OK3D_DIR`), makes `settings.yaml` from
+`settings.example.yaml` with `OK3D_DATA_ROOT` (default `/srv/ok3d`) if there's none, says
+what to run if the data root needs `sudo`, and runs `./ok3d install`. It never uses `sudo`
+itself.
 
 ## Running it from the checkout
 
