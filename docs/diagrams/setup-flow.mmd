@@ -1,0 +1,21 @@
+---
+config:
+  flowchart:
+    wrappingWidth: 360
+---
+%% Setting ok3d up, Dashboard first, and upgrading it later. Rendered to
+%% images/diagrams/setup-flow-light.png and setup-flow-dark.png by scripts/diagrams.sh.
+flowchart TD
+    install["Run the installer<br/>(checks the server, installs the Dashboard and the helper)"]
+    open["Open the Dashboard<br/>(the address and password the installer printed)"]
+    choose["Choose a setup card, or the parts yourself,<br/>and fill in your settings and devices"]
+    check{"Check"}
+    fix["Fix what Check found<br/>(each problem says how)"]
+    apply["Apply<br/>(makes the cluster and deploys ok3d)"]
+    next["What's next<br/>(trust the certificate, open Grafana, send a test alert)"]
+    upgrade["A new release:<br/>back up, make the cluster again, check"]
+
+    install --> open --> choose --> check
+    check -- "problems" --> fix --> check
+    check -- "no problems" --> apply --> next
+    next -. "later" .-> upgrade --> check

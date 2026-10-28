@@ -44,7 +44,7 @@ jobs:
         run: python -m mypy
       # shellcheck comes with the runner.
       - name: shellcheck (the scripts and git hooks, as POSIX sh)
-        run: shellcheck -s sh ok3d scripts/check.sh .githooks/*
+        run: shellcheck -s sh ok3d scripts/check.sh scripts/diagrams.sh .githooks/*
       - name: zizmor (these workflows' security)
         run: zizmor --offline --min-severity medium .github/workflows
       # actionlint, pinned to a release and checked against that release's published checksum.

@@ -1,0 +1,37 @@
+%% How ok3d's pieces fit, as of 1.0. Rendered to images/diagrams/overview-light.png and
+%% overview-dark.png by scripts/diagrams.sh; docs/architecture.md shows them.
+flowchart LR
+    you(["You: a browser, or your phone"])
+    net(["Your network: UniFi gear, servers, NAS, UPS"])
+    out(["Your phone and email: alerts"])
+
+    subgraph host["The server"]
+        dash["The Dashboard<br/>(setup, settings, upgrades)"]
+        helper["The helper<br/>(runs ok3d for the Dashboard)"]
+        data[("The data root<br/>(history, settings, certificates)")]
+
+        subgraph cluster["The k3d cluster (made again on every upgrade)"]
+            gw["agentgateway<br/>(the one way in)"]
+            auth["Authelia<br/>(sign-in)"]
+            grafana["Grafana<br/>(the NOC board)"]
+            prom["Prometheus and Alertmanager"]
+            logs["Loki and Alloy<br/>(logs and syslog)"]
+            agents["kagent and its tools<br/>(read, explain, ask)"]
+        end
+    end
+
+    you -- "HTTPS" --> gw
+    you -- "setup" --> dash
+    dash -- "requests" --> helper
+    helper -- "creates and upgrades" --> cluster
+    gw --> auth
+    gw --> grafana
+    gw --> agents
+    net -- "metrics, pings" --> prom
+    net -- "syslog" --> logs
+    grafana --> prom
+    grafana --> logs
+    agents --> prom
+    agents --> logs
+    prom -- "alerts" --> out
+    cluster -. "keeps its state in" .-> data
