@@ -312,6 +312,11 @@ demo_up() {
 			--label ok3d.demo=true "$demo_network" >/dev/null
 		echo "Made the demo network, $demo_subnet."
 	fi
+	# The image, fetched quietly the first time, instead of Docker's layer-by-layer progress.
+	if ! docker image inspect "$demo_image" >/dev/null 2>&1; then
+		echo "Fetching the demo's image (once)."
+		docker pull --quiet "$demo_image" >/dev/null
+	fi
 	# The failed list starts empty: every device comes up working.
 	install -d -m 0755 "$state"
 	: >"$state/failed"
