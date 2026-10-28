@@ -1,0 +1,114 @@
+{{- /*
+Who may connect to what, inside the cluster. Each ok3d namespace turns away every incoming
+connection it doesn't list here, so a pod that's been taken over can't reach the rest. (From
+outside, k3d publishes only the gateway already.) Outgoing connections aren't limited yet:
+Prometheus and the blackbox exporter reach every device on your network by design.
+
+- monitoring: its own parts talk to each other (Prometheus scrapes the exporters, Grafana
+  reads Prometheus, Prometheus sends to Alertmanager). The gateway may reach Grafana's,
+  Prometheus's, and Alertmanager's web ports, and nothing else. The Prometheus operator's
+  webhook takes calls from Kubernetes' API server, which runs on the node.
+- gateway: anyone may reach its HTTPS port (that's what it's for; k3d's load balancer brings
+  your network's requests there), and only monitoring its metrics.
+- auth and agents: nothing yet, until 0.8 and 0.9 put their parts there.
+
+tests/test_charts.py checks every namespace has its default deny.
+*/ -}}
+{{- $monitoring := .Release.Namespace }}
+{{- range $namespace := list $monitoring "gateway" "auth" "agents" }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ok3d-deny-by-default
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "ok3d.labels" $ | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+{{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ok3d-within-monitoring
+  namespace: {{ $monitoring }}
+  labels:
+    {{- include "ok3d.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: {}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ok3d-pages-from-the-gateway
+  namespace: {{ $monitoring }}
+  labels:
+    {{- include "ok3d.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values: [grafana, prometheus, alertmanager]
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: gateway
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ok3d-gateway
+      ports:
+        - port: 3000
+        - port: 9090
+        - port: 9093
+---
+# Kubernetes' API server calls the operator's admission webhook (which checks PrometheusRules
+# before they're stored) from the node, outside any namespace, so this one port takes calls
+# from anywhere. It serves only that webhook, over TLS.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ok3d-operator-webhook
+  namespace: {{ $monitoring }}
+  labels:
+    {{- include "ok3d.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app: kube-prometheus-stack-operator
+  policyTypes: [Ingress]
+  ingress:
+    - ports:
+        - port: 10250
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ok3d-gateway
+  namespace: gateway
+  labels:
+    {{- include "ok3d.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: ok3d-gateway
+  policyTypes: [Ingress]
+  ingress:
+    # The pages, from anywhere: your network's requests arrive through k3d's load balancer.
+    - ports:
+        - port: 8443
+    # Its metrics, for Prometheus only.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $monitoring }}
+      ports:
+        - port: 15020

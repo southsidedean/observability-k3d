@@ -36,6 +36,9 @@
   root, and nothing sent anywhere (no usage reports or update checks).
 - One admin login for Grafana and for the Prometheus and Alertmanager pages: the password is
   `OK3D_ADMIN_PASSWORD` in `.env`, or one ok3d makes and keeps in the data root.
+- Inside the cluster, each of ok3d's namespaces turns away every connection it doesn't
+  expect: the gateway may reach Grafana's, Prometheus's, and Alertmanager's pages and
+  nothing else, and a pod outside ok3d can reach none of them directly.
 - ok3d leaves out Kubernetes' own internal metrics, which k3s serves in bulk: an empty
   cluster now keeps about 5,000 series instead of about 100,000.
 
