@@ -43,7 +43,7 @@ tool() {
 
 # 1. The shell scripts are POSIX sh and shellcheck clean.
 if command -v shellcheck >/dev/null 2>&1; then
-	if shellcheck -s sh ok3d scripts/check.sh .githooks/*; then
+	if shellcheck -s sh ok3d scripts/check.sh scripts/diagrams.sh .githooks/*; then
 		pass "1. the shell scripts are shellcheck clean"
 	else
 		fail "1. shellcheck found problems (above)"

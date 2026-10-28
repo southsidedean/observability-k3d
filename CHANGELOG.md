@@ -27,6 +27,10 @@ in 0.4. [PLAN.md](PLAN.md) has the roadmap.
   on a device can't let it impersonate any other site.
 - Every ok3d namespace refuses pods that run as root, keep capabilities, or can escalate
   their privileges (Kubernetes' restricted Pod Security Standard).
+- `docs/architecture.md` shows how ok3d's pieces fit and how you set it up, in two diagrams
+  with light and dark versions. Diagrams start as Mermaid files in `docs/diagrams/`;
+  `scripts/diagrams.sh` renders them to PNG with a pinned mermaid-cli, and a test fails when
+  an image no longer matches its source.
 - `tests/vm/cloud-init.yaml` makes the test VM: a generic Ubuntu server with ok3d's
   prerequisites.
 - `SECURITY.md`, `CONTRIBUTING.md`, and templates for pull requests and issues.

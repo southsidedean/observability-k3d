@@ -1,5 +1,5 @@
-"""The docs hold together: every link leads somewhere, every image says what it shows, and
-the house style holds (no em or en dashes).
+"""The docs hold together: every link leads somewhere, every image says what it shows, every
+diagram's images match its current source, and the house style holds (no em or en dashes).
 
 The vendored Grafana dashboards are left out of the style check: they're Grafana.com's text,
 not ours.
@@ -7,6 +7,8 @@ not ours.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 import subprocess
 from pathlib import Path
@@ -97,6 +99,39 @@ def test_no_em_or_en_dashes() -> None:
             continue
         found += [f"{name}:{n}" for n, line in enumerate(text.splitlines(), 1) if DASHES.search(line)]
     assert not found, f"em or en dashes (the house style uses commas, colons, or periods): {found}"
+
+
+def test_diagrams_are_images_made_from_their_current_source() -> None:
+    # Each docs/diagrams/<name>.mmd becomes images/diagrams/<name>-light.png and -dark.png,
+    # made by scripts/diagrams.sh, which records each source's SHA-256 in sources.json.
+    sources = sorted((ROOT / "docs" / "diagrams").glob("*.mmd"))
+    recorded = json.loads((ROOT / "images" / "diagrams" / "sources.json").read_text())
+    stale = [
+        str(src.relative_to(ROOT))
+        for src in sources
+        if recorded.get(str(src.relative_to(ROOT))) != hashlib.sha256(src.read_bytes()).hexdigest()
+    ]
+    assert not stale, f"run scripts/diagrams.sh: these diagrams changed since their images were made: {stale}"
+    missing = [
+        f"{src.stem}-{theme}.png"
+        for src in sources
+        for theme in ("light", "dark")
+        if not (ROOT / "images" / "diagrams" / f"{src.stem}-{theme}.png").is_file()
+    ]
+    assert not missing, f"run scripts/diagrams.sh: missing images {missing}"
+    made = {f"{src.stem}-{theme}.png" for src in sources for theme in ("light", "dark")}
+    orphans = sorted(p.name for p in (ROOT / "images" / "diagrams").glob("*.png") if p.name not in made)
+    assert not orphans, f"images with no source in docs/diagrams: {orphans}"
+
+
+def test_every_diagram_is_shown_somewhere() -> None:
+    shown = " ".join((ROOT / name).read_text(encoding="utf-8") for name in tracked("*.md"))
+    unused = [
+        src.name
+        for src in (ROOT / "docs" / "diagrams").glob("*.mmd")
+        if f"images/diagrams/{src.stem}-light.png" not in shown or f"images/diagrams/{src.stem}-dark.png" not in shown
+    ]
+    assert not unused, f"diagrams no page shows in both versions: {unused}"
 
 
 def test_slugs_match_github() -> None:

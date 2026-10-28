@@ -38,5 +38,13 @@
       depNameTemplate: 'renovate',
       datasourceTemplate: 'npm',
     },
+    {
+      // The mermaid-cli image scripts/diagrams.sh renders the diagrams with, pinned by
+      // version and digest.
+      customType: 'regex',
+      managerFilePatterns: ['/^scripts/diagrams\\.sh$/'],
+      matchStrings: ['image=(?<depName>minlag/mermaid-cli):(?<currentValue>[0-9.]+)@(?<currentDigest>sha256:[a-f0-9]+)'],
+      datasourceTemplate: 'docker',
+    },
   ],
 }
