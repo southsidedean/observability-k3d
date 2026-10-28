@@ -33,3 +33,14 @@ release and the reasons behind it.
 | Retire the old stack, and the guide for moving from it | Done ([#17](https://github.com/southsidedean/observability-k3d/pull/17)) |
 | Release 0.4.0 ([#18](https://github.com/southsidedean/observability-k3d/pull/18)), installed on the test VM from its base snapshot | Done |
 | Move production to 0.4.0 | In progress |
+
+## 0.5.0, in detail
+
+| Part | Status |
+|---|---|
+| The helper: runs `./ok3d check` and `apply` for the Dashboard, and refuses everything else | In progress |
+| The Dashboard's image, and the workflow that builds, scans, and publishes it | Planned |
+| The Dashboard's pages: settings, write-only secrets, switches, devices, Check and Apply, What's next | Planned |
+| The installer (`curl ... \| sh`): the host check, the helper's service, the Dashboard | Planned |
+| Screenshots of the pages for the docs (`scripts/screenshots.sh` on the test VM) | Planned |
+| Release 0.5.0, tested from a bare test VM with the installer and the Dashboard alone | Planned |

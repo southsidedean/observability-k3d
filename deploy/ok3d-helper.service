@@ -1,0 +1,28 @@
+# The ok3d-helper service: runs ./ok3d check and ./ok3d apply when you press Check or Apply on
+# the Dashboard (src/ok3d/helper.py, docs/helper-under-the-hood.md). It's a systemd user
+# service, running as you, because the Dashboard's container can't run anything on the host.
+# The installer fills in the paths:
+#   @DIR@        the ok3d checkout, with the ok3d command in it (the installer refuses a path
+#                with spaces, which this file can't hold)
+#   @DATA_ROOT@  host.dataRoot from settings.yaml
+#   @PATH@       your PATH, so ok3d finds docker, k3d, helm, and kubectl
+#
+#   systemctl --user status ok3d-helper      is it running?
+#   journalctl --user -u ok3d-helper -f      what it has done
+[Unit]
+Description=ok3d-helper: runs ok3d check and apply when you ask on the Dashboard
+
+[Service]
+Type=simple
+WorkingDirectory=@DIR@
+Environment=PATH=@PATH@
+# -I: the host's own Python, isolated from any Python settings and from the folder it runs in.
+ExecStart=/usr/bin/python3 -I @DIR@/src/ok3d/helper.py watch --ok3d-dir @DIR@ --data-root @DATA_ROOT@
+Restart=on-failure
+RestartSec=30
+NoNewPrivileges=yes
+# Everything the helper starts (Helm, k3d) is stopped with it.
+KillMode=control-group
+
+[Install]
+WantedBy=default.target

@@ -149,7 +149,8 @@ install doc shows how to make one with LVM, and how to grow it later.
 
 ```text
 <host.dataRoot>/
-├── dashboard/       the Dashboard's state and the helper's request folder
+├── dashboard/       the Dashboard's state, and outbox/, where it leaves requests for the helper
+├── helper/         the helper's own folder: its answers, which the Dashboard can only read
 ├── prometheus/      the time series database
 ├── alertmanager/    silences and what was already sent, so a new cluster doesn't repeat alerts
 ├── loki/            logs
