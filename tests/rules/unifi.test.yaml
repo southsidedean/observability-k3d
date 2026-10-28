@@ -1,0 +1,49 @@
+# promtool's unit tests for chart/ok3d/rules/unifi.yaml. Run with:
+#   promtool test rules tests/rules/*.test.yaml
+rule_files:
+  - ../../chart/ok3d/rules/unifi.yaml
+evaluation_interval: 1m
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'up{job="unpoller", instance="192.0.2.9:9130"}'
+        values: "1 1 0x15"
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: UniFiControllerUnreachable
+        exp_alerts: []
+      - eval_time: 13m
+        alertname: UniFiControllerUnreachable
+        exp_alerts:
+          - exp_labels: { severity: warning, job: unpoller, instance: "192.0.2.9:9130" }
+            exp_annotations:
+              summary: "ok3d can't read your UniFi controller."
+              description: "unpoller hasn't been able to read the controller for 10 minutes, so UniFi's graphs have stopped."
+              runbook_url: https://github.com/southsidedean/observability-k3d/blob/main/docs/runbooks/UniFiControllerUnreachable.md
+
+  - interval: 1m
+    input_series:
+      # The switch is busy and nearly out of memory; the access point is fine.
+      - series: 'unpoller_device_cpu_utilization_ratio{name="office-switch", model="USW-24-PoE", site_name="Home"}'
+        values: "0.95x20"
+      - series: 'unpoller_device_memory_utilization_ratio{name="office-switch", model="USW-24-PoE", site_name="Home"}'
+        values: "0.93x20"
+      - series: 'unpoller_device_cpu_utilization_ratio{name="living-room-ap", model="U6-Pro", site_name="Home"}'
+        values: "0.2x20"
+    alert_rule_test:
+      - eval_time: 16m
+        alertname: UniFiDeviceBusy
+        exp_alerts:
+          - exp_labels: { severity: warning, name: office-switch, model: USW-24-PoE, site_name: Home }
+            exp_annotations:
+              summary: "office-switch's processor has been above 90% for 15 minutes."
+              description: "office-switch (USW-24-PoE) is at 95% processor use."
+              runbook_url: https://github.com/southsidedean/observability-k3d/blob/main/docs/runbooks/UniFiDeviceBusy.md
+      - eval_time: 16m
+        alertname: UniFiDeviceMemoryFull
+        exp_alerts:
+          - exp_labels: { severity: warning, name: office-switch, model: USW-24-PoE, site_name: Home }
+            exp_annotations:
+              summary: "office-switch's memory has been above 90% for 15 minutes."
+              description: "office-switch (USW-24-PoE) is at 93% memory use."
+              runbook_url: https://github.com/southsidedean/observability-k3d/blob/main/docs/runbooks/UniFiDeviceMemoryFull.md

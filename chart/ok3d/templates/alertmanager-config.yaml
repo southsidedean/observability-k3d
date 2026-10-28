@@ -1,0 +1,73 @@
+{{- /*
+Alertmanager's settings, built from alerts.* in your settings. Nothing secret is in them: the
+ntfy address (whose topic is the secret part), its token, the mail password, and the dead
+man's switch's address are files in the ok3d-alerts Secret, which ok3d apply makes from .env
+and Alertmanager reads at /etc/alertmanager/secrets/ok3d-alerts/.
+
+Where alerts go:
+- Alertmanager's always-firing Watchdog alert goes to the dead man's switch every minute, so
+  it hears from ok3d while all is well and tells you when it stops. Without one, nowhere.
+- Info alerts, and the operator's InfoInhibitor, go nowhere: they're for the board, not your
+  phone.
+- Everything else goes to you (ntfy, email, or both). Critical alerts repeat every
+  alerts.repeatCritical while they fire, warnings every alerts.repeatWarning.
+
+A critical alert holds back the warnings for the same device: when a device is down, you
+hear that, not also that each of its checks failed.
+
+tests/test_alertmanager.py checks the routing with amtool.
+*/ -}}
+{{- $a := .Values.alerts }}
+{{- $files := "/etc/alertmanager/secrets/ok3d-alerts" }}
+{{- $you := dict "name" "you" }}
+{{- $config := dict
+  "route" (dict
+    "receiver" "you"
+    "group_by" (list "alertname" "device")
+    "group_wait" "30s"
+    "group_interval" "5m"
+    "repeat_interval" $a.repeatWarning
+    "routes" (list
+      (dict "receiver" (ternary "deadman" "nobody" $a.deadman.enabled) "matchers" (list "alertname = \"Watchdog\"")
+        "group_wait" "0s" "group_interval" "1m" "repeat_interval" "1m")
+      (dict "receiver" "nobody" "matchers" (list "alertname = \"InfoInhibitor\""))
+      (dict "receiver" "nobody" "matchers" (list "severity = \"info\""))
+      (dict "receiver" "you" "matchers" (list "severity = \"critical\"") "repeat_interval" $a.repeatCritical)))
+  "inhibit_rules" (list
+    (dict "source_matchers" (list "severity = \"critical\"") "target_matchers" (list "severity = \"warning\"")
+      "equal" (list "device")))
+}}
+{{- if $a.email.enabled }}
+{{- $_ := set $config "global" (dict
+  "smtp_smarthost" $a.email.smarthost
+  "smtp_from" $a.email.from
+  "smtp_auth_username" $a.email.username
+  "smtp_auth_password_file" (printf "%s/SMTP_PASSWORD" $files)
+  "smtp_require_tls" $a.email.requireTls) }}
+{{- /* The subject names the cluster, so with more than one ok3d you can tell them apart. */}}
+{{- $subject := printf "[%s] {{ if eq .Status \"resolved\" }}Cleared: {{ end }}{{ .CommonLabels.alertname }}{{ with .CommonAnnotations.summary }}: {{ . }}{{ end }}" .Values.cluster.name }}
+{{- $_ := set $you "email_configs" (list (dict "to" $a.email.to "send_resolved" true "headers" (dict "Subject" $subject))) }}
+{{- end }}
+{{- if $a.ntfy.enabled }}
+{{- $hook := dict "url_file" (printf "%s/NTFY_URL" $files) "send_resolved" true }}
+{{- if $a.ntfy.useToken }}
+{{- $_ := set $hook "http_config" (dict "authorization" (dict "credentials_file" (printf "%s/NTFY_TOKEN" $files))) }}
+{{- end }}
+{{- $_ := set $you "webhook_configs" (list $hook) }}
+{{- end }}
+{{- $receivers := list $you (dict "name" "nobody") }}
+{{- if $a.deadman.enabled }}
+{{- $receivers = append $receivers (dict "name" "deadman" "webhook_configs"
+  (list (dict "url_file" (printf "%s/DEADMAN_URL" $files) "send_resolved" false))) }}
+{{- end }}
+{{- $_ := set $config "receivers" $receivers }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ok3d-alertmanager
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ok3d.labels" . | nindent 4 }}
+stringData:
+  alertmanager.yaml: |
+    {{- toYaml $config | nindent 4 }}

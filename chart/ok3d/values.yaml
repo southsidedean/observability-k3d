@@ -49,6 +49,35 @@ unifi:
   # if yours has one your devices trust.
   verifyTls: false
 
+# Where alerts go: ntfy (a phone app), email, or both, and a dead man's switch that hears from
+# ok3d every minute, so you learn when ok3d itself stops. Each is off until you switch it on.
+# The secrets each needs go in .env: NTFY_TOPIC (and NTFY_TOKEN), SMTP_PASSWORD, DEADMAN_URL.
+# docs/alerts.md has the steps.
+alerts:
+  ntfy:
+    enabled: false
+    # The ntfy server: ntfy.sh, or your own.
+    server: https://ntfy.sh
+    # true if your topic needs a login: put its token in .env as NTFY_TOKEN.
+    useToken: false
+  email:
+    enabled: false
+    # Who gets the alerts, and the mailbox they're sent from.
+    to: ""
+    from: ""
+    # The mail server for sending, with its port, such as smtp.example.com:587, and the
+    # mailbox's user name. Its password goes in .env as SMTP_PASSWORD.
+    smarthost: ""
+    username: ""
+    requireTls: true
+  deadman:
+    # A check that expects to hear from ok3d every minute, such as healthchecks.io's, and
+    # tells you when it doesn't. Its address goes in .env as DEADMAN_URL.
+    enabled: false
+  # How often an alert that's still firing is sent again.
+  repeatCritical: 1h
+  repeatWarning: 12h
+
 # The devices ok3d watches. They come from devices.yaml, which `ok3d apply` adds to these
 # settings when it's there (start from devices.example.yaml; devices.demo.yaml lists the
 # simulated network's). Each device's checks become probes, and its metrics ports become
@@ -84,11 +113,42 @@ kube-prometheus-stack:
   # The operator's definitions come from the platform chart instead, installed first.
   crds:
     enabled: false
-  # Grafana and Alertmanager are switched on by the later 0.4 changes that set them up.
+  # Grafana is switched on by the 0.4 change that sets up the front door.
   grafana:
     enabled: false
   alertmanager:
-    enabled: false
+    enabled: true
+    alertmanagerSpec:
+      # Its settings come from the ok3d-alertmanager Secret (templates/alertmanager-config.yaml,
+      # built from alerts.*), and its secrets from ok3d-alerts (made by ok3d apply from .env),
+      # which it reads as files: nothing secret is in its settings.
+      configSecret: ok3d-alertmanager
+      secrets: [ok3d-alerts]
+      # The data root's alertmanager folder keeps silences and what was already sent, so a
+      # rebuilt cluster doesn't send everything again. Mounted whole, as Prometheus's is.
+      storage:
+        disableMountSubPath: true
+        volumeClaimTemplate:
+          spec:
+            storageClassName: ""
+            accessModes: ["ReadWriteOnce"]
+            selector:
+              matchLabels:
+                ok3d/volume: alertmanager
+            resources:
+              requests:
+                storage: 1Gi
+      # Runs as the data root's owner (ok3d apply passes yours), under the restricted standard.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      resources:
+        requests: { cpu: 10m, memory: 32Mi }
+        limits: { memory: 128Mi }
   # node-exporter needs the host's network, processes, and filesystem, which the restricted
   # Pod Security Standard forbids. Hosts, this server included, are watched the way every
   # host is: node_exporter or Alloy on the host itself, listed in devices.yaml.
@@ -116,6 +176,11 @@ kube-prometheus-stack:
       probes: false
       cAdvisor: true
   defaultRules:
+    # KubeletDown fires when the kubelet's own metrics endpoint stops reporting, and that's
+    # the endpoint turned off above. The other rules in its group (a node not ready, too many
+    # pods) come from kube-state-metrics and stay.
+    disabled:
+      KubeletDown: true
     rules:
       kubeApiserverAvailability: false
       kubeApiserverBurnrate: false

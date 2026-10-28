@@ -98,8 +98,20 @@ jobs:
           } | kubeconform -strict -summary -kubernetes-version "$k8s" -skip CustomResourceDefinition \
             -schema-location default \
             -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'
-      - name: the charts' tests (what they render, and what the schema refuses), with Helm 4
-        run: python -m pytest -q tests/test_charts.py
+      # promtool and amtool, from the Prometheus and Alertmanager versions ok3d runs, pinned
+      # and checked against each release's published checksum.
+      - name: promtool and amtool
+        run: |
+          curl -fsSLo "$RUNNER_TEMP/prometheus.tgz" \
+            https://github.com/prometheus/prometheus/releases/download/v3.15.0/prometheus-3.15.0.linux-amd64.tar.gz
+          echo "2a542df32eac02ee17b9d844fb2aa1de00dafa5476579ba8a3ba862e9d572ea0  $RUNNER_TEMP/prometheus.tgz" | sha256sum -c
+          tar -xzf "$RUNNER_TEMP/prometheus.tgz" -C "$RUNNER_TEMP/bin" --strip-components 1 prometheus-3.15.0.linux-amd64/promtool
+          curl -fsSLo "$RUNNER_TEMP/alertmanager.tgz" \
+            https://github.com/prometheus/alertmanager/releases/download/v0.34.1/alertmanager-0.34.1.linux-amd64.tar.gz
+          echo "265b9d1e55ef0d5306a436018af6d2b686c2ce051f03d968f7464ecb1372a7e8  $RUNNER_TEMP/alertmanager.tgz" | sha256sum -c
+          tar -xzf "$RUNNER_TEMP/alertmanager.tgz" -C "$RUNNER_TEMP/bin" --strip-components 1 alertmanager-0.34.1.linux-amd64/amtool
+      - name: the charts', alert rules', and Alertmanager's tests, with Helm 4, promtool, and amtool
+        run: python -m pytest -q tests/test_charts.py tests/test_rules.py tests/test_alertmanager.py
 
   pytest:
     name: pytest (Python ${{ matrix.python }})

@@ -12,6 +12,7 @@
     "tls",
     "unifi",
     "modules",
+    "alerts",
     "devices"
   ],
   "properties": {
@@ -296,6 +297,132 @@
     "prometheus-blackbox-exporter": {
       "description": "How ok3d sets up the prometheus-blackbox-exporter chart. Not a setting of yours.",
       "type": "object"
+    },
+    "alerts": {
+      "description": "Where alerts go. The secrets each needs go in .env.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ntfy",
+        "email",
+        "deadman",
+        "repeatCritical",
+        "repeatWarning"
+      ],
+      "properties": {
+        "ntfy": {
+          "description": "Alerts on your phone through ntfy. The topic goes in .env as NTFY_TOPIC.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "enabled",
+            "server",
+            "useToken"
+          ],
+          "properties": {
+            "enabled": {
+              "description": "Send alerts to ntfy.",
+              "type": "boolean"
+            },
+            "server": {
+              "description": "The ntfy server, such as https://ntfy.sh.",
+              "type": "string",
+              "pattern": "^https?://[A-Za-z0-9.-]+(:[0-9]{1,5})?$"
+            },
+            "useToken": {
+              "description": "true if the topic needs a login; its token goes in .env as NTFY_TOKEN.",
+              "type": "boolean"
+            }
+          }
+        },
+        "email": {
+          "description": "Alerts by email. The mailbox's password goes in .env as SMTP_PASSWORD.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "enabled",
+            "to",
+            "from",
+            "smarthost",
+            "username",
+            "requireTls"
+          ],
+          "properties": {
+            "enabled": {
+              "description": "Send alerts by email.",
+              "type": "boolean"
+            },
+            "to": {
+              "description": "Who gets the alerts.",
+              "type": "string",
+              "pattern": "^([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,})?$"
+            },
+            "from": {
+              "description": "The mailbox they're sent from.",
+              "type": "string",
+              "pattern": "^([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,})?$"
+            },
+            "smarthost": {
+              "description": "The mail server for sending, with its port, such as smtp.example.com:587.",
+              "type": "string",
+              "pattern": "^([A-Za-z0-9.-]+:[0-9]{1,5})?$"
+            },
+            "username": {
+              "description": "The mailbox's user name for sending.",
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._%+@-]*$"
+            },
+            "requireTls": {
+              "description": "Refuse to send without TLS. Leave it on.",
+              "type": "boolean"
+            }
+          },
+          "if": {
+            "properties": {
+              "enabled": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "to": {
+                "minLength": 3
+              },
+              "from": {
+                "minLength": 3
+              },
+              "smarthost": {
+                "minLength": 3
+              }
+            }
+          }
+        },
+        "deadman": {
+          "description": "A dead man's switch that hears from ok3d every minute. Its address goes in .env as DEADMAN_URL.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "enabled"
+          ],
+          "properties": {
+            "enabled": {
+              "description": "Ping the dead man's switch every minute.",
+              "type": "boolean"
+            }
+          }
+        },
+        "repeatCritical": {
+          "description": "How often a critical alert that's still firing is sent again, such as 1h.",
+          "type": "string",
+          "pattern": "^[1-9][0-9]*(m|h|d)$"
+        },
+        "repeatWarning": {
+          "description": "How often a warning that's still firing is sent again, such as 12h.",
+          "type": "string",
+          "pattern": "^[1-9][0-9]*(m|h|d)$"
+        }
+      }
     }
   }
 }

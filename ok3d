@@ -11,6 +11,7 @@
 #   ./ok3d demo up    Start the simulated network: a few small containers that stand in for a
 #                     home network's devices, and a fake UniFi controller. docs/demo.md says
 #                     more. Also: demo down, demo status, demo fail <device>, demo fix <device>.
+#   ./ok3d test-alert Send a test alert through Alertmanager, to check that alerts reach you.
 #   ./ok3d version    Print ok3d's version.
 #
 # Settings come from settings.yaml next to this script (start from settings.example.yaml),
@@ -111,6 +112,7 @@ load_settings() {
 	: "${CLUSTER_NAME:?} ${K3S_IMAGE:?} ${NETWORK:?} ${API_PORT:?} ${PUBLISH_ADDRESS:?}"
 	: "${HTTPS_PORT:?} ${DATA_ROOT:?} ${TLS_MODE:?} ${DOMAIN:?}"
 	: "${METRICS_RETENTION:?} ${METRICS_RETENTION_SIZE:?} ${MODULE_UNIFI:?}"
+	: "${ALERTS_NTFY:?} ${ALERTS_NTFY_SERVER:?} ${ALERTS_NTFY_TOKEN:?} ${ALERTS_EMAIL:?} ${ALERTS_DEADMAN:?}"
 	context="k3d-$CLUSTER_NAME"
 }
 
@@ -203,6 +205,20 @@ check_data_root() {
 	pass "the data root $DATA_ROOT"
 }
 
+# Each alert destination that's on needs its secret in .env.
+check_alert_secrets() {
+	need_secret() {
+		if [ -z "$(env_value "$2")" ]; then fail "$1 is on, but $2 in .env is empty"; fi
+	}
+	[ "$ALERTS_NTFY" != true ] || need_secret alerts.ntfy NTFY_TOPIC
+	[ "$ALERTS_NTFY" != true ] || [ "$ALERTS_NTFY_TOKEN" != true ] || need_secret alerts.ntfy.useToken NTFY_TOKEN
+	[ "$ALERTS_EMAIL" != true ] || need_secret alerts.email SMTP_PASSWORD
+	[ "$ALERTS_DEADMAN" != true ] || need_secret alerts.deadman DEADMAN_URL
+	if [ "$ALERTS_NTFY" != true ] && [ "$ALERTS_EMAIL" != true ]; then
+		warn "no alert destination is on: alerts won't reach you (docs/alerts.md sets one up)"
+	fi
+}
+
 cmd_check() {
 	load_settings
 	pass "the settings in $settings"
@@ -219,6 +235,7 @@ cmd_check() {
 	if [ "$MODULE_UNIFI" = true ] && [ -z "$(env_value UNIFI_API_KEY)" ]; then
 		fail "modules.unifi is on, but UNIFI_API_KEY in .env is empty"
 	fi
+	check_alert_secrets
 	check_tools
 	check_linux_limits
 	check_data_root
@@ -324,6 +341,25 @@ load_unifi_key() {
 		kubectl --context "$context" apply --filename - >/dev/null
 }
 
+# The ok3d-alerts Secret, which Alertmanager reads as files: the ntfy address (built here from
+# the server and NTFY_TOPIC, with ntfy's own Alertmanager template and the cluster's name as a
+# tag), its token, the mail password, and the dead man's switch's address, each only when its
+# destination is on. Made even when nothing is on, since Alertmanager mounts it either way. The
+# values go to kubectl on its standard input, never on a command line.
+load_alert_secrets() {
+	{
+		[ "$ALERTS_NTFY" != true ] ||
+			printf 'NTFY_URL=%s/%s?template=alertmanager&tags=%s\n' "$ALERTS_NTFY_SERVER" "$(env_value NTFY_TOPIC)" "$CLUSTER_NAME"
+		[ "$ALERTS_NTFY" != true ] || [ "$ALERTS_NTFY_TOKEN" != true ] || printf 'NTFY_TOKEN=%s\n' "$(env_value NTFY_TOKEN)"
+		[ "$ALERTS_EMAIL" != true ] || printf 'SMTP_PASSWORD=%s\n' "$(env_value SMTP_PASSWORD)"
+		[ "$ALERTS_DEADMAN" != true ] || printf 'DEADMAN_URL=%s\n' "$(env_value DEADMAN_URL)"
+		# Something to mount when nothing is on.
+		printf 'NONE=\n'
+	} | kubectl --context "$context" --namespace monitoring create secret generic ok3d-alerts \
+		--from-env-file=/dev/stdin --dry-run=client --output yaml |
+		kubectl --context "$context" apply --filename - >/dev/null
+}
+
 deploy() {
 	echo "Deploying the platform: cert-manager and the Prometheus operator's definitions."
 	helm upgrade --install ok3d-platform chart/ok3d-platform \
@@ -336,6 +372,7 @@ deploy() {
 	move_release_from_0_3
 	make_monitoring_namespace
 	load_unifi_key
+	load_alert_secrets
 	echo "Deploying ok3d."
 	# Prometheus runs as you (the data root's owner), and keeps the history your settings ask
 	# for. Those go to the kube-prometheus-stack chart directly, since a chart's settings can't
@@ -343,10 +380,12 @@ deploy() {
 	uid=$(id -u)
 	gid=$(id -g)
 	p=kube-prometheus-stack.prometheus.prometheusSpec
+	a=kube-prometheus-stack.alertmanager.alertmanagerSpec
 	# shellcheck disable=SC2046 # values_args prints one argument per line, on purpose
 	helm upgrade --install ok3d chart/ok3d $(values_args) \
 		--set "host.uid=$uid,host.gid=$gid" \
 		--set "$p.securityContext.runAsUser=$uid,$p.securityContext.runAsGroup=$gid,$p.securityContext.fsGroup=$gid" \
+		--set "$a.securityContext.runAsUser=$uid,$a.securityContext.runAsGroup=$gid,$a.securityContext.fsGroup=$gid" \
 		--set "$p.retention=$METRICS_RETENTION,$p.retentionSize=$METRICS_RETENTION_SIZE" \
 		--kube-context "$context" --namespace monitoring \
 		--wait --timeout 10m
@@ -376,6 +415,7 @@ cmd_apply() {
 	# The data root's folders, owned by you, before anything is deployed that uses them.
 	install -d -m 0755 "$DATA_ROOT/kagent-ate"
 	install -d -m 0750 "$DATA_ROOT/prometheus"
+	install -d -m 0750 "$DATA_ROOT/alertmanager"
 	make_certificate_authority
 	make_cluster
 	connect_demo
@@ -511,6 +551,19 @@ cmd_demo() {
 	esac
 }
 
+# A test alert, through the real path: Alertmanager's own amtool adds it, and Alertmanager
+# sends it wherever alerts go. It clears itself after 5 minutes.
+cmd_test_alert() {
+	load_settings
+	pod=alertmanager-ok3d-kube-prometheus-stack-alertmanager-0
+	ends=$(date -u -d '+5 minutes' '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || date -u -v+5M '+%Y-%m-%dT%H:%M:%SZ')
+	kubectl --context "$context" --namespace monitoring exec "$pod" --container alertmanager -- \
+		amtool alert add OK3DTestAlert severity=warning device=ok3d \
+		--annotation="summary=\"A test alert from ./ok3d test-alert. If you can read this, alerts reach you.\"" \
+		--end="$ends" --alertmanager.url=http://localhost:9093
+	echo "Sent. It should arrive within a minute, wherever your alerts go (docs/alerts.md)."
+}
+
 cmd_version() {
 	sed -n 's/^__version__ = "\(.*\)"$/ok3d \1/p' src/ok3d/__init__.py
 }
@@ -520,6 +573,7 @@ check) cmd_check ;;
 apply) cmd_apply ;;
 delete) cmd_delete "${2:-}" ;;
 demo) cmd_demo "${2:-}" "${3:-}" ;;
+test-alert) cmd_test_alert ;;
 version | --version) cmd_version ;;
 help | --help | -h) usage ;;
 *)

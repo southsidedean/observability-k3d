@@ -8,7 +8,8 @@
 #
 # Needs python3 with the dev tools installed (python3 -m pip install -e '.[dev]', ideally in
 # a .venv, which this script uses when it finds one), plus shellcheck, actionlint, npx, helm,
-# and kubeconform.
+# and kubeconform. The alert rules' and Alertmanager's tests also use promtool and amtool
+# (CONTRIBUTING.md says where to get the versions ok3d runs); without them, those tests skip.
 # A tool that isn't installed here is skipped with a note; CI sets CI=true, which turns a
 # missing tool into a failure, so nothing is skipped there.
 #

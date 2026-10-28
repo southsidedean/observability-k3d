@@ -26,3 +26,8 @@ data:
   METRICS_RETENTION: {{ .Values.metrics.retention | quote }}
   METRICS_RETENTION_SIZE: {{ .Values.metrics.retentionSize | quote }}
   MODULE_UNIFI: {{ .Values.modules.unifi | quote }}
+  ALERTS_NTFY: {{ .Values.alerts.ntfy.enabled | quote }}
+  ALERTS_NTFY_SERVER: {{ .Values.alerts.ntfy.server | quote }}
+  ALERTS_NTFY_TOKEN: {{ .Values.alerts.ntfy.useToken | quote }}
+  ALERTS_EMAIL: {{ .Values.alerts.email.enabled | quote }}
+  ALERTS_DEADMAN: {{ .Values.alerts.deadman.enabled | quote }}

@@ -16,6 +16,17 @@
   root or extra privileges. [docs/devices.md](docs/devices.md) explains every field.
 - With `modules.unifi` on, unpoller reads your UniFi controller with an API key from a
   view-only admin, kept in `.env` and given only to unpoller.
+- Alerts reach you: on your phone through ntfy, by email, or both, and a dead man's switch
+  hears from ok3d every minute, so you learn when ok3d itself stops.
+  [docs/alerts.md](docs/alerts.md) has the steps. `./ok3d test-alert` sends a test alert.
+- Twelve alerts for devices (down, a check failing, flapping, metrics gone, a certificate
+  running out), UniFi (controller unreachable, busy, out of memory), and computers running
+  node_exporter (disk filling, disk almost full, memory low, RAID degraded), each with a
+  runbook in [docs/runbooks/](docs/runbooks/README.md). When a device is down, you hear
+  about the device, not each of its checks.
+- Every alert rule is tested with promtool, and a test holds each to metrics its exporter
+  really serves, the check that would have caught the old stack's UniFi rules, which watched
+  metrics unpoller never had.
 - ok3d leaves out Kubernetes' own internal metrics, which k3s serves in bulk: an empty
   cluster now keeps about 5,000 series instead of about 100,000.
 

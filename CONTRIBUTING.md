@@ -15,6 +15,10 @@ python3 -m venv .venv
 git config core.hooksPath .githooks
 ```
 
+For the alert rules' and Alertmanager's tests, put promtool (from Prometheus v3.15.0) and
+amtool (from Alertmanager v0.34.1) in `.venv/bin/`, from their releases on GitHub; the tests
+skip without them, and CI always has them.
+
 The last line turns on the git hooks. Before each commit, they refuse a commit on `main`,
 your own settings files, secrets, private names, and images nobody has looked at. Before
 each push, they run every check.

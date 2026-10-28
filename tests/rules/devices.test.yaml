@@ -1,0 +1,99 @@
+# promtool's unit tests for chart/ok3d/rules/devices.yaml: each alert fires when it should,
+# not before, and not when all is well. Run with:
+#   promtool test rules tests/rules/*.test.yaml
+rule_files:
+  - ../../chart/ok3d/rules/devices.yaml
+evaluation_interval: 30s
+tests:
+  - interval: 30s
+    input_series:
+      # The printer stops answering at the 1-minute mark; the router never does.
+      - series: 'probe_success{job="devices", check="ping", device="printer", role="printer", behind="office-switch"}'
+        values: "1 1 0x10"
+      - series: 'probe_success{job="devices", check="ping", device="router", role="gateway", behind=""}'
+        values: "1x12"
+    alert_rule_test:
+      # Down for 1 minute: not yet. For 2: yes.
+      - eval_time: 2m
+        alertname: DeviceDown
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: DeviceDown
+        exp_alerts:
+          - exp_labels: { severity: critical, job: devices, check: ping, device: printer, role: printer, behind: office-switch }
+            exp_annotations:
+              summary: "printer is down."
+              description: "printer (printer) hasn't answered ping for 2 minutes."
+              runbook_url: https://github.com/southsidedean/observability-k3d/blob/main/docs/runbooks/DeviceDown.md
+
+  - interval: 1m
+    input_series:
+      - series: 'probe_success{job="devices", check="http", device="nas", role="nas", behind="office-switch"}'
+        values: "0x10"
+      # A failing ping is DeviceDown's, not this alert's.
+      - series: 'probe_success{job="devices", check="ping", device="nas", role="nas", behind="office-switch"}'
+        values: "0x10"
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: DeviceCheckFailing
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: DeviceCheckFailing
+        exp_alerts:
+          - exp_labels: { severity: warning, job: devices, check: http, device: nas, role: nas, behind: office-switch }
+            exp_annotations:
+              summary: "nas's http check is failing."
+              description: "The http check on nas has failed for 5 minutes."
+              runbook_url: https://github.com/southsidedean/observability-k3d/blob/main/docs/runbooks/DeviceCheckFailing.md
+
+  - interval: 1m
+    input_series:
+      # Up and down every minute: flapping. Down for good: not flapping.
+      - series: 'probe_success{job="devices", check="ping", device="living-room-ap", role="access-point", behind="office-switch"}'
+        values: "1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0"
+      - series: 'probe_success{job="devices", check="ping", device="printer", role="printer", behind="office-switch"}'
+        values: "1 0x15"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: DeviceFlapping
+        exp_alerts:
+          - exp_labels: { severity: warning, job: devices, check: ping, device: living-room-ap, role: access-point, behind: office-switch }
+            exp_annotations:
+              summary: "living-room-ap keeps dropping off and coming back."
+              description: "living-room-ap's ping went up and down 14 times in 15 minutes."
+              runbook_url: https://github.com/southsidedean/observability-k3d/blob/main/docs/runbooks/DeviceFlapping.md
+
+  - interval: 1m
+    input_series:
+      - series: 'up{job="device-nas", instance="192.168.1.20:9100", device="nas", role="nas", behind="office-switch"}'
+        values: "0x10"
+      # Prometheus's own targets aren't devices.
+      - series: 'up{job="kube-state-metrics", instance="192.0.2.5:8080"}'
+        values: "0x10"
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: DeviceMetricsDown
+        exp_alerts:
+          - exp_labels: { severity: warning, job: device-nas, instance: "192.168.1.20:9100", device: nas, role: nas, behind: office-switch }
+            exp_annotations:
+              summary: "nas stopped serving its metrics."
+              description: "Prometheus hasn't been able to read 192.168.1.20:9100 for 5 minutes."
+              runbook_url: https://github.com/southsidedean/observability-k3d/blob/main/docs/runbooks/DeviceMetricsDown.md
+
+  - interval: 1m
+    input_series:
+      # Runs out 10 days after the start of the test: inside the two weeks. The router's runs
+      # out in 60 days: fine.
+      - series: 'probe_ssl_earliest_cert_expiry{job="devices", check="https", device="nas", role="nas", behind="office-switch"}'
+        values: "864000x80"
+      - series: 'probe_ssl_earliest_cert_expiry{job="devices", check="https", device="router", role="gateway", behind=""}'
+        values: "5184000x80"
+    alert_rule_test:
+      - eval_time: 70m
+        alertname: DeviceCertificateExpiring
+        exp_alerts:
+          - exp_labels: { severity: warning, job: devices, check: https, device: nas, role: nas, behind: office-switch }
+            exp_annotations:
+              summary: "nas's certificate runs out in less than two weeks."
+              description: "The certificate nas serves runs out in 9d 22h 50m 0s."
+              runbook_url: https://github.com/southsidedean/observability-k3d/blob/main/docs/runbooks/DeviceCertificateExpiring.md

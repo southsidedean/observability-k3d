@@ -1,0 +1,35 @@
+# Alerts from unpoller, with modules.unifi on: the controller itself, and each UniFi device's
+# load. A UniFi device that stops answering is DeviceDown (from devices.yaml), not an alert
+# here. tests/rules/unifi.test.yaml tests every rule here with promtool.
+groups:
+  - name: unifi
+    rules:
+      - alert: UniFiControllerUnreachable
+        expr: up{job="unpoller"} == 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "ok3d can't read your UniFi controller."
+          description: "unpoller hasn't been able to read the controller for 10 minutes, so UniFi's graphs have stopped."
+          runbook_url: https://github.com/southsidedean/observability-k3d/blob/main/docs/runbooks/UniFiControllerUnreachable.md
+
+      - alert: UniFiDeviceBusy
+        expr: unpoller_device_cpu_utilization_ratio > 0.9
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.name }}'s processor has been above 90% for 15 minutes."
+          description: "{{ $labels.name }} ({{ $labels.model }}) is at {{ $value | humanizePercentage }} processor use."
+          runbook_url: https://github.com/southsidedean/observability-k3d/blob/main/docs/runbooks/UniFiDeviceBusy.md
+
+      - alert: UniFiDeviceMemoryFull
+        expr: unpoller_device_memory_utilization_ratio > 0.9
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.name }}'s memory has been above 90% for 15 minutes."
+          description: "{{ $labels.name }} ({{ $labels.model }}) is at {{ $value | humanizePercentage }} memory use."
+          runbook_url: https://github.com/southsidedean/observability-k3d/blob/main/docs/runbooks/UniFiDeviceMemoryFull.md
