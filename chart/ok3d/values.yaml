@@ -139,6 +139,7 @@ kube-prometheus-stack:
         path: /api/health
         port: grafana
       periodSeconds: 10
+      timeoutSeconds: 5
       failureThreshold: 90
     # kube-prometheus-stack's own dashboards are about Kubernetes' internals, mostly from the
     # metrics ok3d leaves out. ok3d's (templates/dashboards.yaml) are loaded instead.

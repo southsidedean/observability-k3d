@@ -17,16 +17,20 @@ ROOT = Path(__file__).resolve().parent.parent
 
 GIT = r"""#!/bin/sh
 echo "git $*" >>"$FAKE_LOG"
+[ "$1" != -C ] || shift 2
 case "$1" in
+status)
+	[ -z "${FAKE_DIRTY:-}" ] || echo " M ok3d"
+	;;
 ls-remote)
-	printf '%s\trefs/tags/%s\n' a v0.3.0 b v0.4.0 c v0.10.0 d v0.11.0-rc1 e v0.9.2
+	printf '%s\trefs/tags/%s\n' a v0.3.0 b v0.4.0 c v0.10.0 d v1.1.0-rc1 e v0.9.2 f v1.0.0
 	;;
 clone)
 	for last; do :; done
 	mkdir -p "$last/.git"
 	cp "$FAKE_EXAMPLE" "$last/settings.example.yaml"
 	if [ -z "${FAKE_OLD:-}" ]; then
-		printf '#!/bin/sh\ncase "$1" in\ninstall) echo "ran ok3d install in $(pwd)" ;;\nesac\n' >"$last/ok3d"
+		printf '#!/bin/sh\n# ok3d: a stand-in\ncase "$1" in\ninstall) echo "ran ok3d install in $(pwd)" ;;\nesac\n' >"$last/ok3d"
 	else
 		printf '#!/bin/sh\necho old\n' >"$last/ok3d"
 	fi
@@ -69,7 +73,7 @@ def test_it_installs_the_newest_release_into_home(env: dict[str, str]) -> None:
     assert result.returncode == 0, result.stderr
     home = Path(env["HOME"]) / "ok3d"
     clone = next(line for line in calls(env) if line.startswith("git clone"))
-    assert "--branch v0.10.0 " in clone  # newest by number, not by text; never a test tag
+    assert "--branch v1.0.0 " in clone  # newest by number (1.0 after 0.10), never a test tag
     assert f"ran ok3d install in {home}" in result.stdout
 
 
@@ -91,7 +95,9 @@ def test_it_keeps_settings_you_have(env: dict[str, str]) -> None:
 def test_it_brings_a_checkout_up_to_the_release(env: dict[str, str]) -> None:
     install(env)
     install({**env, "OK3D_VERSION": "v0.9.2"})
-    assert any(line.endswith("checkout --quiet v0.9.2") for line in calls(env))
+    log = calls(env)
+    assert any("fetch --quiet https://github.com/southsidedean/observability-k3d.git refs/tags/v0.9.2:refs/tags/v0.9.2" in line for line in log)
+    assert any(line.endswith("checkout --quiet v0.9.2") for line in log)
 
 
 def test_it_says_how_to_make_the_data_root(env: dict[str, str]) -> None:
@@ -126,3 +132,38 @@ def test_it_stops_on_a_release_without_an_installer(env: dict[str, str]) -> None
     result = install({**env, "FAKE_OLD": "1"})
     assert result.returncode == 1
     assert "has no installer" in result.stderr
+
+
+
+def test_it_wont_take_over_another_projects_checkout(env: dict[str, str]) -> None:
+    other = Path(env["HOME"]) / "ok3d"
+    (other / ".git").mkdir(parents=True)
+    (other / "ok3d").write_text("#!/bin/sh\necho something else\n")
+    result = install(env)
+    assert result.returncode == 1
+    assert "not of ok3d" in result.stderr
+
+
+def test_it_wont_move_a_checkout_with_your_changes(env: dict[str, str]) -> None:
+    install(env)
+    result = install({**env, "FAKE_DIRTY": "1", "OK3D_VERSION": "v0.9.2"})
+    assert result.returncode == 1
+    assert "has changes of yours" in result.stderr
+    assert not any(line.endswith("checkout --quiet v0.9.2") for line in calls(env))
+
+
+def test_a_download_cut_short_runs_nothing(env: dict[str, str], tmp_path: Path) -> None:
+    whole = (ROOT / "install.sh").read_text()
+    cut = tmp_path / "cut.sh"
+    cut.write_text(whole[: whole.rindex('main "$@"')])  # everything but the last line
+    result = subprocess.run(["sh", str(cut)], capture_output=True, text=True, env=env, check=False)
+    assert result.returncode == 0
+    assert calls(env) == []
+
+
+def test_a_quoted_data_root_in_your_settings_is_read(env: dict[str, str]) -> None:
+    install(env)
+    settings = Path(env["HOME"]) / "ok3d" / "settings.yaml"
+    settings.write_text(f'settingsVersion: 1\nhost:\n  dataRoot: "{env["OK3D_DATA_ROOT"]}"\n')
+    result = install(env)
+    assert result.returncode == 0, result.stderr

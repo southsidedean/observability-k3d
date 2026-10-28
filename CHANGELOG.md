@@ -9,6 +9,9 @@
   (`kube-prometheus-stack`, `prometheus-blackbox-exporter`, `gateway`, `global`), which
   choose images and how pods run. Nothing in the docs ever asked for them;
   [chart/ok3d-files/README.md](chart/ok3d-files/README.md) has the list.
+- A certificate authority made from 0.5 on can't vouch for any IP address, only for names
+  under your domain. One you already have is kept as it is, so your devices keep trusting it;
+  to get the new limit, move `certs/` aside and run `./ok3d apply`, then trust the new one.
 - A device's address can't be a name inside the cluster (`.svc`, `.cluster.local`),
   `localhost`, or a loopback, link-local, or `0.x` address: ok3d watches your network, not
   itself.

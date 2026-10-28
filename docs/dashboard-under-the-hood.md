@@ -148,26 +148,39 @@ with a note to wait. If the outbox can't be written, the page says so and sends 
 `./ok3d install` needs Linux with systemd, and runs as you, never as root. It's safe to run
 again: it brings each part up to date. In order, it:
 
-1. Reads your settings, and checks the data root is there and yours.
+1. Reads your settings, and checks the data root is there and that you can write to it. The
+   ok3d folder and the data root may have only letters, digits, and `. _ / -`, since the
+   service file holds them.
 2. Makes `dashboard/`, `dashboard/outbox/`, and `helper/` in the data root, readable only by
    you.
 3. Makes ok3d's certificate authority if there's none (the same one the pages use).
 4. Issues the Dashboard's certificate from it, for `dashboard.<domain>`, valid for 397 days
-   (browsers accept at most 398), into `dashboard/tls/`. It keeps the one there until it's
-   within 30 days of running out.
+   (browsers accept at most 398). The Dashboard's container can write `dashboard/tls/`, so
+   nothing there is trusted: the key, the request, and the extensions are made in a new
+   folder inside `certs/`, the authority's own, with a random serial, and only the finished
+   certificate and key are moved into `tls/` (a rename, which replaces a link there rather
+   than following it). A certificate already there is kept only if it's a plain file this
+   authority signed for this name, it matches the key beside it, and it has more than 30
+   days left.
 5. Writes the helper's service, `~/.config/systemd/user/ok3d-helper.service`, from
-   `deploy/ok3d-helper.service` with this checkout's paths, then enables and restarts it, so
-   it runs this checkout's code. Without `loginctl enable-linger`, a user's services stop when
-   they log out and don't start at boot, so it says to run `sudo loginctl enable-linger <you>`
-   when that's off.
-6. Makes the Dashboard's container again (above).
-7. Waits for the Dashboard to make its password, then prints the address and the password.
+   `deploy/ok3d-helper.service` with this checkout's paths, through a temporary file, then
+   enables and restarts it, so it runs this checkout's code. A `%` or `$` in your `PATH` is
+   escaped for systemd; a quote, backslash, or newline there stops the install. Without
+   `loginctl enable-linger`, a user's services stop when they log out and don't start at
+   boot, so it says to run `sudo loginctl enable-linger <you>` when that's off.
+6. Pulls the Dashboard's image first, so a pull that fails leaves the running Dashboard as it
+   was, then makes the container again (above).
+7. Prints the address. The password is printed the first time only, when the Dashboard has
+   just made it; after that, it says which file holds it.
 
 `install.sh`, for `curl -fsSL .../install.sh | sh`, comes before it: it checks out the newest
 release (or `OK3D_VERSION`) into `~/ok3d` (or `OK3D_DIR`), makes `settings.yaml` from
 `settings.example.yaml` with `OK3D_DATA_ROOT` (default `/srv/ok3d`) if there's none, says
 what to run if the data root needs `sudo`, and runs `./ok3d install`. It never uses `sudo`
-itself.
+itself, and never needs a terminal. Everything is inside one function called on its last
+line, so a download cut short runs nothing. An existing checkout must be ok3d's, with no
+changes of yours to ok3d's own files, and it's moved to the release fetched from the same
+place the release was found (`OK3D_REPO`).
 
 ## Running it from the checkout
 

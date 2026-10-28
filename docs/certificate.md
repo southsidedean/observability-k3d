@@ -69,7 +69,8 @@ device:
 
 The authority can only vouch for names under ok3d's domain: it carries a name constraint
 that browsers enforce. Even if its key were ever stolen, it couldn't be used to pass off any
-other site (your bank, say) on a device that trusts it.
+other site (your bank, say) on a device that trusts it. An authority made by 0.5 or later
+also can't vouch for any IP address.
 
 Its key stays in the data root (`certs/ca.key`), readable only by you, and in the cluster as
 the Secret cert-manager issues from. The page certificate cert-manager issues lasts 90 days

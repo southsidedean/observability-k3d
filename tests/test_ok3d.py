@@ -21,6 +21,7 @@ FAKES = {
     # docker run, for the Dashboard, makes its password, as the real one does on first start.
     "docker": r"""echo "docker $*" >>"$FAKE_LOG"
 if [ "$1" = run ] && [ -d "$FAKE_DATA_ROOT/dashboard" ]; then printf 'kxq7-m2pa-9fht-3bnd\n' >"$FAKE_DATA_ROOT/dashboard/password"; fi
+if [ "$1" = pull ]; then exit "${FAKE_PULL_STATUS:-0}"; fi
 exit "${FAKE_DOCKER_STATUS:-0}"
 """,
     "k3d": r"""echo "k3d $*" >>"$FAKE_LOG"
@@ -46,7 +47,7 @@ data:
   API_PORT: "6445"
   PUBLISH_ADDRESS: "0.0.0.0"
   HTTPS_PORT: "8443"
-  DASHBOARD_PORT: "8444"
+  DASHBOARD_PORT: "${FAKE_DASHBOARD_PORT:-8444}"
   DATA_ROOT: "$FAKE_DATA_ROOT"
   TLS_MODE: "self-issued"
   DOMAIN: "${FAKE_DOMAIN:-noc.home.arpa}"
@@ -77,6 +78,12 @@ esac""",
 if [ "$1" = req ]; then
 	while [ $# -gt 0 ]; do
 		case "$1" in -keyout | -out) touch "$2"; shift ;; esac
+		shift
+	done
+elif [ "$1" = x509 ] && [ "$2" = -req ]; then
+	# What the certificate would say, kept for the test to read.
+	while [ $# -gt 0 ]; do
+		case "$1" in -extfile) cp "$2" "$FAKE_LOG.ext"; shift ;; -out) touch "$2"; shift ;; esac
 		shift
 	done
 elif [ "$1" = x509 ]; then
@@ -478,8 +485,75 @@ def test_install_issues_the_dashboards_certificate_for_its_name(linux: dict[str,
     ok3d(linux, "install")
     issue = next(line for line in calls(linux) if line.startswith("openssl x509 -req"))
     assert "-days 397" in issue
-    ext = [line for line in calls(linux) if "dashboard.ext" in line]
-    assert ext
+    assert "-set_serial 0x" in issue
+    ext = Path(linux["FAKE_LOG"] + ".ext").read_text()
+    assert "subjectAltName=DNS:dashboard.noc.home.arpa\n" in ext
+    assert "basicConstraints=critical,CA:FALSE" in ext
+    # Made where the Dashboard's container can't reach, and only the result moved into tls/.
+    data = linux["FAKE_DATA_ROOT"]
+    assert f"-extfile {data}/certs/issue." in issue
+    assert "-CAserial" not in issue
+    assert sorted(os.listdir(Path(data) / "dashboard" / "tls")) == ["dashboard.crt", "dashboard.key"]
+    assert [n for n in os.listdir(Path(data) / "certs") if n.startswith("issue.")] == []
+
+
+def test_a_new_certificate_authority_vouches_for_no_ip_address(linux: dict[str, str]) -> None:
+    ok3d(linux, "install")
+    make = next(line for line in calls(linux) if line.startswith("openssl req -x509"))
+    assert "excluded;IP:0.0.0.0/0.0.0.0" in make
+
+
+def test_install_replaces_links_in_tls_instead_of_following_them(linux: dict[str, str], tmp_path: Path) -> None:
+    tls = Path(linux["FAKE_DATA_ROOT"]) / "dashboard" / "tls"
+    tls.mkdir(parents=True)
+    victim = tmp_path / "authorized_keys"
+    victim.write_text("mine\n")
+    (tls / "dashboard.key").symlink_to(victim)
+    ok3d(linux, "install")
+    assert victim.read_text() == "mine\n"
+    assert not (tls / "dashboard.key").is_symlink()
+
+
+def test_install_refuses_a_tls_folder_that_is_a_link(linux: dict[str, str], tmp_path: Path) -> None:
+    dashboard = Path(linux["FAKE_DATA_ROOT"]) / "dashboard"
+    dashboard.mkdir()
+    (tmp_path / "elsewhere").mkdir()
+    (dashboard / "tls").symlink_to(tmp_path / "elsewhere")
+    result = ok3d(linux, "install")
+    assert result.returncode == 1
+    assert "isn't a folder" in result.stderr
+
+
+def test_a_failed_pull_leaves_the_running_dashboard(linux: dict[str, str]) -> None:
+    result = ok3d({**linux, "FAKE_PULL_STATUS": "1"}, "install")
+    assert result.returncode == 1
+    assert "left as it was" in result.stderr
+    assert not any(line.startswith("docker rm") for line in calls(linux))
+
+
+def test_the_password_is_shown_on_first_install_only(linux: dict[str, str]) -> None:
+    assert "kxq7-m2pa-9fht-3bnd" in ok3d(linux, "install").stdout
+    again = ok3d(linux, "install").stdout
+    assert "kxq7-m2pa-9fht-3bnd" not in again
+    assert "Its password is in" in again
+
+
+def test_install_refuses_one_port_for_both(linux: dict[str, str]) -> None:
+    result = ok3d({**linux, "FAKE_DASHBOARD_PORT": "8443"}, "install")
+    assert result.returncode == 1
+    assert "need a port each" in result.stderr
+
+
+def test_install_refuses_a_path_the_service_file_cant_hold(linux: dict[str, str]) -> None:
+    result = ok3d({**linux, "PATH": linux["PATH"] + ':/opt/"odd'}, "install")
+    assert result.returncode == 1
+    assert "PATH has a quote" in result.stderr
+
+
+def test_install_escapes_percent_signs_for_systemd(linux: dict[str, str], tmp_path: Path) -> None:
+    ok3d({**linux, "PATH": linux["PATH"] + ":/opt/100%"}, "install")
+    unit = (tmp_path / "config" / "systemd" / "user" / "ok3d-helper.service").read_text()
+    assert "/opt/100%%" in unit
 
 
 def test_install_says_how_to_keep_the_helper_running_after_logout(linux: dict[str, str]) -> None:
