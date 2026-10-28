@@ -1,0 +1,44 @@
+# The form for reporting a problem. It asks for what helps most and reminds people to remove
+# private details, since issues are public.
+name: Something isn't working
+description: ok3d, the Dashboard, an alert, or a dashboard isn't doing what the docs say.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting this.
+
+        Please remove anything private before posting: passwords, API keys, and tokens; addresses and host names on your network; device and Wi-Fi network names; ntfy topic names; and paths that include your name.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you saw, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to make it happen again
+      description: The steps, if you know them.
+  - type: input
+    id: version
+    attributes:
+      label: ok3d version
+      description: Shown at the bottom of the Dashboard, or run `ok3d --version`.
+    validations:
+      required: true
+  - type: input
+    id: host
+    attributes:
+      label: The computer running ok3d
+      placeholder: e.g. Ubuntu 24.04 on a mini PC with 16 GB of memory
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Log or output
+      description: What the command or the Dashboard said, with private details removed.
+      render: text

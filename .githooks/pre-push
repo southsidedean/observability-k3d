@@ -1,0 +1,6 @@
+#!/bin/sh
+# Runs before every push, once turned on with: git config core.hooksPath .githooks
+# Runs every check that doesn't need a cluster (scripts/check.sh), so a pull request doesn't
+# wait on CI to find what this machine could have. Skip it with git push --no-verify.
+set -eu
+exec "$(git rev-parse --show-toplevel)/scripts/check.sh"

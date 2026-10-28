@@ -37,9 +37,18 @@ For the old stack, until 0.4:
 ./extras/create-unifi-secret.sh <user> <pass> <controller-url>
 ```
 
-There are no tests yet. To check a change to the old manifests, render them with
-`kubectl kustomize manifests/monitoring/` and check the scripts with `bash -n scripts/*.sh`.
-From 0.3, `scripts/check.sh` runs every check that doesn't need a cluster.
+For everything new:
+
+```bash
+python3 -m venv .venv && .venv/bin/python -m pip install -e '.[dev]'   # once
+git config core.hooksPath .githooks                                    # once: the git hooks
+scripts/check.sh                                   # every check that doesn't need a cluster
+.venv/bin/python -m pytest tests/test_privacy.py   # one test file
+.venv/bin/python -m pytest -k hooks                # tests by name
+```
+
+The old stack has no tests. To check a change to its manifests, render them with
+`kubectl kustomize manifests/monitoring/`.
 
 ## Git and GitHub
 

@@ -1,0 +1,42 @@
+// Renovate keeps every pinned version current: the GitHub Actions (by commit), the Python
+// test and lint tools in pyproject.toml, and, as they arrive, the Helm chart dependencies,
+// the image tags, and the base images. Dependabot stays on for security alerts only.
+// Renovate works once its GitHub app is installed on the repository.
+{
+  $schema: 'https://docs.renovatebot.com/renovate-schema.json',
+  extends: [
+    'config:recommended',
+    // Actions are pinned to a full commit, with the version in a comment beside it.
+    'helpers:pinGitHubActionDigests',
+  ],
+  // One pull request a month for everything, so updates are reviewed together, not one by one.
+  schedule: ['before 6am on the first day of the month'],
+  // Only releases at least a week old, so a broken release has time to be noticed and pulled.
+  minimumReleaseAge: '7 days',
+  packageRules: [
+    {
+      matchPackageNames: ['*'],
+      groupName: 'monthly updates',
+      groupSlug: 'monthly',
+    },
+  ],
+  // Fixes for known vulnerabilities come right away, without waiting for the month or the week.
+  vulnerabilityAlerts: {
+    enabled: true,
+    schedule: ['at any time'],
+    minimumReleaseAge: null,
+  },
+  osvVulnerabilityAlerts: true,
+  customManagers: [
+    {
+      // The Renovate version that checks this file, pinned in scripts/check.sh and the tests
+      // workflow. actionlint is pinned there too, but with a checksum Renovate can't update,
+      // so it's moved by hand.
+      customType: 'regex',
+      managerFilePatterns: ['/^scripts/check\\.sh$/', '/^\\.github/workflows/tests\\.yml$/'],
+      matchStrings: ['renovate@(?<currentValue>\\d+\\.\\d+\\.\\d+)'],
+      depNameTemplate: 'renovate',
+      datasourceTemplate: 'npm',
+    },
+  ],
+}

@@ -1,0 +1,71 @@
+# The ok3d Python package: the Dashboard, the helper, and the tools that run in the cluster
+# all live under src/ok3d as they're built. This file also pins the test and lint tools, so a
+# new release of one can't fail an unrelated pull request; Renovate proposes updates.
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ok3d"
+dynamic = ["version"]
+description = "A home network operations center on k3d, with AI agents."
+readme = "README.md"
+license = "AGPL-3.0-only"
+# Ubuntu 24.04 LTS ships Python 3.12, and the helper runs on the host's own Python.
+requires-python = ">=3.12"
+
+[project.optional-dependencies]
+dev = [
+    "pytest==9.1.1",
+    "pytest-cov==7.1.0",
+    "pytest-timeout==2.4.0",
+    "hypothesis==6.170.5",
+    "ruff==0.17.1",
+    "bandit==1.9.4",
+    "mypy==2.4.0",
+    "zizmor==1.31.1",
+]
+
+[tool.setuptools.dynamic]
+version = { attr = "ok3d.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# -ra lists skipped tests and why at the end of each run.
+addopts = "-ra --strict-markers"
+# A test that hangs fails after a minute with a traceback of where it was stuck, instead of
+# holding CI until GitHub's six-hour limit. A test that needs longer says so with
+# @pytest.mark.timeout(seconds).
+timeout = 60
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+# Rules that find bugs and risky code rather than style: pyflakes, pycodestyle errors,
+# bugbear, pyupgrade, simplify, perflint, async, security (bandit's rules), and pylint's
+# errors and warnings. The same set kia uses.
+select = ["E4", "E7", "E9", "F", "B", "UP", "SIM", "PERF", "ASYNC", "S", "PLE", "PLW", "RUF"]
+ignore = [
+    "S603",  # subprocess calls with argument lists (no shell) are how the scripts run tools
+    "S607",  # tools such as git are found on PATH, as a user's shell would find them
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests assert, use temporary paths, and write example secrets on purpose.
+"tests/**" = ["S101", "S105", "S106", "S108"]
+
+[tool.bandit]
+exclude_dirs = ["tests"]
+# Same reasons as the ruff ignores above.
+skips = ["B404", "B603", "B607"]
+
+[tool.mypy]
+strict = true
+python_version = "3.12"
+files = ["src", "tests"]

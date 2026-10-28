@@ -1,0 +1,36 @@
+name: scorecard
+
+# OpenSSF Scorecard rates how well the repository itself is protected: pinned actions, branch
+# protection, token permissions, signed releases, and more. The results go to the Security
+# tab and to the public Scorecard site.
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 7 * * 3"
+  workflow_dispatch:
+
+# Nothing at the top level: Scorecard checks that each job asks only for what it needs.
+permissions: {}
+
+jobs:
+  analysis:
+    name: scorecard
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write # to put the results in the Security tab
+      id-token: write # to publish the results, signed, to the Scorecard site
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ossf/scorecard-action@fa7117db83c52d787ae5a89f350999701505d78e # v2.5.0
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true
+      - uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
+        with:
+          sarif_file: results.sarif
