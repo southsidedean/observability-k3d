@@ -1,0 +1,6 @@
+# Checks which sections a devices file may have (README.md one folder up). Never installed.
+apiVersion: v2
+name: ok3d-devices-file
+description: Checks the sections of an ok3d devices file
+type: application
+version: 0.0.0

@@ -1,20 +1,23 @@
-"""ok3d-helper: runs `./ok3d check` and `./ok3d apply` when the Dashboard asks.
+"""ok3d-helper: runs `./ok3d check` and `./ok3d apply`, and saves settings, devices, and
+secrets, when the Dashboard asks.
 
 The Dashboard runs in a container and can't run anything on the host itself. When you press
-Check or Apply, it leaves a request file in its outbox, `<data root>/dashboard/outbox/request`:
+Check or Apply, or saves a change, it leaves a request file in its outbox,
+`<data root>/dashboard/outbox/request`:
 
     id=3f9a0c51d2e8b746
     action=check
 
 This helper, a systemd user service running as you, looks for that file every few seconds.
 It renames it into its own folder, `<data root>/helper/taken/`, which the Dashboard can read
-but not write, checks every value again, runs the `ok3d` command, and writes its answer to
+but not write, checks every value again, carries it out, and writes its answer to
 `<data root>/helper/result` for the page to read.
 
 It assumes the Dashboard's container may have been taken over, so it trusts nothing in the
 outbox: not the file's contents, not its type (it may be a link, a folder, or a pipe), and not
-its size. The most a request can ever do is run `./ok3d check` or `./ok3d apply`, which you
-could run yourself. docs/helper-under-the-hood.md has the whole story.
+its size. The most a request can ever do is what you could do yourself: run `./ok3d check`
+or `./ok3d apply`, save a settings or devices file that `./ok3d validate` passes, or set one
+of four lines of .env (ENV_NAMES). docs/helper-under-the-hood.md has the whole story.
 
 It uses only the standard library and runs on the host's own Python (`python3 -I`), so the
 host needs nothing installed.
@@ -37,24 +40,46 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-# The most of a request that's read. A real one is under 100 bytes.
-MAX_REQUEST = 4096
+# The most of a file a request may carry (settings.yaml or devices.yaml), and of a request in
+# all: the file, and a few short lines before it.
+MAX_FILE = 64 * 1024
+MAX_REQUEST = MAX_FILE + 1024
 # A request older than this is refused: the page that sent it has given up waiting.
 MAX_AGE = 300
 # How far in the future a request's time may be, for a clock that's a little off.
 MAX_SKEW = 60
-# What a request may ask for, and nothing else.
-ACTIONS = ("check", "apply")
+# What a request may ask for, and nothing else:
+#   check, apply      run ./ok3d check or ./ok3d apply
+#   save-settings     check the file that follows with ./ok3d validate, then save it as settings.yaml
+#   save-devices      the same for devices.yaml
+#   set-env           set one line of .env (name=, one of ENV_NAMES) to the value that follows
+ACTIONS = ("check", "apply", "save-settings", "save-devices", "set-env")
+# The files the two save actions write, in the ok3d checkout, and what ./ok3d validate calls them.
+SAVES = {"save-settings": ("settings.yaml", "settings"), "save-devices": ("devices.yaml", "devices")}
+# The .env lines set-env may set. Not OK3D_ADMIN_PASSWORD, ANTHROPIC_API_KEY, or DEADMAN_URL:
+# choosing the admin password would let a Dashboard someone had taken over sign in to Grafana,
+# a key of their own would send the agents' conversations to their account, and the dead
+# man's switch could be pointed anywhere. You set those three in .env on the server. A wrong
+# value in any line here only stops something working: where each is sent is a setting only
+# you may change.
+ENV_NAMES = ("UNIFI_API_KEY", "NTFY_TOPIC", "NTFY_TOKEN", "SMTP_PASSWORD")
+# A .env value: printable characters with no spaces, quotes, backslashes, dollar signs, or
+# backticks, so .env holds it as plain text that nothing reading .env can misread. Empty
+# clears it. API keys, tokens, URLs, and generated passwords all fit.
+ENV_VALUE = re.compile(r"[!#%&()*+,\-./0-9:;<=>?@A-Z\[\]^_a-z{|}~]{0,1024}")
 # The id is the page's own random number, so it knows which answer is to its request.
 ID = re.compile(r"[0-9a-f]{16,64}")
-# The fields a request has, each exactly once.
-FIELDS = ("id", "action")
+# The lines a request's head may have, each at most once: id and action always, name only
+# with set-env.
+FIELDS = ("id", "action", "name")
 # How long each action may run before it's stopped. A first apply downloads images.
-TIMEOUTS = {"check": 300, "apply": 3600}
+TIMEOUTS = {"check": 300, "apply": 3600, "save-settings": 120, "save-devices": 120}
 # How many lines of what the command printed go into the result.
 TAIL = 200
 # How many recent ids are kept, so the same request can't be carried out twice.
 SEEN = 100
+# How many earlier copies of each file are kept in local/backups/ in the ok3d checkout.
+BACKUPS = 10
 # How often the outbox is looked at, in seconds.
 INTERVAL = 3.0
 
@@ -67,6 +92,8 @@ class Refused(Exception):
 class Request:
     id: str
     action: str
+    name: str | None = None  # the .env line, for set-env
+    body: bytes = b""  # the file, or the .env value
 
 
 @dataclass(frozen=True)
@@ -138,39 +165,77 @@ def open_folders(folders: Folders) -> Opened:
 
 
 def parse_request(data: bytes, mtime: float, now: float) -> Request:
-    """Checks a request's bytes and age, and returns it, or raises Refused."""
+    """Checks a request's bytes and age, and returns it, or raises Refused.
+
+    A request is a few lines (its head), each ending in a newline. A save or set-env adds a
+    blank line and then the file or the value (its body). check and apply have no body.
+    """
     if len(data) > MAX_REQUEST:
         raise Refused("the request is too big")
     if not now - MAX_AGE <= mtime <= now + MAX_SKEW:
         raise Refused("the request isn't recent")
+    head_bytes, blank, body = data.partition(b"\n\n")
     try:
-        text = data.decode("ascii")
+        head = head_bytes.decode("ascii")
     except UnicodeDecodeError:
         raise Refused("the request isn't plain text") from None
+    if not blank:
+        # No body: the head must end in a newline.
+        if not head.endswith("\n"):
+            raise Refused("the request isn't finished")
+        head = head[:-1]
     fields: dict[str, str] = {}
-    # One field per line, each line ending in a newline; no blank lines or carriage returns.
-    if not text.endswith("\n"):
-        raise Refused("the request isn't finished")
-    for line in text[:-1].split("\n"):
+    for line in head.split("\n"):
         key, sep, value = line.partition("=")
         if not sep or key not in FIELDS:
             raise Refused("the request has a line the helper doesn't know")
         if key in fields:
             raise Refused("the request repeats a line")
         fields[key] = value
-    if set(fields) != set(FIELDS):
+    if "id" not in fields or "action" not in fields:
         raise Refused("the request is missing a line")
     if not ID.fullmatch(fields["id"]):
         raise Refused("the request's id isn't valid")
-    if fields["action"] not in ACTIONS:
+    action = fields["action"]
+    if action not in ACTIONS:
         raise Refused("the request asks for something the helper doesn't do")
-    return Request(fields["id"], fields["action"])
+    if ("name" in fields) != (action == "set-env"):
+        raise Refused("the request has a line the helper doesn't know" if "name" in fields
+                      else "the request is missing a line")  # fmt: skip
+    has_body = action in SAVES or action == "set-env"
+    if bool(blank) != has_body:
+        raise Refused("the request has something after it" if blank else "the request isn't finished")
+    if action in SAVES:
+        check_file(body)
+    if action == "set-env":
+        if fields["name"] not in ENV_NAMES:
+            raise Refused("the request names a .env line the helper doesn't set")
+        body = body.removesuffix(b"\n")
+        if not ENV_VALUE.fullmatch(body.decode("ascii", errors="replace")):
+            raise Refused("the value has characters .env can't hold safely")
+    return Request(fields["id"], action, fields.get("name"), body)
+
+
+def check_file(body: bytes) -> None:
+    """A settings or devices file: UTF-8 text, at most MAX_FILE, with no control characters
+    but tabs and newlines. Whether it's valid ok3d settings is ./ok3d validate's to say."""
+    if not body:
+        raise Refused("the file is empty")
+    if len(body) > MAX_FILE:
+        raise Refused("the file is too big")
+    try:
+        text = body.decode("utf-8")
+    except UnicodeDecodeError:
+        raise Refused("the file isn't UTF-8 text") from None
+    if any((c < " " and c not in "\t\n") or c == "\x7f" for c in text):
+        raise Refused("the file has control characters")
 
 
 def find_id(data: bytes) -> str | None:
     """The request's id, if it has a valid one, so even a refusal can say which request it
     answers. Only an id that passes the check is ever repeated."""
-    match = re.search(rb"^id=([0-9a-f]{16,64})$", data[:MAX_REQUEST], re.MULTILINE)
+    head = data[:MAX_REQUEST].partition(b"\n\n")[0]
+    match = re.search(rb"^id=([0-9a-f]{16,64})$", head, re.MULTILINE)
     return match.group(1).decode() if match else None
 
 
@@ -251,25 +316,27 @@ def now_utc() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def run_ok3d(opened: Opened, action: str) -> tuple[int, str]:
-    """Runs ./ok3d <action> and returns its exit status and the last lines it printed."""
+def run_ok3d(opened: Opened, args: list[str], timeout: int) -> tuple[int, str]:
+    """Runs ./ok3d with these arguments and returns its exit status and the last lines it printed."""
     ok3d_dir = opened.folders.ok3d_dir
     flags = os.O_RDWR | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW
     fd = os.open("output", flags, 0o600, dir_fd=opened.own)
     with os.fdopen(fd, "w+", encoding="utf-8", errors="replace") as out:
         # Its own process group, so a timeout stops everything it started, Helm and k3d too.
         process = subprocess.Popen(
-            [str(ok3d_dir / "ok3d"), action],
+            [str(ok3d_dir / "ok3d"), *args],
             cwd=ok3d_dir,
+            # Without OK3D_SETTINGS and the like, so ./ok3d reads the same files the helper writes.
+            env={k: v for k, v in os.environ.items() if not k.startswith("OK3D_")},
             stdin=subprocess.DEVNULL,
             stdout=out,
             stderr=subprocess.STDOUT,
             start_new_session=True,
         )
         try:
-            status = process.wait(timeout=TIMEOUTS[action])
+            status = process.wait(timeout=timeout)
         except subprocess.TimeoutExpired:
-            out.write(f"\nok3d-helper: stopped ./ok3d {action} after {TIMEOUTS[action]} seconds.\n")
+            out.write(f"\nok3d-helper: stopped ./ok3d {args[0]} after {timeout} seconds.\n")
             status = 124
         # Anything it left running in its group goes too, whether it finished or was stopped.
         with contextlib.suppress(ProcessLookupError, PermissionError):
@@ -279,6 +346,101 @@ def run_ok3d(opened: Opened, action: str) -> tuple[int, str]:
         out.seek(0)
         lines = out.read().splitlines()
     return status, "\n".join(lines[-TAIL:]) + "\n"
+
+
+def replace_file(path: Path, data: bytes) -> None:
+    """Writes a file in the ok3d checkout, readable only by you, through a temporary file
+    renamed into place, after making sure it's on disk."""
+    tmp = path.with_name(f".{path.name}.ok3d-helper.tmp")
+    tmp.unlink(missing_ok=True)
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, "wb") as f:
+        f.write(data)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path)
+
+
+def back_up(opened: Opened, path: Path) -> None:
+    """Keeps a copy of a file before it's replaced, in local/backups/ in the ok3d checkout,
+    readable only by you, and only the last BACKUPS of each. The Dashboard can't see that
+    folder, which matters for .env."""
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    except FileNotFoundError:
+        return
+    with os.fdopen(fd, "rb") as f:
+        data = f.read()
+    backups = opened.folders.ok3d_dir / "local" / "backups"
+    backups.mkdir(mode=0o700, parents=True, exist_ok=True)
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+    replace_file(backups / f"{path.name}.{stamp}", data)
+    old = sorted(backups.glob(f"{path.name}.2*"))
+    for extra in old[:-BACKUPS]:
+        extra.unlink(missing_ok=True)
+
+
+def save(opened: Opened, request: Request) -> tuple[int, str]:
+    """save-settings or save-devices: ./ok3d validate checks the file first, in the helper's
+    own folder; only a file it passes replaces yours, after a copy of yours is kept."""
+    name, kind = SAVES[request.action]
+    write_file(opened, f"staged-{name}", request.body.decode("utf-8"))
+    try:
+        args = ["validate", kind, str(opened.folders.own / f"staged-{name}")]
+        if kind == "settings":
+            args.append("--from-dashboard")  # the settings only you may change stay as they are
+        status, output = run_ok3d(opened, args, TIMEOUTS[request.action])
+    finally:
+        with contextlib.suppress(FileNotFoundError):
+            os.unlink(f"staged-{name}", dir_fd=opened.own)
+    if status != 0:
+        return status, output + f"Not saved: your {name} is unchanged.\n"
+    target = opened.folders.ok3d_dir / name
+    back_up(opened, target)
+    replace_file(target, request.body)
+    return 0, output + f"Saved {name}.\n"
+
+
+def set_env_value(opened: Opened, request: Request) -> tuple[int, str]:
+    """set-env: sets one line of .env, keeping every other byte of it as it was. The value
+    never goes into the answer or the log."""
+    name = (request.name or "").encode()
+    path = opened.folders.ok3d_dir / ".env"
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        with os.fdopen(fd, "rb") as f:
+            data = f.read()
+    except FileNotFoundError:
+        data = b""
+    # Split on newlines only, as bytes, so nothing else in the file is touched: not a character
+    # in another encoding, not a carriage return, not an unusual separator.
+    lines = data.split(b"\n") if data else []
+    if data.endswith(b"\n"):
+        lines.pop()
+    new = name + b"=" + request.body
+    # Its first line takes the new value and any later ones go, since ./ok3d reads the last.
+    out: list[bytes] = []
+    placed = False
+    for line in lines:
+        if line.startswith(name + b"="):
+            if not placed:
+                out.append(new)
+                placed = True
+        else:
+            out.append(line)
+    if not placed:
+        out.append(new)
+    back_up(opened, path)
+    replace_file(path, b"\n".join(out) + b"\n")
+    return 0, f"Saved {request.name} in .env.\n"
+
+
+def carry_out(opened: Opened, request: Request) -> tuple[int, str]:
+    if request.action in SAVES:
+        return save(opened, request)
+    if request.action == "set-env":
+        return set_env_value(opened, request)
+    return run_ok3d(opened, [request.action], TIMEOUTS[request.action])
 
 
 def handle_once(opened: Opened, now: float | None = None) -> str | None:
@@ -298,15 +460,22 @@ def handle_once(opened: Opened, now: float | None = None) -> str | None:
         fields = {"id": request_id} if request_id else {}
         write_result(opened, fields | {"state": "refused", "reason": str(e), "finished": now_utc()})
         return f"refused a request: {e}"
-    answer = {"id": request.id, "action": request.action}
+    answer = {"id": request.id, "action": request.action} | ({"name": request.name} if request.name else {})
     write_result(opened, answer | {"state": "running"})
     try:
-        status, output = run_ok3d(opened, request.action)
+        status, output = carry_out(opened, request)
     except OSError:
-        write_result(opened, answer | {"state": "failed", "reason": "the ok3d command couldn't run", "finished": now_utc()})
-        return f"couldn't run ./ok3d {request.action} for {request.id}"
+        reason = "the ok3d command couldn't run" if request.action in ("check", "apply") else "the file couldn't be saved"
+        write_result(opened, answer | {"state": "failed", "reason": reason, "finished": now_utc()})
+        return f"couldn't carry out {describe(request)}"
     write_result(opened, answer | {"state": "finished", "exit": str(status), "finished": now_utc()}, output)
-    return f"ran ./ok3d {request.action} for {request.id}: exit {status}"
+    return f"ran {describe(request)}: exit {status}"
+
+
+def describe(request: Request) -> str:
+    """What a request was, for the log: its action and id, both checked already, never its body."""
+    what = {"check": "./ok3d check", "apply": "./ok3d apply"}.get(request.action, request.action)
+    return f"{what} for {request.id}"
 
 
 def watch(folders: Folders) -> None:

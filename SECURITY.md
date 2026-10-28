@@ -59,8 +59,24 @@ Dashboard's container has been taken over:
 - It renames each request into its own folder, under a new name each time, before opening
   anything, so a link moves as a link and is never followed. It refuses links, hard links,
   folders, and pipes, and never removes a folder someone sent it.
-- It reads at most 4 KB, accepts exactly two fields (`id` and `action`), and runs only
-  `./ok3d check` or `./ok3d apply`, with no arguments from the request.
+- It reads at most 65 KB and accepts a fixed set of fields. The only commands it runs are
+  `./ok3d check`, `./ok3d apply`, and `./ok3d validate` on a file in its own folder, with
+  no arguments from the request.
+- It saves a settings or devices file only after `./ok3d validate` passes it, keeping a
+  copy of the old one. A file from the Dashboard may hold only your own settings or devices,
+  never the chart's own sections, and may not change where ok3d keeps its data or where it
+  sends your keys, tokens, and passwords (the UniFi controller, the ntfy server, the mail
+  server), or turn on remote access, the mesh, or agents; those you change on the server.
+  Until you've made `settings.yaml` on the server, the Dashboard can't save settings at all.
+- It sets only four lines of `.env` (the UniFi key, the ntfy topic and token, and the mail
+  password), one plain-text line at a time, and never sends a value back: copies of `.env`
+  go to `local/backups/` in the ok3d checkout, which the Dashboard can't see. The admin
+  password, the AI model's key, and the dead man's switch's address are yours alone to set,
+  on the server.
+- `./ok3d` itself refuses a `settings.yaml` or `devices.yaml` that holds the chart's own
+  sections, which choose images and how pods run, whoever wrote it.
+- The Dashboard may still change who receives alerts (an email address, the ntfy topic).
+  Alerts name your devices and what's wrong with them, but carry no keys or passwords.
 - It refuses requests older than 5 minutes, and any of the last 100 ids it carried out.
 - Every request it takes gets an answer, from a fixed list, that repeats nothing from the
   request but a valid id.

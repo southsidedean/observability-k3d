@@ -39,7 +39,8 @@ release and the reasons behind it.
 | Part | Status |
 |---|---|
 | The helper: runs `./ok3d check` and `apply` for the Dashboard, and refuses everything else | Done ([#21](https://github.com/southsidedean/observability-k3d/pull/21)) |
-| The Dashboard's image, and the workflow that builds, scans, and publishes it, with its sign-in and first page | In progress |
+| The Dashboard's image, and the workflow that builds, scans, and publishes it, with its sign-in and first page | Done ([#22](https://github.com/southsidedean/observability-k3d/pull/22)) |
+| The helper saves settings, devices, and secrets for the Dashboard, after `./ok3d validate` checks them | In progress |
 | The Dashboard's pages: settings, write-only secrets, switches, devices, Check and Apply, What's next | Planned |
 | The installer (`curl ... \| sh`): the host check, the helper's service, the Dashboard | Planned |
 | Screenshots of the pages for the docs (`scripts/screenshots.sh` on the test VM) | Planned |

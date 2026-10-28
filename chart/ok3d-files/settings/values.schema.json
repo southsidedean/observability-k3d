@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "The sections a settings file may have",
+  "description": "Only your own settings. The values in each are checked by chart/ok3d/values.schema.json.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "settingsVersion": {"description": "The layout of the settings file."},
+    "cluster": {"description": "The cluster's name, ports, and address."},
+    "host": {"description": "The data root."},
+    "tls": {"description": "The domain and how certificates are made."},
+    "modules": {"description": "The parts of ok3d that are on."},
+    "metrics": {"description": "How much history Prometheus keeps."},
+    "unifi": {"description": "Your UniFi controller."},
+    "alerts": {"description": "Where alerts go."},
+    "global": {"description": "Helm adds this on its own; it must stay empty.", "type": "object", "maxProperties": 0}
+  }
+}
