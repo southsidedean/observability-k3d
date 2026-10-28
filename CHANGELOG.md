@@ -27,6 +27,15 @@
 - Every alert rule is tested with promtool, and a test holds each to metrics its exporter
   really serves, the check that would have caught the old stack's UniFi rules, which watched
   metrics unpoller never had.
+- The front door: every page over HTTPS on one port, through agentgateway, at its own name
+  under ok3d's domain: Grafana, Prometheus, Alertmanager, and the certificate authority to
+  download. Nothing else in the cluster is reachable from your network.
+  [docs/certificate.md](docs/certificate.md) says how to point the names at the server and
+  trust the authority on each kind of device.
+- Grafana, with ok3d's Devices dashboard and the UniFi dashboards, its database in the data
+  root, and nothing sent anywhere (no usage reports or update checks).
+- One admin login for Grafana and for the Prometheus and Alertmanager pages: the password is
+  `OK3D_ADMIN_PASSWORD` in `.env`, or one ok3d makes and keeps in the data root.
 - ok3d leaves out Kubernetes' own internal metrics, which k3s serves in bulk: an empty
   cluster now keeps about 5,000 series instead of about 100,000.
 

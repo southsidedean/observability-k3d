@@ -9,9 +9,12 @@ operations center on k3d with AI agents. `PLAN.md` holds every decision, the roa
 to 1.x, the CI and quality rules, and the open questions. Read it before starting work, and
 update it in the same pull request when a decision changes.
 
+`docs/roadmap.md` is the status page: what's released, in progress, and planned, release by
+release. The user reads it instead of asking, so every pull request that finishes, starts, or
+changes a roadmap item updates it (a test checks it names the version the code is at).
+
 - `v0.2.0` is the old stack's last version. Its files (below) stay until 0.4.0 replaces them.
-- Next is 0.3 (groundwork): CI, hooks, the two chart skeletons, the `ok3d` command, and the
-  first diagrams.
+- `v0.3.0` is released. 0.4 is in progress; `docs/roadmap.md` has where it stands.
 - Before 1.0: a full independent review of every file (no spot checks) and an architectural
   review, written up in `docs/reviews/1.0-review.md`.
 

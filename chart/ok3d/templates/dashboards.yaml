@@ -1,0 +1,22 @@
+{{- /*
+Grafana's dashboards: each file in chart/ok3d/dashboards/ becomes a ConfigMap that Grafana's
+sidecar loads (it watches for the grafana_dashboard label). The UniFi ones are from
+Grafana.com (IDs 11311 to 11315), with their placeholder datasources (${DS_PROMETHEUS},
+${DS_UNIFI_POLLER}) replaced by Prometheus's fixed uid. The Client DPI dashboard (11310) is
+left out: DPI is off, and it's the largest of them by far.
+*/ -}}
+{{- range $path, $_ := .Files.Glob "dashboards/*.json" }}
+{{- $name := base $path | trimSuffix ".json" }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ printf "ok3d-dashboard-%s" $name }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "ok3d.labels" $ | nindent 4 }}
+    grafana_dashboard: "1"
+data:
+  {{ $name }}.json: |-
+    {{- $.Files.Get $path | replace "${DS_PROMETHEUS}" "prometheus" | replace "${DS_UNIFI_POLLER}" "prometheus" | nindent 4 }}
+{{- end }}

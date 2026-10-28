@@ -7,3 +7,4 @@
 - [ ] Text people read was reviewed for AI writing patterns (the `humanizer` skill)
 - [ ] Every new or changed image was looked at, has alt text, and was committed with `IMAGES_CHECKED=1`
 - [ ] `CHANGELOG.md` has a line under the next version if users will notice the change
+- [ ] `docs/roadmap.md` shows what this finishes, starts, or changes

@@ -60,7 +60,10 @@ esac""",
 case "$*" in
 *"--filename -"*) cat >>"$FAKE_LOG.stdin" ;;
 *"--from-file=api-key=/dev/stdin"*) echo "stdin: $(cat)" >>"$FAKE_LOG.stdin"; echo "kind: Secret" ;;
-*"--from-env-file=/dev/stdin"*) cat >"$FAKE_LOG.alerts"; echo "kind: Secret" ;;
+*"--from-env-file=/dev/stdin"*)
+	# Each Secret's contents in a file of its own, by namespace and name.
+	name=$(echo "$*" | sed -n 's/.*--namespace \([^ ]*\) create secret generic \([^ ]*\).*/\1.\2/p')
+	cat >"$FAKE_LOG.$name"; echo "kind: Secret" ;;
 *"--output yaml"*) echo "kind: Secret" ;;
 esac""",
     # Makes the key and certificate files, and answers the name-constraint question with
@@ -74,6 +77,10 @@ if [ "$1" = req ]; then
 elif [ "$1" = x509 ]; then
 	echo "    Permitted:"
 	echo "      DNS:.${FAKE_CA_DOMAIN:-noc.home.arpa}"
+elif [ "$1" = rand ]; then
+	printf 'made-up-admin-password'
+elif [ "$1" = dgst ]; then
+	echo "0123abcd *stdin"
 fi""",
     # Darwin, so ok3d skips the Linux-only checks (inotify, free memory, the filesystem type)
     # whatever machine the tests run on.
@@ -161,14 +168,17 @@ def test_apply_makes_everything_in_order(env: dict[str, str]) -> None:
     # monitoring namespace (with its labels, before anything is installed into it), and ok3d.
     assert first("openssl req") < first("k3d cluster create") < first("helm upgrade --install ok3d-platform")
     assert first("helm upgrade --install ok3d-platform") < first("kubectl --context k3d-ok3d --namespace cert-manager create secret tls ok3d-ca")
-    # Three applies come before ok3d's release: the authority's Secret, the monitoring
-    # namespace, and the alerts Secret. (A Secret's create and apply run as a pipe, whose two
-    # halves start together, so their order in the log isn't fixed.)
+    # Five applies come before ok3d's release: the authority's Secret, the namespaces, the
+    # alerts Secret, and the admin Secret in monitoring and gateway. (A Secret's create and
+    # apply run as a pipe, whose two halves start together, so their order in the log isn't
+    # fixed.)
     release_at = first("helm upgrade --install ok3d chart/ok3d")
     applies = [i for i, line in enumerate(log) if line.startswith("kubectl --context k3d-ok3d apply --filename -")]
-    assert len(applies) == 3 and max(applies) < release_at
-    assert first("kubectl --context k3d-ok3d --namespace cert-manager create secret") < release_at
+    assert len(applies) == 5 and max(applies) < release_at
+    # The gateway namespace is made first, marked for the release to take over.
     stdin = Path(env["FAKE_LOG"] + ".stdin").read_text()
+    assert "name: gateway" in stdin and "meta.helm.sh/release-name: ok3d" in stdin
+    assert first("kubectl --context k3d-ok3d --namespace cert-manager create secret") < release_at
     assert "name: monitoring" in stdin and "pod-security.kubernetes.io/enforce: restricted" in stdin
 
     release = log[first("helm upgrade --install ok3d chart/ok3d")]
@@ -180,6 +190,9 @@ def test_apply_makes_everything_in_order(env: dict[str, str]) -> None:
     assert "retention=30d" in release and "retentionSize=40GB" in release
     assert (Path(env["FAKE_DATA_ROOT"]) / "prometheus").is_dir()
     assert (Path(env["FAKE_DATA_ROOT"]) / "alertmanager").is_dir()
+    assert (Path(env["FAKE_DATA_ROOT"]) / "grafana").is_dir()
+    assert "grafana\\.ini.server.root_url=https://grafana.noc.home.arpa:8443/" in release
+    assert f"--set-file tls.caCertificate={env['FAKE_DATA_ROOT']}/certs/ca.crt" in release
     assert f"alertmanagerSpec.securityContext.runAsUser={uid}" in release
 
     create = log[first("k3d cluster create")]
@@ -268,7 +281,7 @@ def test_alert_secrets_go_to_kubectl_on_stdin_only_for_what_is_on(env: dict[str,
     env.update(FAKE_NTFY="true", FAKE_DEADMAN="true")
     result = ok3d(env, "apply")
     assert result.returncode == 0, result.stdout + result.stderr
-    secrets = Path(env["FAKE_LOG"] + ".alerts").read_text()
+    secrets = Path(env["FAKE_LOG"] + ".monitoring.ok3d-alerts").read_text()
     # ntfy's address is built from the server and the topic, with ntfy's Alertmanager template.
     assert "NTFY_URL=https://ntfy.sh/ok3d-7f3k9q?template=alertmanager&tags=ok3d" in secrets
     assert "DEADMAN_URL=https://hc.example.com/ping/abc" in secrets
@@ -281,7 +294,7 @@ def test_alert_secrets_go_to_kubectl_on_stdin_only_for_what_is_on(env: dict[str,
 def test_the_alerts_secret_is_made_even_with_nothing_on(env: dict[str, str]) -> None:
     # Alertmanager mounts it either way.
     assert ok3d(env, "apply").returncode == 0
-    assert "NONE=" in Path(env["FAKE_LOG"] + ".alerts").read_text()
+    assert "NONE=" in Path(env["FAKE_LOG"] + ".monitoring.ok3d-alerts").read_text()
 
 
 def test_check_finds_a_missing_alert_secret_and_warns_with_no_destination(env: dict[str, str], tmp_path: Path) -> None:
@@ -358,3 +371,34 @@ def test_test_alert_sends_through_alertmanagers_own_amtool(env: dict[str, str]) 
     # The summary goes as one quoted matcher value, the form Alertmanager's parser wants.
     assert '--annotation=summary="A test alert from ./ok3d test-alert.' in call
     assert "--end=" in call
+
+
+def test_the_admin_password_is_made_once_kept_private_and_sent_on_stdin(env: dict[str, str]) -> None:
+    assert ok3d(env, "apply").returncode == 0
+    kept = Path(env["FAKE_DATA_ROOT"]) / "admin-password"
+    assert kept.read_text() == "made-up-admin-password"
+    assert stat.S_IMODE(kept.stat().st_mode) == 0o600
+    for namespace in ("monitoring", "gateway"):
+        secret = Path(env["FAKE_LOG"] + f".{namespace}.ok3d-admin").read_text()
+        assert "admin-user=admin" in secret and "admin-password=made-up-admin-password" in secret
+    # Never on a command line; the gateway gets only a checksum, to restart when it changes.
+    log = Path(env["FAKE_LOG"]).read_text()
+    assert "made-up-admin-password" not in log
+    assert "gateway.adminChecksum=0123abcd" in log
+    # A second apply keeps the same password.
+    kept.write_text("still-the-same")
+    assert ok3d(env, "apply").returncode == 0
+    assert "admin-password=still-the-same" in Path(env["FAKE_LOG"] + ".gateway.ok3d-admin").read_text()
+
+
+def test_the_admin_password_can_come_from_dotenv(env: dict[str, str], tmp_path: Path) -> None:
+    dotenv(tmp_path, env, "OK3D_ADMIN_PASSWORD=chosen-by-you\n")
+    result = ok3d(env, "apply")
+    assert result.returncode == 0
+    assert "admin-password=chosen-by-you" in Path(env["FAKE_LOG"] + ".monitoring.ok3d-admin").read_text()
+    assert not (Path(env["FAKE_DATA_ROOT"]) / "admin-password").exists()
+    # The page list names Grafana's address: compared part by part, after parsing.
+    from urllib.parse import urlsplit
+
+    pages = [urlsplit(word) for line in result.stdout.splitlines() for word in line.split() if "://" in word]
+    assert any((p.scheme, p.hostname, p.port, p.path) == ("https", "grafana.noc.home.arpa", 8443, "/") for p in pages)

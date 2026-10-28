@@ -1,0 +1,234 @@
+{{- /*
+The front door: agentgateway, in standalone mode (one config file, built here), as the one
+way in to every web page. It serves HTTPS on one port for every page, each under its own name
+(grafana.<domain>, and so on), with the wildcard certificate cert-manager issues from ok3d's
+own authority. k3d publishes only this Service, on cluster.publishAddress; every other
+Service in the cluster is reachable only from inside it.
+
+- grafana.<domain>: Grafana, with its own login.
+- prometheus.<domain> and alertmanager.<domain>: their own pages, which have no login of
+  their own, so the gateway asks for ok3d's admin login (basic auth) first, and slows down
+  guessing. (From 0.8, one sign-in for every page replaces this.)
+- ca.<domain>: the certificate authority's public certificate, to download and trust on your
+  devices (docs/certificate.md).
+- Any other name: a plain 404.
+
+Every response carries headers that stop it being framed by another site, sniffed as another
+type, or leaking its address in a Referer.
+*/ -}}
+{{- $domain := .Values.tls.domain }}
+{{- $monitoring := .Release.Namespace }}
+{{- $headers := dict
+  "x-frame-options" "DENY"
+  "x-content-type-options" "nosniff"
+  "referrer-policy" "no-referrer"
+}}
+{{- $login := dict
+  "basicAuth" (dict "htpasswd" (dict "file" "/auth/htpasswd") "realm" "ok3d" "mode" "strict")
+  "localRateLimit" (list (dict "maxTokens" 20 "tokensPerFill" 5 "fillInterval" "1s"))
+  "requestHeaderModifier" (dict "remove" (list "authorization"))
+  "responseHeaderModifier" (dict "set" $headers)
+}}
+{{- $routes := list
+  (dict "name" "grafana" "hostnames" (list (printf "grafana.%s" $domain))
+    "policies" (dict "responseHeaderModifier" (dict "set" $headers))
+    "backends" (list (dict "host" (printf "ok3d-grafana.%s.svc.cluster.local:80" $monitoring))))
+  (dict "name" "prometheus" "hostnames" (list (printf "prometheus.%s" $domain))
+    "policies" $login
+    "backends" (list (dict "host" (printf "ok3d-kube-prometheus-stack-prometheus.%s.svc.cluster.local:9090" $monitoring))))
+  (dict "name" "alertmanager" "hostnames" (list (printf "alertmanager.%s" $domain))
+    "policies" $login
+    "backends" (list (dict "host" (printf "ok3d-kube-prometheus-stack-alertmanager.%s.svc.cluster.local:9093" $monitoring))))
+}}
+{{- with .Values.tls.caCertificate }}
+{{- /* The certificate, as a CEL string: triple quotes allow its line breaks. */}}
+{{- $routes = append $routes (dict "name" "certificate-authority" "hostnames" (list (printf "ca.%s" $domain))
+  "policies" (dict "directResponse" (dict "status" 200
+    "bodyExpression" (printf "'''%s\n'''" (trim .))
+    "headers" (dict
+      "content-type" "\"application/x-x509-ca-cert\""
+      "content-disposition" "\"attachment; filename=ok3d-ca.crt\"")))) }}
+{{- end }}
+{{- $routes = append $routes (dict "name" "not-found"
+  "policies" (dict "directResponse" (dict "status" 404 "bodyExpression" "\"Not found\\n\""))) }}
+{{- $config := dict
+  "config" (dict
+    "statsAddr" "0.0.0.0:15020"
+    "readinessAddr" "0.0.0.0:15021"
+    "adminAddr" "off"
+    "logging" (dict "format" "json")
+    "session" (dict "key" "disabled"))
+  "binds" (list (dict "port" 8443 "listeners" (list (dict
+    "name" "pages"
+    "protocol" "HTTPS"
+    "hostname" (printf "*.%s" $domain)
+    "tls" (dict "cert" "/tls/tls.crt" "key" "/tls/tls.key" "minTLSVersion" "TLS_V1_2")
+    "routes" $routes))))
+}}
+{{- $configYaml := toYaml $config }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ok3d-gateway
+  namespace: gateway
+  labels:
+    {{- include "ok3d.labels" . | nindent 4 }}
+data:
+  config.yaml: |
+    {{- $configYaml | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ok3d-gateway
+  namespace: gateway
+  labels:
+    {{- include "ok3d.labels" . | nindent 4 }}
+    app.kubernetes.io/name: ok3d-gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ok3d-gateway
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ok3d-gateway
+      annotations:
+        # A changed config, or a changed admin password, restarts the gateway.
+        checksum/config: {{ $configYaml | sha256sum }}
+        checksum/admin: {{ .Values.gateway.adminChecksum | quote }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        # ok3d's admin password, turned into the bcrypt file the basic auth reads. The
+        # password comes from the ok3d-admin Secret and goes to htpasswd on its stdin.
+        - name: password-hash
+          image: {{ .Values.gateway.images.htpasswd }}
+          command:
+            - /bin/sh
+            - -c
+            - printf '%s' "$ADMIN_PASSWORD" | htpasswd -niB -C 12 "$ADMIN_USER" >/auth/htpasswd
+          env:
+            - name: ADMIN_USER
+              valueFrom:
+                secretKeyRef:
+                  name: ok3d-admin
+                  key: admin-user
+            - name: ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ok3d-admin
+                  key: admin-password
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests: { cpu: 10m, memory: 16Mi }
+            limits: { memory: 64Mi }
+          volumeMounts:
+            - name: auth
+              mountPath: /auth
+      containers:
+        - name: gateway
+          image: {{ .Values.gateway.images.agentgateway }}
+          args: ["-f", "/config/config.yaml"]
+          ports:
+            - name: https
+              containerPort: 8443
+            - name: stats
+              containerPort: 15020
+            - name: readiness
+              containerPort: 15021
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests: { cpu: 20m, memory: 32Mi }
+            limits: { memory: 256Mi }
+          readinessProbe:
+            httpGet:
+              path: /healthz/ready
+              port: readiness
+            periodSeconds: 10
+          volumeMounts:
+            - name: config
+              mountPath: /config
+              readOnly: true
+            - name: auth
+              mountPath: /auth
+              readOnly: true
+            - name: tls
+              mountPath: /tls
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: ok3d-gateway
+        - name: auth
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Mi
+        - name: tls
+          secret:
+            secretName: ok3d-pages-tls
+---
+# The one Service k3d publishes: port 443 here is publishAddress:<https port> on your network.
+apiVersion: v1
+kind: Service
+metadata:
+  name: ok3d-gateway
+  namespace: gateway
+  labels:
+    {{- include "ok3d.labels" . | nindent 4 }}
+    app.kubernetes.io/name: ok3d-gateway
+spec:
+  type: LoadBalancer
+  selector:
+    app.kubernetes.io/name: ok3d-gateway
+  ports:
+    - name: https
+      port: 443
+      targetPort: https
+---
+# The gateway's own metrics (requests, response codes, how long each took), for Prometheus.
+apiVersion: v1
+kind: Service
+metadata:
+  name: ok3d-gateway-stats
+  namespace: gateway
+  labels:
+    {{- include "ok3d.labels" . | nindent 4 }}
+    app.kubernetes.io/name: ok3d-gateway-stats
+spec:
+  selector:
+    app.kubernetes.io/name: ok3d-gateway
+  ports:
+    - name: stats
+      port: 15020
+      targetPort: stats
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: ok3d-gateway
+  namespace: gateway
+  labels:
+    {{- include "ok3d.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ok3d-gateway-stats
+  endpoints:
+    - port: stats
+      interval: 30s

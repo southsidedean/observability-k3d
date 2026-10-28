@@ -49,7 +49,8 @@ In the repository, examples use stand-ins instead: addresses like `192.168.1.20`
    workflows.
 4. Update the docs in the same pull request. That includes the "under the hood" pages when
    the code they describe changes.
-5. Add a line to `CHANGELOG.md`, under the next version, if users will notice the change.
+5. Add a line to `CHANGELOG.md`, under the next version, if users will notice the change,
+   and update `docs/roadmap.md` with what the change finishes, starts, or changes.
 6. Stage files by name (`git add path/to/file`), never with `git add -A`, so nothing
    untracked goes in by mistake.
 7. Run `scripts/check.sh`. The pre-push hook runs it too.

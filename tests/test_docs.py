@@ -138,3 +138,16 @@ def test_slugs_match_github() -> None:
     assert slug("The review before 1.0") == "the-review-before-10"
     assert slug("0.3: Groundwork") == "03-groundwork"
     assert slug("North/south: `agentgateway`") == "northsouth-agentgateway"
+
+
+def test_the_roadmap_knows_the_version_the_code_is_at() -> None:
+    # docs/roadmap.md is the page to read for where ok3d is. Starting a version (the
+    # "Start X.Y.Z.dev0" pull request) or releasing one has to show there.
+    from ok3d import __version__
+
+    version = re.match(r"\d+\.\d+\.\d+", __version__)
+    assert version
+    roadmap = (ROOT / "docs" / "roadmap.md").read_text()
+    assert f"| {version.group(0)} |" in roadmap, f"docs/roadmap.md has no row for {version.group(0)}"
+    if "dev" in __version__:
+        assert f"{version.group(0)} is in progress" in roadmap, "docs/roadmap.md doesn't say which version is in progress"

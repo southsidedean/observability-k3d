@@ -130,6 +130,11 @@
           "description": "The domain the web pages are named under, such as noc.home.arpa.",
           "type": "string",
           "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$"
+        },
+        "caCertificate": {
+          "description": "The certificate authority's public certificate, served at ca.<domain>. ok3d apply fills it in.",
+          "type": "string",
+          "pattern": "^(|-----BEGIN CERTIFICATE-----[A-Za-z0-9+/=\\s]+-----END CERTIFICATE-----\\s*)$"
         }
       }
     },
@@ -423,6 +428,10 @@
           "pattern": "^[1-9][0-9]*(m|h|d)$"
         }
       }
+    },
+    "gateway": {
+      "description": "How ok3d sets up its gateway. Not a setting of yours.",
+      "type": "object"
     }
   }
 }

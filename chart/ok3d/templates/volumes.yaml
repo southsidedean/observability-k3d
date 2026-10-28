@@ -40,3 +40,39 @@ spec:
   hostPath:
     path: /var/lib/ok3d/alertmanager
     type: Directory
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: ok3d-grafana
+  labels:
+    {{- include "ok3d.labels" . | nindent 4 }}
+    ok3d/volume: grafana
+spec:
+  capacity:
+    storage: 2Gi
+  accessModes: ["ReadWriteOnce"]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  hostPath:
+    path: /var/lib/ok3d/grafana
+    type: Directory
+---
+# Grafana's chart takes an existing claim, rather than making one from a template as the
+# Prometheus operator does, so the claim is here too.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ok3d-grafana
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ok3d.labels" . | nindent 4 }}
+spec:
+  storageClassName: ""
+  accessModes: ["ReadWriteOnce"]
+  selector:
+    matchLabels:
+      ok3d/volume: grafana
+  resources:
+    requests:
+      storage: 2Gi

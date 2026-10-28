@@ -267,3 +267,76 @@ def test_no_alert_fires_because_a_target_ok3d_turns_off_is_missing() -> None:
     unscraped = r'up\{job="(?:kubelet", ?metrics_path="/metrics"|apiserver|node-exporter|kube-scheduler|kube-proxy)'
     missing = re.compile(rf"(?:unless[^\n]*\n?[^\n]*{unscraped}[^}}]*\}} == 1|absent\({unscraped})")
     assert not missing.search(rules), f"an alert fires while a target ok3d doesn't scrape is missing: {missing.findall(rules)}"
+
+
+CA_PEM = "-----BEGIN CERTIFICATE-----\nMIIBexample=\n-----END CERTIFICATE-----\n"
+
+
+def gateway_config(tmp_path: Path, *extra: str) -> dict[str, Any]:
+    import yaml
+
+    rendered = render(*extra)
+    config_map = next(d for d in documents(rendered, "ConfigMap") if "name: ok3d-gateway" in d)
+    config: dict[str, Any] = yaml.safe_load(yaml.safe_load(config_map)["data"]["config.yaml"])
+    return config
+
+
+def routes(config: dict[str, Any]) -> list[dict[str, Any]]:
+    found: list[dict[str, Any]] = config["binds"][0]["listeners"][0]["routes"]
+    return found
+
+
+def test_the_gateway_serves_https_for_every_name_with_the_pages_certificate(tmp_path: Path) -> None:
+    listener = gateway_config(tmp_path)["binds"][0]["listeners"][0]
+    assert listener["protocol"] == "HTTPS" and listener["hostname"] == "*.noc.home.arpa"
+    assert listener["tls"]["minTLSVersion"] == "TLS_V1_2"
+    by_name = {r["name"]: r for r in routes(gateway_config(tmp_path))}
+    # Prometheus and Alertmanager have no login of their own, so the gateway asks; Grafana has one.
+    for page in ("prometheus", "alertmanager"):
+        assert by_name[page]["policies"]["basicAuth"]["htpasswd"]["file"] == "/auth/htpasswd"
+        assert by_name[page]["policies"]["localRateLimit"]
+    assert "basicAuth" not in by_name["grafana"]["policies"]
+    for route in by_name.values():
+        if "backends" in route:
+            assert route["policies"]["responseHeaderModifier"]["set"]["x-frame-options"] == "DENY"
+
+
+def test_the_certificate_authority_is_served_only_once_ok3d_passes_it(tmp_path: Path) -> None:
+    ca = tmp_path / "ca.crt"
+    ca.write_text(CA_PEM)
+    without = [r["name"] for r in routes(gateway_config(tmp_path))]
+    assert "certificate-authority" not in without
+    served = {r["name"]: r for r in routes(gateway_config(tmp_path, "--set-file", f"tls.caCertificate={ca}"))}
+    response = served["certificate-authority"]["policies"]["directResponse"]
+    assert "MIIBexample=" in response["bodyExpression"]
+    assert response["headers"]["content-type"] == '"application/x-x509-ca-cert"'
+
+
+def test_any_other_name_gets_a_404_from_the_last_route(tmp_path: Path) -> None:
+    last = routes(gateway_config(tmp_path))[-1]
+    assert last["name"] == "not-found" and "hostnames" not in last
+    assert last["policies"]["directResponse"]["status"] == 404
+
+
+def test_the_gateway_runs_hardened_with_its_password_only_from_the_secret() -> None:
+    gateway = next(d for d in documents(render(), "Deployment") if "name: ok3d-gateway" in d)
+    assert "runAsNonRoot: true" in gateway and "readOnlyRootFilesystem: true" in gateway
+    assert gateway.count('drop: ["ALL"]') + gateway.count("- ALL") >= 2
+    assert "@sha256:" in gateway
+    assert "name: ok3d-admin" in gateway and "admin-password" in gateway
+    service = next(d for d in documents(render(), "Service") if "name: ok3d-gateway\n" in d)
+    assert "type: LoadBalancer" in service
+
+
+def test_dashboards_have_their_datasources_and_dpi_stays_out() -> None:
+    dashboards = [d for d in documents(render(), "ConfigMap") if 'grafana_dashboard: "1"' in d and "ok3d-dashboard-" in d]
+    names = sorted(d.split("name: ok3d-dashboard-", 1)[1].split("\n", 1)[0] for d in dashboards)
+    assert names == ["devices", "unifi-11311", "unifi-11312", "unifi-11313", "unifi-11314", "unifi-11315"]
+    assert not any("${DS_" in d for d in dashboards)
+
+
+def test_grafana_sends_nothing_anywhere_and_lets_no_one_sign_up() -> None:
+    ini = next(d for d in documents(render(), "ConfigMap") if "grafana.ini:" in d)
+    for setting in ("reporting_enabled = false", "check_for_updates = false", "allow_sign_up = false",
+                    "cookie_secure = true"):
+        assert setting in ini, setting
