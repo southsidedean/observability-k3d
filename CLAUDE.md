@@ -13,7 +13,8 @@ update it in the same pull request when a decision changes.
 release. The user reads it instead of asking, so every pull request that finishes, starts, or
 changes a roadmap item updates it (a test checks it names the version the code is at).
 
-- `v0.2.0` is the old stack's last version. Its files (below) stay until 0.4.0 replaces them.
+- `v0.2.0` is the old stack's last version; its files are gone from 0.4 (`docs/upgrading.md`
+  covers moving from it). Fix forward in ok3d, never by bringing them back.
 - `v0.3.0` is released. 0.4 is in progress; `docs/roadmap.md` has where it stands.
 - Before 1.0: a full independent review of every file (no spot checks) and an architectural
   review, written up in `docs/reviews/1.0-review.md`.
@@ -23,24 +24,6 @@ in this repository.
 
 ## Commands
 
-For the old stack, until 0.4:
-
-```bash
-# Full deploy. Deletes and recreates the k3d cluster every run, by design: recreating
-# with newer versions is the upgrade path, and state survives on host folders.
-./scripts/cluster-setup-k3d-observability-everything.sh
-
-# Destroy the cluster
-./scripts/cluster-destroy-k3d.sh
-
-# Re-fetch the UniFi dashboards from Grafana.com (pin a revision with GRAFANA_REVISION_<id>=N)
-./scripts/vendor-unifi-dashboards.sh
-
-# Rotate the UniFi credentials secret without a full redeploy
-./extras/create-unifi-secret.sh <user> <pass> <controller-url>
-```
-
-For everything new:
 
 ```bash
 ./ok3d check          # is this machine ready, and are the settings valid? changes nothing
@@ -54,8 +37,6 @@ scripts/check.sh                                   # every check that doesn't ne
 .venv/bin/python -m pytest -k hooks                # tests by name
 ```
 
-The old stack has no tests. To check a change to its manifests, render them with
-`kubectl kustomize manifests/monitoring/`.
 
 ## Git and GitHub
 
@@ -120,29 +101,3 @@ and the repository carries a commented example of each.
 - Shell scripts are POSIX `sh`. The Dashboard, the helper, and the in-cluster tools are
   Python.
 - All environment config lives in the user's settings files, never hardcoded in scripts.
-
-## The old stack (until 0.4)
-
-How the files from `v0.2.0` fit together:
-
-- `scripts/cluster-setup-k3d-observability-everything.sh` checks the prerequisites and
-  `vars.sh`, deletes and recreates the k3d cluster from `cluster-k3d/k3d-cluster.yaml`
-  (1 server, 3 agents, traefik off), installs the Gateway API CRDs and kgateway (and kagent
-  when `OPENAI_API_KEY` is set), then Helm's kube-prometheus-stack, loki-stack, the blackbox
-  exporter, and Grafana, then the vendored dashboards and the Kustomize overlays.
-- `vars.sh` holds every setting. `cluster-k3d/k3d-cluster.yaml` and two manifests
-  (`manifests/monitoring/storage.yaml` and `manifests/monitoring/kgateway/syslog-gateway.yaml`)
-  contain variables, so they go through `envsubst`, never `kubectl apply -k`.
-- Helm values are in `manifests/monitoring/helm/`. `manifests/monitoring/kustomization.yaml`
-  gathers the prometheus, probes, alerts, grafana, dashboards, and unifi overlays.
-- Host ports: 7001 is HTTP into the gateway (`/grafana`, `/kagent`), 7401 is HTTPS, 7601 is
-  the Kubernetes API, and 30114 is syslog over TCP.
-- Storage: Grafana and Loki use hostPath volumes under `$PERSISTENT_DATA_PATH`. Prometheus uses
-  `local-path` inside the k3d nodes, so its history is lost when the cluster is recreated.
-- Grafana is served from `/grafana`, loads dashboards, datasources, and alerts from ConfigMaps
-  by label, and has a fixed Prometheus datasource uid, `prometheus`, which the vendored UniFi
-  dashboards (Grafana.com IDs 11310 to 11315) depend on.
-
-The review on 2026-10-27 found what's broken in it (no alert delivery, UniFi rules on metrics
-that don't exist, unscraped probes, syslog that never arrives). `PLAN.md` lists the findings.
-Fix forward in the rebuild, not in the old files.

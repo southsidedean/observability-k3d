@@ -24,7 +24,7 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 RULES = sorted((ROOT / "chart" / "ok3d" / "rules").glob("*.yaml"))
 FIXTURES = ROOT / "tests" / "fixtures"
-DASHBOARDS = ROOT / "manifests" / "monitoring" / "dashboards" / "unifi"
+DASHBOARDS = ROOT / "chart" / "ok3d" / "dashboards"
 
 # Prometheus's own series: up is written for every scrape target.
 BUILT_IN = {"up"}
@@ -43,7 +43,7 @@ def known_metrics() -> set[str]:
     names = set(BUILT_IN)
     for fixture in FIXTURES.glob("*.metrics"):
         names |= {line.strip() for line in fixture.read_text().splitlines() if line.strip()}
-    for dashboard in DASHBOARDS.glob("*.json"):
+    for dashboard in DASHBOARDS.glob("unifi-*.json"):
         names |= set(re.findall(r"\bunpoller_[a-z_]+", dashboard.read_text()))
     return names
 

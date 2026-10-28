@@ -1,9 +1,0 @@
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-
-resources:
-  - security-dashboard.yaml
-  - alerts.yaml
-  # Uncomment after configuring real contact points in alerting.yaml
-  # (email address, Slack webhook URL)
-  # - alerting.yaml

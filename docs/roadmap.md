@@ -28,7 +28,7 @@ release and the reasons behind it.
 | Metrics: Prometheus with its history in the data root, checks for every device, UniFi | Done ([#13](https://github.com/southsidedean/observability-k3d/pull/13)) |
 | Alerts to ntfy and email, the dead man's switch, 12 tested rules with runbooks | Done ([#14](https://github.com/southsidedean/observability-k3d/pull/14)) |
 | The front door: HTTPS through agentgateway, Grafana and its dashboards, one admin login, the certificate download | Done ([#15](https://github.com/southsidedean/observability-k3d/pull/15)) |
-| NetworkPolicies: inside the cluster, each part accepts only what it should | In progress |
+| NetworkPolicies: inside the cluster, each part accepts only what it should | Done ([#16](https://github.com/southsidedean/observability-k3d/pull/16)) |
 | Screenshots of the pages for the docs (`scripts/screenshots.sh` on the test VM) | Planned |
-| Retire the old stack, and the guide for moving from it | Planned |
+| Retire the old stack, and the guide for moving from it | In progress |
 | Release 0.4.0, install it on the test VM, then move production to it | Planned |

@@ -3,106 +3,83 @@
   <img src="images/ok3d-logo.svg" alt="ok3d logo: an amber pulse line above a row of device tiles" width="88">
 </picture>
 
-# observability-k3d
+# ok3d
 
-## Introduction
+A network operations center for your home: ok3d watches every device on your network and
+tells you, on your phone or by email, when something breaks, before anyone in the house
+tells you. It runs on one Linux server, in a small Kubernetes cluster (k3d) that it builds
+and looks after itself.
 
-This repository provides scripts and manifests to quickly stand up a local Kubernetes cluster using `k3d` with a comprehensive observability stack. The stack is designed for home lab environments, particularly those using Ubiquiti UniFi network gear.
+- **Every device, checked.** List your devices once, in `devices.yaml`: your router,
+  switches, access points, NAS, servers, printer. ok3d pings each one and checks its pages
+  and ports every 30 seconds.
+- **Alerts that reach you.** ntfy on your phone, email, or both, with a runbook for every
+  alert. A dead man's switch tells you when ok3d itself stops. When a device is down, you hear
+  about the device, not about each of its checks.
+- **UniFi, in detail.** With a view-only API key, ok3d reads your UniFi controller: each
+  device's load, ports, clients, and the internet link's traffic, with UniFi's own dashboards.
+- **Your computers.** Disks filling up, memory running low, a failed RAID disk, from
+  node_exporter on each computer.
+- **Pages that are yours.** Grafana, Prometheus, and Alertmanager over HTTPS, at names under
+  your own domain, with a certificate authority of ok3d's own that you trust once on each
+  device. Nothing is sent anywhere you didn't set up, and nothing else in the cluster is
+  reachable from your network.
+- **Data that lasts.** History, settings, and the certificate authority live in a folder on
+  the server, so upgrading means making the cluster again, and it picks up where it left off.
 
-The following components are installed:
-- **Prometheus:** For metrics collection and alerting.
-- **Grafana:** For visualization and dashboards.
-- **Loki:** For log aggregation.
-- **Promtail:** For shipping logs to Loki, including a syslog listener.
-- **Unpoller:** For exporting detailed metrics from a UniFi Controller to Prometheus.
-- **kagent & kgateway:** For AI-assisted Kubernetes operations and simplified ingress.
+ok3d is being built release by release: [docs/roadmap.md](docs/roadmap.md) says where it
+stands, and [PLAN.md](PLAN.md) says where it's going, with the reasons. Coming next: a
+Dashboard to set it all up from a web page, logs and syslog, a NOC board, one sign-in for
+every page, and AI agents that explain what went wrong.
 
-Data for Prometheus, Grafana, and Loki is persisted to a local directory on your host machine to survive cluster restarts.
+## What you need
 
-## Prerequisites
+- A Linux server with about 8 GB of memory free (more once agents arrive in 0.9), Docker,
+  [k3d](https://k3d.io) 5.9 or newer, [Helm](https://helm.sh), `kubectl`, and `openssl`.
+- A folder for ok3d's data, on a filesystem of its own if you can.
+- A way to add a name to your local DNS: most routers can, and so can Pi-hole.
 
-If you don't have the following, you're gonna have a bad time:
+## Try it
 
-- [`k3d`](https://k3d.io)
-- [Docker](https://www.docker.com/get-started/)
-- [Helm](https://helm.sh/docs/intro/install/)
-- The `bash` (or equivalent) shell
-- [The `kubectl` command](https://kubernetes.io/docs/tasks/tools/)
-- [The `kubectx` command](https://github.com/ahmetb/kubectx)
-- [The `curl` command](https://curl.se/download.html)
-- [The `jq` command](https://jqlang.github.io/jq/download/)
-- The `envsubst` command (part of [gettext](https://www.gnu.org/software/gettext/))
-- The contents of [this](https://github.com/southsidedean/observability-k3d) GitHub repository
-- Internet access to pull containers
+On the server:
 
-Everything else is self-contained, just run the script to create the cluster(s).
+```sh
+git clone https://github.com/southsidedean/observability-k3d.git ok3d && cd ok3d
+cp settings.example.yaml settings.yaml        # edit it: at least the data folder
+sudo install -d -o "$USER" -m 0755 /srv/ok3d  # the data folder, owned by you
+./ok3d check                                  # is this server ready?
+./ok3d demo up                                # optional: a simulated network to watch
+cp devices.demo.yaml devices.yaml             # watch the simulated network for now
+./ok3d apply                                  # make the cluster and deploy everything
+```
 
-### Configuration
+`./ok3d apply` ends by printing the pages' addresses. Then:
 
-Before running the setup script, you must configure the environment variables in `vars.sh`:
+1. [Open the pages](docs/certificate.md): point the names at the server, and trust ok3d's
+   certificate authority on your devices.
+2. [Get alerts](docs/alerts.md): ntfy, email, and the dead man's switch.
+3. [List your own devices](docs/devices.md), and switch UniFi on if you have it.
 
-- `PERSISTENT_DATA_PATH`: The local directory on your host machine where monitoring data will be stored (e.g., `/media/content/observability`).
-- `UNIFI_CONTROLLER_URL`, `UNIFI_CONTROLLER_USER`, `UNIFI_CONTROLLER_PASS`: Credentials for a **read-only** user on your UniFi Controller.
-- `OPENAI_API_KEY`: (Optional) Your API key for OpenAI if you intend to use the AI features of `kagent`.
+`./ok3d test-alert` checks that alerts reach you. `./ok3d delete --yes` deletes the cluster
+and keeps your data; `./ok3d apply` brings it back.
 
-### Usage
-The primary script `scripts/cluster-setup-k3d-observability-everything.sh` automates the entire process.
+## The docs
 
-1.  **Configure variables:** Edit `vars.sh` as described above.
-2.  **Run the script:**
-    ```bash
-    ./scripts/cluster-setup-k3d-observability-everything.sh
-    ```
-This script will:
-- Create a `k3d` cluster with the necessary ports and volume mounts.
-- Install `kgateway` for ingress, and optionally `kagent` (if `OPENAI_API_KEY` is set).
-- Deploy the full observability stack (Prometheus, Grafana, Loki, Unpoller).
-- Apply custom monitoring rules and gateway routes.
+| Page | What it covers |
+|---|---|
+| [How ok3d fits together](docs/architecture.md) | The pieces, and how you set it up |
+| [Opening ok3d's pages](docs/certificate.md) | Local DNS, and trusting the certificate authority |
+| [Your devices](docs/devices.md) | `devices.yaml`, the checks, node_exporter, UniFi |
+| [Alerts](docs/alerts.md) | ntfy, email, the dead man's switch, silences |
+| [Runbooks](docs/runbooks/README.md) | What each alert means and what to check |
+| [The simulated network](docs/demo.md) | Trying ok3d without a network of your own |
+| [Upgrading](docs/upgrading.md) | New releases, and moving from the old stack |
+| [Roadmap](docs/roadmap.md) | Where ok3d is, release by release |
 
-#### Other Scripts
+## Contributing
 
-- **Destroy Cluster:** To tear down the cluster and its resources, use `scripts/cluster-destroy-k3d.sh`.
-- **Vendor Dashboards:** To re-fetch UniFi dashboards from Grafana.com, use `scripts/vendor-unifi-dashboards.sh`.
+[CONTRIBUTING.md](CONTRIBUTING.md) covers setting up, the checks every change passes, and
+how releases happen. Security problems go to a private report:
+[SECURITY.md](SECURITY.md) says how.
 
-### Accessing Services
-
-Once the script is complete, you can access the services via the `kgateway` ingress running on `localhost:7001`:
-
-- **Grafana:** `http://localhost:7001/grafana`
-  - **Login:** `admin` / password set in `GRAFANA_ADMIN_PASSWORD` from `vars.sh`.
-- **kagent UI:** `http://localhost:7001/kagent` (only available if `OPENAI_API_KEY` is set)
-- **Syslog:** Your host machine will listen for syslog messages on TCP port `30114` (or as configured in `SYSLOG_PORT_TCP` in `vars.sh`). Configure your devices (like UniFi gear or Ubuntu servers) to send logs to `tcp://<your_host_ip>:30114`.
-
-### Monitoring Capabilities
-
-#### Querying Syslog Data in Grafana
-
-The system is configured to separate logs from each device. In Grafana's "Explore" view with the Loki data source, you can query for logs from a specific host using its `host` label.
-
-For example, to see logs from a device named `unifi-dream-machine`, use the following LogQL query:
-
-`{job="syslog", host="unifi-dream-machine"}`
-
-### Monitoring External Hosts (e.g., Linux/MacOS)
-
-This stack is pre-configured to monitor external Linux hosts using Prometheus `node-exporter`.
-
-1.  **Install Node Exporter:** On each host you want to monitor, install and run `node_exporter`.
-    - **For Linux (Debian/Ubuntu):**
-    ```bash
-    sudo apt-get install prometheus-node-exporter
-    sudo systemctl start node-exporter
-    sudo systemctl enable node-exporter
-    ```
-    - **For MacOS (using Homebrew):**
-    ```bash
-    brew install node_exporter
-    brew services start node_exporter
-    ```
-    Verify it's running by checking `http://<your_host_ip>:9100/metrics`.
-
-2.  **Configure Prometheus:** Open `manifests/monitoring/prometheus/additional-scrape-configs.yaml`. Find the `targets` list and add the IP addresses and port (`:9100`) of your hosts.
-
-3.  **Re-run the setup script:** Execute `./scripts/cluster-setup-k3d-observability-everything.sh` again to apply the new configuration.
-
-The "Node Exporter Full" dashboard will now be populated with metrics from your servers.
+ok3d is licensed under the [AGPL-3.0](LICENSE).

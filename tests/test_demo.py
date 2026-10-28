@@ -20,7 +20,7 @@ from ok3d import demo_device, demo_exporter
 
 ROOT = Path(__file__).resolve().parent.parent
 NETWORK = ROOT / "demo" / "network.tsv"
-DASHBOARDS = ROOT / "manifests" / "monitoring" / "dashboards" / "unifi"
+DASHBOARDS = ROOT / "chart" / "ok3d" / "dashboards"
 
 # A sample line in Prometheus's text format: a name, labels, and a number.
 SAMPLE = re.compile(r'^([a-z_][a-z0-9_]*)(\{([a-z_]+="[^"\\]*"(,[a-z_]+="[^"\\]*")*)?\})? -?[0-9.e+-]+$')
@@ -66,7 +66,7 @@ def test_every_metric_is_one_unpoller_has_and_the_dashboards_use(devices: list[d
     # The point of the fake: the real dashboards (and, from 0.4, the real alert rules) work on
     # it unchanged. A name the dashboards don't know would mean the fake drifted from unpoller.
     known = set()
-    for dashboard in DASHBOARDS.glob("*.json"):
+    for dashboard in DASHBOARDS.glob("unifi-*.json"):
         known |= set(re.findall(r"unpoller_[a-z_]+", dashboard.read_text()))
     rendered = samples(demo_exporter.render(devices, set(), now=1000.0, started=0.0))
     assert rendered, "nothing was rendered"

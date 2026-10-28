@@ -12,9 +12,6 @@
 # (CONTRIBUTING.md says where to get the versions ok3d runs); without them, those tests skip.
 # A tool that isn't installed here is skipped with a note; CI sets CI=true, which turns a
 # missing tool into a failure, so nothing is skipped there.
-#
-# The old stack's scripts (scripts/cluster-*.sh, scripts/vendor-unifi-dashboards.sh) aren't
-# checked: they're bash, retired in 0.4, and fixed forward in the rebuild instead.
 set -eu
 cd "$(dirname "$0")/.."
 
