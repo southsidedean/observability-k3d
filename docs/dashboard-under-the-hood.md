@@ -110,21 +110,28 @@ Each page reads only the helper's folder, mounted read-only at `/helper`:
 
 - `current-settings.yaml` and `current-devices.yaml`: the helper's copies of yours.
 - `env-set`: the names of the lines in `.env` that have a value.
-- `alive`: when the helper last wrote these (every 30 seconds, and after every request).
-  While it's more than 90 seconds old, the pages say the helper isn't running and send
-  nothing.
+- `alive`: when the helper last wrote it: every 30 seconds, after every request, and every
+  30 seconds while a Check or Apply runs. While it's more than 90 seconds old, the pages say
+  the helper isn't running and send nothing.
 - `result`: the answer to the last request.
 
 Every button leaves one request in `/state/outbox/request`, written to a temporary file and
-renamed into place, then sends you to Home, where the answer appears. One request at a time:
-while one is waiting or running, a new one is refused with a note to wait.
+renamed into place, then sends you to Home, where the answer appears. The Dashboard keeps the
+id of the request it last sent in `/state/last-sent`. One request at a time, however many
+tabs are open: while ours waits in the outbox, while the helper says it's running one, or
+until the answer to the one we last sent arrives (or 10 minutes pass), a new one is refused
+with a note to wait. If the outbox can't be written, the page says so and sends nothing.
 
-- **Apply** turns on only when the helper's last answer is a Check that found no problems. A
-  save, or a Check that failed, turns it off again, so what's applied is always what was last
-  checked. The server checks this too, not only the button.
+- **Apply** turns on only when the helper's answer to the last request this Dashboard sent
+  is a Check that found no problems. Anything sent since (a save, a key) turns it off again,
+  as does a failed Check. The server checks this too, not only the button. It doesn't see
+  changes you make to the files on the server after the Check, and the helper doesn't
+  enforce it: Apply is something you could run yourself anyway.
 - **Saving settings or devices** sends the whole file, with a browser's `\r\n` line endings
-  turned into `\n`, at most 64 KB. The helper checks it with `./ok3d validate` and saves it
-  only if it passes. A settings save can't change the settings only you may change on the
+  turned into `\n`, at most 64 KB, and the SHA-256 of the file as the page showed it. The
+  helper refuses the save if the file has changed on the server since, so an edit there
+  isn't overwritten. Then it checks the file with `./ok3d validate` and saves it only if it
+  passes. A settings save can't change the settings only you may change on the
   server, and Settings has nothing to save until `settings.yaml` exists on the server.
 - **Keys** checks a value the way the helper will (one line of letters, digits, and symbols,
   with no spaces, quotes, backslashes, `$`, or backticks), so a value the helper would

@@ -9,6 +9,7 @@ unescaped.
 from __future__ import annotations
 
 import concurrent.futures
+import hashlib
 import http.client
 import json
 import re
@@ -456,15 +457,19 @@ def test_apply_waits_for_a_check_that_passed(ready: Dashboard) -> None:
     session = ready.sign_in()
     assert "<button disabled>Apply</button>" in body(ready.get("/", session))
     assert ready.post("/apply", session=session).status == 409
-    (ready.helper / "result").write_text("id=x\naction=check\nstate=finished\nexit=1\n\nFAIL  x\n")
+    ready.post("/check", session=session)
+    sent = head(outbox(ready))["id"]
+    (ready.state / "outbox" / "request").unlink()
+    (ready.helper / "result").write_text(f"id={sent}\naction=check\nstate=finished\nexit=1\n\nFAIL  x\n")
     assert ready.post("/apply", session=session).status == 409
-    (ready.helper / "result").write_text("id=x\naction=check\nstate=finished\nexit=0\n\nReady.\n")
+    (ready.helper / "result").write_text(f"id={sent}\naction=check\nstate=finished\nexit=0\n\nReady.\n")
     assert "<button>Apply</button>" in body(ready.get("/", session))
     assert ready.post("/apply", session=session).status == 303
     assert head(outbox(ready))["action"] == "apply"
-    # A save since the Check turns it off again.
+    # Anything sent since the Check turns it off again, even before its answer arrives.
     (ready.state / "outbox" / "request").unlink()
-    (ready.helper / "result").write_text("id=y\naction=save-devices\nstate=finished\nexit=0\n\n")
+    assert (ready.state / "last-sent").read_text().split()[0] != sent
+    (ready.helper / "result").write_text(f"id={sent}\naction=check\nstate=finished\nexit=0\n\nReady.\n")
     assert ready.post("/apply", session=session).status == 409
 
 
@@ -475,11 +480,15 @@ def test_the_settings_page_shows_yours_and_saves_a_change(ready: Dashboard) -> N
     assert "dataRoot: /srv/ok3d" in shown
     assert "&lt;b&gt;x&lt;/b&gt;" in shown
     new = "settingsVersion: 1\r\nmetrics:\r\n  retention: 60d"
-    response = ready.post("/settings", "file=" + urllib.parse.quote(new), session=session)
+    shown_copy = (ready.helper / "current-settings.yaml").read_text()
+    base = hashlib.sha256(shown_copy.encode()).hexdigest()
+    assert f'name="base" value="{base}"' in shown
+    response = ready.post("/settings", f"base={base}&file=" + urllib.parse.quote(new), session=session)
     assert response.status == 303
     request = outbox(ready)
     assert head(request)["action"] == "save-settings"
     assert request.partition(b"\n\n")[2] == b"settingsVersion: 1\nmetrics:\n  retention: 60d\n"
+    assert head(request)["base"] == base
 
 
 def test_settings_cant_be_saved_before_there_are_any(ready: Dashboard) -> None:
@@ -489,13 +498,17 @@ def test_settings_cant_be_saved_before_there_are_any(ready: Dashboard) -> None:
 def test_devices_are_saved_the_same_way(ready: Dashboard) -> None:
     session = ready.sign_in()
     assert "devices: []" in body(ready.get("/devices", session))
-    ready.post("/devices", "file=" + urllib.parse.quote("devices: []\n"), session=session)
+    assert 'name="base" value="none"' in body(ready.get("/devices", session))
+    ready.post("/devices", "base=none&file=" + urllib.parse.quote("devices: []\n"), session=session)
     assert head(outbox(ready))["action"] == "save-devices"
+    assert head(outbox(ready))["base"] == "none"
 
 
 def test_a_file_too_big_isnt_sent(ready: Dashboard) -> None:
-    response = ready.post("/devices", "file=" + "x" * (65 * 1024), session=ready.sign_in())
+    response = ready.post("/devices", "base=none&file=" + "x" * (65 * 1024), session=ready.sign_in())
     assert response.status == 413
+    lines = ready.post("/devices", "base=none&file=" + "%0D%0A" * 70000, session=ready.sign_in())
+    assert lines.status == 413
     assert not (ready.state / "outbox" / "request").exists()
 
 
@@ -556,3 +569,63 @@ def test_the_dashboard_and_the_helper_agree_on_what_may_be_sent() -> None:
     assert tuple(name for name, _ in server.KEY_ABOUT) == helper.ENV_NAMES
     assert helper_link.ENV_VALUE.pattern == helper.ENV_VALUE.pattern
     assert helper_link.MAX_FILE == helper.MAX_FILE
+
+
+
+def test_a_passed_check_from_before_doesnt_turn_apply_on(ready: Dashboard) -> None:
+    # A Check this Dashboard didn't send (or sent before something else) doesn't count.
+    (ready.helper / "result").write_text("id=0123456789abcdef\naction=check\nstate=finished\nexit=0\n\n")
+    assert ready.post("/apply", session=ready.sign_in()).status == 409
+
+
+def test_busy_until_the_answer_to_our_last_request_arrives(ready: Dashboard) -> None:
+    session = ready.sign_in()
+    (ready.helper / "result").write_text("id=0123456789abcdef\naction=check\nstate=finished\nexit=0\n\n")
+    ready.post("/check", session=session)
+    sent = head(outbox(ready))["id"]
+    (ready.state / "outbox" / "request").unlink()  # taken, but not answered yet
+    assert ready.post("/check", session=session).status == 409
+    (ready.helper / "result").write_text(f"id={sent}\naction=check\nstate=finished\nexit=0\n\n")
+    assert ready.post("/check", session=session).status == 303
+
+
+def test_a_running_answer_from_a_helper_that_stopped_doesnt_block_forever(ready: Dashboard) -> None:
+    (ready.helper / "result").write_text("id=0123456789abcdef\naction=apply\nstate=running\n\n")
+    (ready.helper / "alive").write_text("2020-01-01T00:00:00Z\n")
+    from ok3d.dashboard import helper_link
+
+    assert not helper_link.busy(ready.state, ready.helper)
+
+
+def test_two_tabs_sending_at_once_send_one(ready: Dashboard) -> None:
+    session = ready.sign_in()
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+        codes = list(pool.map(lambda _: ready.post("/check", session=session).status, range(8)))
+    assert codes.count(303) == 1
+    assert codes.count(409) == 7
+
+
+def test_no_outbox_gets_an_answer(dash: Dashboard) -> None:
+    alive(dash)
+    response = dash.post("/check", session=dash.sign_in())
+    assert response.status == 503
+    assert "write its outbox" in body(response)
+
+
+def test_a_file_starting_with_a_blank_line_keeps_it(ready: Dashboard) -> None:
+    (ready.helper / "current-devices.yaml").write_text("\ndevices: []\n")
+    assert '">\n\ndevices: []' in body(ready.get("/devices", ready.sign_in()))
+
+
+def test_a_form_that_isnt_utf8_is_refused(ready: Dashboard) -> None:
+    response = ready.post("/devices", "base=none&file=%FF%FE", session=ready.sign_in())
+    assert response.status == 400
+    assert not (ready.state / "outbox" / "request").exists()
+
+
+@pytest.mark.parametrize("path", ["/check", "/apply", "/settings", "/devices", "/keys"])
+def test_every_form_refuses_a_cross_site_fetch(ready: Dashboard, path: str) -> None:
+    response = ready.request("POST", path, "name=NTFY_TOPIC&value=x", {
+        "Content-Type": "application/x-www-form-urlencoded", "Origin": f"https://127.0.0.1:{ready.port}",
+        "Sec-Fetch-Site": "cross-site", "Cookie": f"{COOKIE}={ready.sign_in()}"})  # fmt: skip
+    assert response.status == 403

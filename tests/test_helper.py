@@ -644,3 +644,73 @@ def test_once_publishes_too(h: helper.Opened) -> None:
     (h.folders.ok3d_dir / "settings.yaml").write_text(SETTINGS)
     helper.main(["once", "--ok3d-dir", str(h.folders.ok3d_dir), "--data-root", str(h.folders.data_root)])
     assert (h.folders.own / "current-settings.yaml").exists()
+
+
+def test_the_heartbeat_goes_on_while_a_long_command_runs(h: helper.Opened, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(helper, "PUBLISH_EVERY", 0.2)
+    (h.folders.ok3d_dir / "ok3d").write_text("#!/bin/sh\nsleep 1\n")
+    send(h)
+    helper.handle_once(h)
+    assert (h.folders.own / "alive").exists()
+
+
+def test_an_answer_left_running_is_marked_failed_when_the_helper_starts(h: helper.Opened) -> None:
+    (h.folders.own / "result").write_text(f"id={ID}\naction=apply\nstate=running\n\n")
+    helper.clear_unfinished(h)
+    answer = result(h)
+    assert answer["id"] == ID
+    assert answer["state"] == "failed"
+    assert answer["reason"] == "the helper stopped while it ran"
+
+
+def test_a_finished_answer_is_left_alone_at_start(h: helper.Opened) -> None:
+    (h.folders.own / "result").write_text(f"id={ID}\naction=check\nstate=finished\nexit=0\n\nReady.\n")
+    helper.clear_unfinished(h)
+    assert result(h)["state"] == "finished"
+
+
+def test_a_save_based_on_the_file_as_it_is_goes_ahead(h: helper.Opened) -> None:
+    import hashlib
+
+    (h.folders.ok3d_dir / "devices.yaml").write_text("devices: []\n")
+    base = hashlib.sha256(b"devices: []\n").hexdigest()
+    ask(h, f"id={ID}\naction=save-devices\nbase={base}\n", "devices: [] # new\n")
+    assert (h.folders.ok3d_dir / "devices.yaml").read_text() == "devices: [] # new\n"
+
+
+def test_a_save_based_on_an_older_file_is_refused(h: helper.Opened) -> None:
+    import hashlib
+
+    (h.folders.ok3d_dir / "devices.yaml").write_text("devices: [] # changed on the server\n")
+    base = hashlib.sha256(b"devices: []\n").hexdigest()
+    ask(h, f"id={ID}\naction=save-devices\nbase={base}\n", "devices: [] # from the page\n")
+    assert (h.folders.ok3d_dir / "devices.yaml").read_text() == "devices: [] # changed on the server\n"
+    assert result(h)["exit"] == "1"
+    assert "changed on the server since the page showed it" in (h.folders.own / "result").read_text()
+    assert ran(h) == []
+
+
+def test_base_none_means_there_was_no_file(h: helper.Opened) -> None:
+    ask(h, f"id={ID}\naction=save-devices\nbase=none\n", "devices: []\n")
+    assert (h.folders.ok3d_dir / "devices.yaml").exists()
+    (h.folders.ok3d_dir / "devices.yaml").write_text("devices: [] # since\n")
+    ask(h, f"id={'2' * 16}\naction=save-devices\nbase=none\n", "devices: []\n")
+    assert (h.folders.ok3d_dir / "devices.yaml").read_text() == "devices: [] # since\n"
+
+
+@pytest.mark.parametrize("head", [f"id={ID}\naction=save-devices\nbase=xyz\n", f"id={ID}\naction=check\nbase=none\n"])
+def test_a_bad_base_is_refused(h: helper.Opened, head: str) -> None:
+    body = "devices: []\n" if "save" in head else None
+    if body is None:
+        send(h, head)
+        helper.handle_once(h)
+    else:
+        ask(h, head, body)
+    assert result(h)["state"] == "refused"
+    assert ran(h) == []
+
+
+def test_env_lines_are_read_as_ok3d_reads_them(h: helper.Opened) -> None:
+    (h.folders.ok3d_dir / ".env").write_text("NTFY_TOKEN= \nNTFY_TOPIC=\"\"\nSMTP_PASSWORD='x'\n")
+    helper.publish(h)
+    assert (h.folders.own / "env-set").read_text().split() == ["NTFY_TOKEN", "SMTP_PASSWORD"]

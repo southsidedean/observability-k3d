@@ -63,7 +63,7 @@ The helper's checks hold only with the right mounts, which the installer sets up
    - It was written in the last 5 minutes (or up to a minute ahead, for a clock that's off).
    - Its head is plain ASCII text, with each line ending in a newline.
    - Its head has exactly the lines its action needs, each once, and nothing else: `id` and
-     `action`, and `name` with `set-env`.
+     `action`, `name` with `set-env`, and optionally `base` with a save.
    - The id is 16 to 64 lowercase hex digits.
    - The action is one of `check`, `apply`, `save-settings`, `save-devices`, or `set-env`,
      exactly. `check` and `apply` have nothing after their head; the others have a blank line
@@ -92,7 +92,9 @@ The helper's checks hold only with the right mounts, which the installer sets up
    ```
 
    A refused request gets `state=refused` and a `reason`, from a fixed list, and one that
-   couldn't run gets `state=failed`. Every request taken gets an answer. The answer repeats
+   couldn't run gets `state=failed`. If the helper stops partway through (a restart, a
+   reboot), it marks that answer `failed` when it starts again, so the page doesn't wait
+   for it forever. Every request taken gets an answer. The answer repeats
    nothing the request said except its id, and only when the id is valid (16 to 64 hex
    digits), so the page knows which request was refused.
 6. The page reads `helper/result` every few seconds, and shows it when the id matches.
@@ -111,7 +113,9 @@ devices:
 ```
 
 1. The helper checks the file is UTF-8 text, at most 64 KB, with no control characters but
-   tabs and newlines.
+   tabs and newlines. If the request has a `base` (the SHA-256 of the file as the page
+   showed it, or `none` when there was none), and your file no longer matches it, the save
+   is refused: the file changed on the server since the page showed it.
 2. It writes it to its own folder, as `helper/staged-devices.yaml`, and runs
    `./ok3d validate devices` on it: the same checks `./ok3d check` runs on yours. The file
    may hold only `devices`, and the devices must pass the chart's schema with your
@@ -190,9 +194,9 @@ temporary file first and renamed into place, so the page never reads half of one
 | `output` | Everything `ok3d` printed for the last request, written as it runs |
 | `seen` | The ids of the last 100 requests, so none runs twice |
 | `staged-settings.yaml`, `staged-devices.yaml` | A file the Dashboard sent, only while `./ok3d validate` checks it |
-| `current-settings.yaml`, `current-devices.yaml` | Copies of yours, for the Dashboard to show; missing when you have none, and never copied through a link |
+| `current-settings.yaml`, `current-devices.yaml` | Copies of yours, for the Dashboard to show; missing when you have none, and never copied through a link. Everything in them, comments too, is visible to the Dashboard, which is one more reason secrets belong in `.env` |
 | `env-set` | The names of the lines in `.env` that have a value, one per line. Never a value |
-| `alive` | When it last wrote these: every 30 seconds, and after every request |
+| `alive` | When it last wrote these: every 30 seconds, after every request, and every 30 seconds while a command runs |
 | `lock` | Held while the helper runs, so a second one on the same data root won't start |
 
 In the ok3d checkout: `settings.yaml`, `devices.yaml`, and `.env` when you save them, and

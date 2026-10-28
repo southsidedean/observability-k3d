@@ -29,6 +29,7 @@ import argparse
 import contextlib
 import errno
 import fcntl
+import hashlib
 import itertools
 import os
 import re
@@ -70,8 +71,9 @@ ENV_VALUE = re.compile(r"[!#%&()*+,\-./0-9:;<=>?@A-Z\[\]^_a-z{|}~]{0,1024}")
 # The id is the page's own random number, so it knows which answer is to its request.
 ID = re.compile(r"[0-9a-f]{16,64}")
 # The lines a request's head may have, each at most once: id and action always, name only
-# with set-env.
-FIELDS = ("id", "action", "name")
+# with set-env, and base (optional) only with a save: the SHA-256 of the file the page showed,
+# so a save doesn't overwrite a change made on the server since.
+FIELDS = ("id", "action", "name", "base")
 # How long each action may run before it's stopped. A first apply downloads images.
 TIMEOUTS = {"check": 300, "apply": 3600, "save-settings": 120, "save-devices": 120}
 # How many lines of what the command printed go into the result.
@@ -101,6 +103,7 @@ class Request:
     action: str
     name: str | None = None  # the .env line, for set-env
     body: bytes = b""  # the file, or the .env value
+    base: str | None = None  # for a save: the SHA-256 of the file as the page showed it
 
 
 @dataclass(frozen=True)
@@ -209,6 +212,8 @@ def parse_request(data: bytes, mtime: float, now: float) -> Request:
     if ("name" in fields) != (action == "set-env"):
         raise Refused("the request has a line the helper doesn't know" if "name" in fields
                       else "the request is missing a line")  # fmt: skip
+    if "base" in fields and (action not in SAVES or not re.fullmatch(r"[0-9a-f]{64}|none", fields["base"])):
+        raise Refused("the request's base isn't valid")
     has_body = action in SAVES or action == "set-env"
     if bool(blank) != has_body:
         raise Refused("the request has something after it" if blank else "the request isn't finished")
@@ -220,7 +225,7 @@ def parse_request(data: bytes, mtime: float, now: float) -> Request:
         body = body.removesuffix(b"\n")
         if not ENV_VALUE.fullmatch(body.decode("ascii", errors="replace")):
             raise Refused("the value has characters .env can't hold safely")
-    return Request(fields["id"], action, fields.get("name"), body)
+    return Request(fields["id"], action, fields.get("name"), body, fields.get("base"))
 
 
 def check_file(body: bytes) -> None:
@@ -340,11 +345,20 @@ def run_ok3d(opened: Opened, args: list[str], timeout: int) -> tuple[int, str]:
             stderr=subprocess.STDOUT,
             start_new_session=True,
         )
-        try:
-            status = process.wait(timeout=timeout)
-        except subprocess.TimeoutExpired:
-            out.write(f"\nok3d-helper: stopped ./ok3d {args[0]} after {timeout} seconds.\n")
-            status = 124
+        # Wait in steps, writing the heartbeat at each, so the Dashboard knows the helper is
+        # still here through an Apply that takes many minutes.
+        deadline = time.monotonic() + timeout
+        while True:
+            try:
+                status = process.wait(timeout=max(0.1, min(PUBLISH_EVERY, deadline - time.monotonic())))
+                break
+            except subprocess.TimeoutExpired:
+                if time.monotonic() >= deadline:
+                    out.write(f"\nok3d-helper: stopped ./ok3d {args[0]} after {timeout} seconds.\n")
+                    status = 124
+                    break
+                with contextlib.suppress(OSError):
+                    write_file(opened, "alive", now_utc() + "\n")
         # Anything it left running in its group goes too, whether it finished or was stopped.
         with contextlib.suppress(ProcessLookupError, PermissionError):
             os.killpg(process.pid, signal.SIGKILL)
@@ -391,6 +405,10 @@ def save(opened: Opened, request: Request) -> tuple[int, str]:
     """save-settings or save-devices: ./ok3d validate checks the file first, in the helper's
     own folder; only a file it passes replaces yours, after a copy of yours is kept."""
     name, kind = SAVES[request.action]
+    if request.base is not None:
+        now = read_own_file(opened.folders.ok3d_dir / name, MAX_FILE)
+        if (hashlib.sha256(now).hexdigest() if now is not None else "none") != request.base:
+            return 1, f"Not saved: {name} changed on the server since the page showed it. Open it again.\n"
     write_file(opened, f"staged-{name}", request.body.decode("utf-8"))
     try:
         args = ["validate", kind, str(opened.folders.own / f"staged-{name}")]
@@ -514,15 +532,35 @@ def publish(opened: Opened) -> None:
                 os.unlink(f"current-{name}", dir_fd=opened.own)
         else:
             write_file(opened, f"current-{name}", data.decode("utf-8", errors="replace"))
-    env = read_own_file(ok3d_dir / ".env", 1024 * 1024) or b""
+    env = read_own_file(ok3d_dir / ".env", 4 * 1024 * 1024) or b""
     values: dict[bytes, bytes] = {}
     for line in env.split(b"\n"):
         key, sep, value = line.partition(b"=")
         if sep:
-            values[key] = value.strip().strip(b"\"'")  # the last one counts, as for ./ok3d
+            # As ./ok3d reads it: the last line counts, with one quote taken off each end.
+            if value[:1] in (b'"', b"'"):
+                value = value[1:]
+            if value[-1:] in (b'"', b"'"):
+                value = value[:-1]
+            values[key] = value
     set_names = [n for n in ENV_SHOWN if values.get(n.encode())]
     write_file(opened, "env-set", "".join(f"{n}\n" for n in set_names))
     write_file(opened, "alive", now_utc() + "\n")
+
+
+def clear_unfinished(opened: Opened) -> None:
+    """An answer still saying running when the helper starts is from a helper that stopped
+    partway (a restart, a reboot): say so, so the Dashboard doesn't wait for it forever."""
+    try:
+        fd = os.open("result", os.O_RDONLY | os.O_NOFOLLOW, dir_fd=opened.own)
+    except FileNotFoundError:
+        return
+    with os.fdopen(fd, "rb") as f:
+        head = f.read(MAX_REQUEST).decode("utf-8", errors="replace").partition("\n\n")[0]
+    fields = dict(line.split("=", 1) for line in head.splitlines() if "=" in line)
+    if fields.get("state") == "running":
+        fields |= {"state": "failed", "reason": "the helper stopped while it ran", "finished": now_utc()}
+        write_result(opened, fields)
 
 
 def watch(folders: Folders) -> None:
@@ -534,6 +572,7 @@ def watch(folders: Folders) -> None:
     except BlockingIOError:
         raise SystemExit("ok3d-helper: another helper is already running for this data root") from None
     print(f"ok3d-helper: watching {folders.outbox}", flush=True)
+    clear_unfinished(opened)
     published = 0.0
     while True:
         try:

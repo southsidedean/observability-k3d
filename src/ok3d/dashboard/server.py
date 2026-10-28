@@ -1,7 +1,8 @@
 """The Dashboard's web server: HTTPS only, behind its own sign-in.
 
-This first version has the sign-in and one page, which shows ok3d's version and the helper's
-last answer. The pages for settings, devices, and Check and Apply build on it.
+It has the sign-in and four pages: Home (Check and Apply), Settings, Devices, and Keys. Each
+page reads what the helper publishes, and each button leaves a request for it
+(helper_link.py).
 
 Every page is made here, with every value escaped, and carries headers that keep it out of
 frames, stop other sites' scripts, and keep it out of caches. A form is accepted only from
@@ -15,6 +16,7 @@ thread, with a time limit, every connection has a time limit, and only so many r
 from __future__ import annotations
 
 import html
+import re
 import socket
 import ssl
 import threading
@@ -37,9 +39,10 @@ TIMEOUT = 10
 # The most connections served at once; the rest are closed straight away.
 MAX_CONNECTIONS = 32
 # The most of a form that's read. The sign-in form is a few dozen bytes; a settings or devices
-# file may be 64 KB, which a browser may send at up to three times that.
+# file may be 64 KB, which a browser may send at up to six times that (a line break goes as
+# %0D%0A).
 MAX_FORM = 4096
-MAX_FILE_FORM = 3 * 64 * 1024 + 1024
+MAX_FILE_FORM = 6 * 64 * 1024 + 1024
 
 HEADERS = {
     "Content-Security-Policy": "default-src 'none'; style-src 'self'; img-src 'self'; form-action 'self'; "
@@ -146,7 +149,7 @@ def answer_section(config: Config) -> str:
 
 def home(config: Config, message: str = "") -> str:
     """Home: the helper, Check and Apply, and the helper's last answer."""
-    note = f"<p class=good>{html.escape(message)}</p>" if message else ""
+    note = f"<p class=bad>{html.escape(message)}</p>" if message else ""
     if not helper_link.alive(config.helper):
         helper = (
             "<p class=bad>The helper isn't running, so Check, Apply, and saving can't happen from "
@@ -156,10 +159,11 @@ def home(config: Config, message: str = "") -> str:
         helper = "<p class=good>The helper is running.</p>"
     apply_note = (
         ""
-        if helper_link.can_apply(config.helper)
-        else "<p class=muted>Apply turns on once a Check finds no problems, and off again after a save.</p>"
+        if helper_link.can_apply(config.state, config.helper)
+        else "<p class=muted>Apply turns on once a Check finds no problems, and off again when anything "
+        "else is sent.</p>"
     )
-    disabled = "" if helper_link.can_apply(config.helper) else " disabled"
+    disabled = "" if helper_link.can_apply(config.state, config.helper) else " disabled"
     return (
         f"<section><h2>ok3d {html.escape(__version__)}</h2>{note}{helper}"
         "<p>Check that the server and your settings are ready, then Apply to make the cluster and "
@@ -186,6 +190,7 @@ def file_page(config: Config, name: str, message: str = "") -> str:
             "<code>devices.example.yaml</code> and docs/devices.md explain each field.</p>"
         ),
     }[name]
+    base = helper_link.fingerprint(text)
     if text is None:
         if name == "settings.yaml":
             return (f"<section><h2>{title}</h2>{about}<p class=bad>There's no settings.yaml on the "
@@ -195,8 +200,9 @@ def file_page(config: Config, name: str, message: str = "") -> str:
     note = f"<p class=bad>{html.escape(message)}</p>" if message else ""
     return (
         f"<section><h2>{title}</h2>{about}{note}"
-        f'<form method="post" action="/{title.lower()}">'
-        f'<p><textarea name="file" rows="24" spellcheck="false" aria-label="{name}">{html.escape(text)}</textarea></p>'
+        f'<form method="post" action="/{title.lower()}"><input type="hidden" name="base" value="{base}">'
+        # The newline after <textarea> is one HTML drops, so a file that starts with a blank line keeps it.
+        f'<p><textarea name="file" rows="24" spellcheck="false" aria-label="{name}">\n{html.escape(text)}</textarea></p>'
         f"{SAVE_NOTE}<p><button>Save</button></p></form></section>"
     )
 
@@ -335,8 +341,8 @@ class Handler(BaseHTTPRequestHandler):
         if len(body) != length:
             return None
         try:
-            fields = urllib.parse.parse_qs(body.decode("utf-8", errors="replace"), max_num_fields=10)
-        except ValueError:
+            fields = urllib.parse.parse_qs(body.decode("ascii"), max_num_fields=10, errors="strict")
+        except (ValueError, UnicodeDecodeError):
             return None
         return {k: v[0] for k, v in fields.items()}
 
@@ -397,14 +403,18 @@ class Handler(BaseHTTPRequestHandler):
         self.redirect("/", {"Set-Cookie": cookie})
 
     def ask_helper(self, back: str, render: Callable[[Config, str], str], title: str, action: str,
-                   name: str | None = None, body: bytes | None = None) -> None:  # fmt: skip
+                   name: str | None = None, body: bytes | None = None, base: str | None = None) -> None:  # fmt: skip
         """Leaves a request for the helper, then sends you Home to watch for the answer, or
         back to the page with what went wrong."""
         if not helper_link.alive(self.config.helper):
             self.send(503, page(title, render(self.config, "The helper isn't running, so nothing was sent."), True))
             return
         try:
-            helper_link.send(self.config.state, self.config.helper, action, name, body)
+            helper_link.send(self.config.state, self.config.helper, action, name, body, base)
+        except helper_link.Unavailable:
+            self.send(503, page(title, render(self.config, "The Dashboard can't write its outbox, so nothing "
+                                              "was sent. Check the Dashboard's folder on the server."), True))  # fmt: skip
+            return
         except helper_link.Busy:
             self.send(409, page(title, render(self.config, "The helper is busy with the last request. "
                                               "Try again when Home shows its answer."), True))  # fmt: skip
@@ -415,7 +425,7 @@ class Handler(BaseHTTPRequestHandler):
         self.ask_helper("/", home, "Home", "check")
 
     def post_apply(self) -> None:
-        if not helper_link.can_apply(self.config.helper):
+        if not helper_link.can_apply(self.config.state, self.config.helper):
             self.send(409, page("Home", home(self.config, "") + "<p class=bad>Run a Check that finds "
                                 "no problems first.</p>", True))  # fmt: skip
             return
@@ -425,9 +435,16 @@ class Handler(BaseHTTPRequestHandler):
         def render(config: Config, message: str) -> str:
             return file_page(config, name, message)
 
+        try:
+            if int(self.headers.get("Content-Length", "0")) > MAX_FILE_FORM:
+                self.send(413, page(title, render(self.config, "That's bigger than 64 KB."), True))
+                return
+        except ValueError:
+            pass
         form = self.read_form(MAX_FILE_FORM)
         text = (form or {}).get("file")
-        if text is None:
+        base = (form or {}).get("base", "")
+        if text is None or not re.fullmatch(r"[0-9a-f]{64}|none", base):
             self.send(400, page(title, render(self.config, "That didn't arrive in one piece. Try again."), True))
             return
         # A browser sends a text box's lines with \r\n; the files use \n.
@@ -437,7 +454,7 @@ class Handler(BaseHTTPRequestHandler):
         if len(data) > helper_link.MAX_FILE:
             self.send(413, page(title, render(self.config, "That's bigger than 64 KB."), True))
             return
-        self.ask_helper("/", render, title, action, body=data)
+        self.ask_helper("/", render, title, action, body=data, base=base)
 
     def post_settings(self) -> None:
         self.post_file("settings.yaml", "save-settings", "Settings")
