@@ -25,6 +25,9 @@ dev = [
     "bandit==1.9.4",
     "mypy==2.4.0",
     "zizmor==1.31.1",
+    # For the tests that read the charts' rules, settings, and Alertmanager's config.
+    "pyyaml==6.0.3",
+    "types-PyYAML==6.0.12.20260906",
 ]
 
 [tool.setuptools.dynamic]

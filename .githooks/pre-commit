@@ -21,10 +21,11 @@ fi
 # The files being added or changed, one per line.
 staged=$(git diff --cached --name-only --diff-filter=ACMR)
 
-# 2. Your own setup and keys. The examples (*.example.yaml, .env.example) are fine.
+# 2. Your own setup, at the repository's root where it lives (a chart file may share a name),
+# and keys anywhere. The examples (*.example.yaml, .env.example) are fine.
 own=$(printf '%s\n' "$staged" |
-	grep -E '(^|/)(settings|devices)\.yaml$|(^|/)users\.yml$|(^|/)\.env$|(^|/)\.env\.[^/]*$|^local/|\.(pem|key|p12)$' |
-	grep -v -E '(^|/)\.env\.example$' || true)
+	grep -E '^(settings|devices)\.yaml$|^users\.yml$|^\.env$|^\.env\.[^/]*$|^local/|\.(pem|key|p12)$' |
+	grep -v -E '^\.env\.example$' || true)
 if [ -n "$own" ]; then
 	echo "Not committing these: they're your own setup or keys, which stay on your machine." >&2
 	printf '%s\n' "$own" | sed 's/^/  /' >&2

@@ -1,0 +1,55 @@
+# Alerts for computers that run node_exporter (listed in devices.yaml with metrics: ["9100"]):
+# disks, memory, and software RAID. Filesystems that live in memory or in containers are left
+# out. ok3d labels each host with device (its name in devices.yaml), so node_exporter's own
+# device label (/dev/sda1, md0) arrives as exported_device. tests/rules/hosts.test.yaml tests
+# every rule here with promtool.
+groups:
+  - name: hosts
+    rules:
+      # Under 20% free, and at the pace of the last 6 hours, full within a day.
+      - alert: HostDiskFillingUp
+        expr: |
+          (
+            node_filesystem_avail_bytes{fstype!~"tmpfs|ramfs|overlay|squashfs|nsfs"}
+              / node_filesystem_size_bytes{fstype!~"tmpfs|ramfs|overlay|squashfs|nsfs"} < 0.2
+          )
+          and predict_linear(node_filesystem_avail_bytes{fstype!~"tmpfs|ramfs|overlay|squashfs|nsfs"}[6h], 24 * 3600) < 0
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.device }}'s {{ $labels.mountpoint }} will be full within a day."
+          description: "{{ $labels.mountpoint }} on {{ $labels.device }} has {{ $value | humanizePercentage }} free and is filling up."
+          runbook_url: https://github.com/southsidedean/observability-k3d/blob/main/docs/runbooks/HostDiskFillingUp.md
+
+      - alert: HostDiskAlmostFull
+        expr: |
+          node_filesystem_avail_bytes{fstype!~"tmpfs|ramfs|overlay|squashfs|nsfs"}
+            / node_filesystem_size_bytes{fstype!~"tmpfs|ramfs|overlay|squashfs|nsfs"} < 0.05
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.device }}'s {{ $labels.mountpoint }} is almost full."
+          description: "{{ $labels.mountpoint }} on {{ $labels.device }} has only {{ $value | humanizePercentage }} free."
+          runbook_url: https://github.com/southsidedean/observability-k3d/blob/main/docs/runbooks/HostDiskAlmostFull.md
+
+      - alert: HostMemoryLow
+        expr: node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes < 0.05
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.device }} is almost out of memory."
+          description: "{{ $labels.device }} has had less than 5% of its memory free for 15 minutes."
+          runbook_url: https://github.com/southsidedean/observability-k3d/blob/main/docs/runbooks/HostMemoryLow.md
+
+      - alert: HostRaidDegraded
+        expr: node_md_disks{state="failed"} > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "A disk failed in {{ $labels.device }}'s RAID."
+          description: "The RAID array {{ $labels.exported_device }} on {{ $labels.device }} has {{ $value }} failed disk(s)."
+          runbook_url: https://github.com/southsidedean/observability-k3d/blob/main/docs/runbooks/HostRaidDegraded.md

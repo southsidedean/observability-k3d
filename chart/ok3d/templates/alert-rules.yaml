@@ -1,0 +1,18 @@
+{{- /*
+ok3d's alert rules. Each file in chart/ok3d/rules/ is a plain Prometheus rule file, so
+`promtool test rules` tests exactly what runs (tests/rules/), and each becomes a
+PrometheusRule here, which the Prometheus operator loads. The rules' own {{ $labels }}
+templates are left alone: .Files.Get reads the files as text, without rendering them.
+*/ -}}
+{{- range $path, $_ := .Files.Glob "rules/*.yaml" }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ printf "ok3d-%s" (base $path | trimSuffix ".yaml") }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "ok3d.labels" $ | nindent 4 }}
+spec:
+  {{- $.Files.Get $path | fromYaml | toYaml | nindent 2 }}
+{{- end }}

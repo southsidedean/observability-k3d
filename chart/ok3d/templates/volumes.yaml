@@ -23,3 +23,20 @@ spec:
     # It must exist already, made by ok3d apply with the right owner. Kubernetes making it
     # would leave it owned by root, where Prometheus couldn't write.
     type: Directory
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: ok3d-alertmanager
+  labels:
+    {{- include "ok3d.labels" . | nindent 4 }}
+    ok3d/volume: alertmanager
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes: ["ReadWriteOnce"]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  hostPath:
+    path: /var/lib/ok3d/alertmanager
+    type: Directory

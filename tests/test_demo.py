@@ -134,6 +134,25 @@ def test_the_exporter_serves_metrics_and_nothing_else(running: str) -> None:
     assert refused.value.code == 404
 
 
+def test_a_device_takes_a_post_and_logs_where_it_went_but_not_what_it_said(capsys: pytest.CaptureFixture[str]) -> None:
+    server = demo_device.make_server("nas", "127.0.0.1", 0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{server.server_address[1]}/ok3d-topic?template=alertmanager",
+            data=b'{"status": "firing", "secret": "do-not-log"}', method="POST",
+        )
+        with urllib.request.urlopen(request) as response:  # noqa: S310
+            assert response.status == 200
+    finally:
+        server.shutdown()
+        server.server_close()
+    logged = capsys.readouterr().out
+    assert "received a POST to '/ok3d-topic'" in logged
+    assert "do-not-log" not in logged and "template" not in logged
+
+
 def test_the_device_page_names_the_device_safely() -> None:
     assert b"<h1>nas</h1>" in demo_device.page("nas")
     assert b"<script>" not in demo_device.page("<script>")
@@ -152,7 +171,9 @@ FAKE_HELM = r"""case "$*" in
 	printf '%s\n' '  CLUSTER_NAME: "ok3d"' '  K3S_IMAGE: "rancher/k3s:v1.37.1-k3s1"' '  NETWORK: "ok3d"' \
 		'  API_PORT: "6445"' '  PUBLISH_ADDRESS: "0.0.0.0"' '  HTTPS_PORT: "8443"' \
 		"  DATA_ROOT: \"$FAKE_DATA_ROOT\"" '  TLS_MODE: "self-issued"' '  DOMAIN: "noc.home.arpa"' \
-		'  METRICS_RETENTION: "30d"' '  METRICS_RETENTION_SIZE: "40GB"' '  MODULE_UNIFI: "false"' ;;
+		'  METRICS_RETENTION: "30d"' '  METRICS_RETENTION_SIZE: "40GB"' '  MODULE_UNIFI: "false"' \
+		'  ALERTS_NTFY: "false"' '  ALERTS_NTFY_SERVER: "https://ntfy.sh"' '  ALERTS_NTFY_TOKEN: "false"' \
+		'  ALERTS_EMAIL: "false"' '  ALERTS_DEADMAN: "false"' ;;
 esac"""
 
 

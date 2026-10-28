@@ -1,0 +1,82 @@
+# promtool's unit tests for chart/ok3d/rules/hosts.yaml. Run with:
+#   promtool test rules tests/rules/*.test.yaml
+# ok3d labels a host with device (its name in devices.yaml); node_exporter's own device label
+# arrives as exported_device.
+rule_files:
+  - ../../chart/ok3d/rules/hosts.yaml
+evaluation_interval: 1m
+tests:
+  - interval: 5m
+    input_series:
+      # 100 GB, losing 2 GB an hour (about 167 MB every 5 minutes) from 30 GB free: under 20%
+      # after 6 hours, and full within a day. The other disk is half empty and steady.
+      - series: 'node_filesystem_avail_bytes{device="nas", exported_device="/dev/sda1", mountpoint="/", fstype="ext4"}'
+        values: "30e9-166666667x120"
+      - series: 'node_filesystem_size_bytes{device="nas", exported_device="/dev/sda1", mountpoint="/", fstype="ext4"}'
+        values: "100e9x120"
+      - series: 'node_filesystem_avail_bytes{device="nas", exported_device="/dev/sdb1", mountpoint="/srv", fstype="ext4"}'
+        values: "50e9x120"
+      - series: 'node_filesystem_size_bytes{device="nas", exported_device="/dev/sdb1", mountpoint="/srv", fstype="ext4"}'
+        values: "100e9x120"
+      # A filesystem in memory never counts.
+      - series: 'node_filesystem_avail_bytes{device="nas", exported_device="tmpfs", mountpoint="/run", fstype="tmpfs"}'
+        values: "1e6x120"
+      - series: 'node_filesystem_size_bytes{device="nas", exported_device="tmpfs", mountpoint="/run", fstype="tmpfs"}'
+        values: "1e9x120"
+    alert_rule_test:
+      - eval_time: 9h
+        alertname: HostDiskFillingUp
+        exp_alerts:
+          - exp_labels: { severity: warning, device: nas, exported_device: /dev/sda1, mountpoint: /, fstype: ext4 }
+            exp_annotations:
+              summary: "nas's / will be full within a day."
+              description: "/ on nas has 12% free and is filling up."
+              runbook_url: https://github.com/southsidedean/observability-k3d/blob/main/docs/runbooks/HostDiskFillingUp.md
+
+  - interval: 1m
+    input_series:
+      - series: 'node_filesystem_avail_bytes{device="nas", exported_device="/dev/sda1", mountpoint="/", fstype="ext4"}'
+        values: "4e9x15"
+      - series: 'node_filesystem_size_bytes{device="nas", exported_device="/dev/sda1", mountpoint="/", fstype="ext4"}'
+        values: "100e9x15"
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: HostDiskAlmostFull
+        exp_alerts:
+          - exp_labels: { severity: critical, device: nas, exported_device: /dev/sda1, mountpoint: /, fstype: ext4 }
+            exp_annotations:
+              summary: "nas's / is almost full."
+              description: "/ on nas has only 4% free."
+              runbook_url: https://github.com/southsidedean/observability-k3d/blob/main/docs/runbooks/HostDiskAlmostFull.md
+
+  - interval: 1m
+    input_series:
+      - series: 'node_memory_MemAvailable_bytes{device="nas"}'
+        values: "300e6x20"
+      - series: 'node_memory_MemTotal_bytes{device="nas"}'
+        values: "8e9x20"
+    alert_rule_test:
+      - eval_time: 17m
+        alertname: HostMemoryLow
+        exp_alerts:
+          - exp_labels: { severity: warning, device: nas }
+            exp_annotations:
+              summary: "nas is almost out of memory."
+              description: "nas has had less than 5% of its memory free for 15 minutes."
+              runbook_url: https://github.com/southsidedean/observability-k3d/blob/main/docs/runbooks/HostMemoryLow.md
+
+  - interval: 1m
+    input_series:
+      - series: 'node_md_disks{device="nas", exported_device="md0", state="failed"}'
+        values: "0 0 1x10"
+      - series: 'node_md_disks{device="nas", exported_device="md0", state="active"}'
+        values: "2 2 1x10"
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: HostRaidDegraded
+        exp_alerts:
+          - exp_labels: { severity: critical, device: nas, exported_device: md0, state: failed }
+            exp_annotations:
+              summary: "A disk failed in nas's RAID."
+              description: "The RAID array md0 on nas has 1 failed disk(s)."
+              runbook_url: https://github.com/southsidedean/observability-k3d/blob/main/docs/runbooks/HostRaidDegraded.md

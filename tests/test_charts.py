@@ -216,3 +216,54 @@ def test_ping_runs_without_root_or_extra_capabilities() -> None:
     assert "net.ipv4.ping_group_range" in blackbox
     assert "NET_RAW" not in blackbox
     assert "runAsNonRoot: true" in blackbox
+
+
+def test_every_rule_file_becomes_a_prometheus_rule() -> None:
+    rules = documents(render(), "PrometheusRule")
+    ours = [r for r in rules if "app.kubernetes.io/part-of: ok3d" in r and "name: ok3d-" in r]
+    files = sorted(p.stem for p in (CHART / "rules").glob("*.yaml"))
+    assert sorted(r.split("name: ok3d-", 1)[1].split("\n", 1)[0] for r in ours) == files
+    # The rules' own templates reach Prometheus as written.
+    assert any("{{ $labels.device }}" in r for r in ours)
+
+
+def test_alertmanager_keeps_its_state_in_the_data_root_and_reads_secrets_as_files() -> None:
+    rendered = render()
+    volumes = documents(rendered, "PersistentVolume")
+    assert any("path: /var/lib/ok3d/alertmanager" in v and "ok3d/volume: alertmanager" in v for v in volumes)
+    alertmanager = next(d for d in documents(rendered, "Alertmanager"))
+    assert "configSecret: ok3d-alertmanager" in alertmanager
+    assert "- ok3d-alerts" in alertmanager
+    assert "disableMountSubPath: true" in alertmanager
+
+
+@pytest.mark.parametrize(
+    ("setting", "why"),
+    [
+        ("alerts.email.to=not-an-address", "an email address that isn't one"),
+        ("alerts.repeatCritical=often", "a repeat that isn't a duration"),
+        ("alerts.ntfy.server=ntfy.sh", "an ntfy server without https://"),
+    ],
+)
+def test_the_schema_refuses_bad_alert_settings(setting: str, why: str) -> None:
+    result = helm("template", "ok3d", str(CHART), "--values", str(EXAMPLE), "--set", setting)
+    assert result.returncode != 0, f"the schema accepted {why}"
+
+
+def test_email_on_needs_its_addresses() -> None:
+    result = helm("template", "ok3d", str(CHART), "--values", str(EXAMPLE), "--set", "alerts.email.enabled=true")
+    assert result.returncode != 0
+
+
+def test_no_alert_fires_because_a_target_ok3d_turns_off_is_missing() -> None:
+    # The kubelet's own endpoint and the API server aren't scraped (they're tens of thousands
+    # of series), so an alert that fires when one of them is missing would fire forever: an
+    # "unless ... up{job=...} == 1" or an absent(up{job=...}). A real run caught KubeletDown
+    # pending this way. (Alerts on "up{job=...} == 0" are fine: with no target, there's no
+    # series to be 0.)
+    import re
+
+    rules = "\n".join(documents(render(), "PrometheusRule"))
+    unscraped = r'up\{job="(?:kubelet", ?metrics_path="/metrics"|apiserver|node-exporter|kube-scheduler|kube-proxy)'
+    missing = re.compile(rf"(?:unless[^\n]*\n?[^\n]*{unscraped}[^}}]*\}} == 1|absent\({unscraped})")
+    assert not missing.search(rules), f"an alert fires while a target ok3d doesn't scrape is missing: {missing.findall(rules)}"

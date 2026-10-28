@@ -1,0 +1,57 @@
+# Alerts for the devices in devices.yaml, from their checks (probe_*, through the blackbox
+# exporter) and their metrics ports (up, for job device-<name>). Every alert carries the
+# device's name, role, and the device it's behind. Each links to its runbook in docs/runbooks/.
+# tests/rules/devices.test.yaml tests every rule here with promtool.
+groups:
+  - name: devices
+    rules:
+      - alert: DeviceDown
+        expr: probe_success{job="devices", check="ping"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.device }} is down."
+          description: "{{ $labels.device }} ({{ $labels.role }}) hasn't answered ping for 2 minutes."
+          runbook_url: https://github.com/southsidedean/observability-k3d/blob/main/docs/runbooks/DeviceDown.md
+
+      - alert: DeviceCheckFailing
+        expr: probe_success{job="devices", check!="ping"} == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.device }}'s {{ $labels.check }} check is failing."
+          description: "The {{ $labels.check }} check on {{ $labels.device }} has failed for 5 minutes."
+          runbook_url: https://github.com/southsidedean/observability-k3d/blob/main/docs/runbooks/DeviceCheckFailing.md
+
+      # Up and down four times in 15 minutes: a loose cable, a failing power supply, or Wi-Fi
+      # at the edge of its range.
+      - alert: DeviceFlapping
+        expr: changes(probe_success{job="devices", check="ping"}[15m]) >= 4
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.device }} keeps dropping off and coming back."
+          description: "{{ $labels.device }}'s ping went up and down {{ $value }} times in 15 minutes."
+          runbook_url: https://github.com/southsidedean/observability-k3d/blob/main/docs/runbooks/DeviceFlapping.md
+
+      - alert: DeviceMetricsDown
+        expr: up{job=~"device-.+"} == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.device }} stopped serving its metrics."
+          description: "Prometheus hasn't been able to read {{ $labels.instance }} for 5 minutes."
+          runbook_url: https://github.com/southsidedean/observability-k3d/blob/main/docs/runbooks/DeviceMetricsDown.md
+
+      - alert: DeviceCertificateExpiring
+        expr: (probe_ssl_earliest_cert_expiry{job="devices"} - time()) < 14 * 86400
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.device }}'s certificate runs out in less than two weeks."
+          description: "The certificate {{ $labels.device }} serves runs out in {{ $value | humanizeDuration }}."
+          runbook_url: https://github.com/southsidedean/observability-k3d/blob/main/docs/runbooks/DeviceCertificateExpiring.md

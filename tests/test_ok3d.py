@@ -48,6 +48,11 @@ data:
   METRICS_RETENTION: "30d"
   METRICS_RETENTION_SIZE: "40GB"
   MODULE_UNIFI: "${FAKE_UNIFI:-false}"
+  ALERTS_NTFY: "${FAKE_NTFY:-false}"
+  ALERTS_NTFY_SERVER: "https://ntfy.sh"
+  ALERTS_NTFY_TOKEN: "${FAKE_NTFY_TOKEN:-false}"
+  ALERTS_EMAIL: "${FAKE_EMAIL:-false}"
+  ALERTS_DEADMAN: "${FAKE_DEADMAN:-false}"
 EOF
 	;;
 esac""",
@@ -55,6 +60,7 @@ esac""",
 case "$*" in
 *"--filename -"*) cat >>"$FAKE_LOG.stdin" ;;
 *"--from-file=api-key=/dev/stdin"*) echo "stdin: $(cat)" >>"$FAKE_LOG.stdin"; echo "kind: Secret" ;;
+*"--from-env-file=/dev/stdin"*) cat >"$FAKE_LOG.alerts"; echo "kind: Secret" ;;
 *"--output yaml"*) echo "kind: Secret" ;;
 esac""",
     # Makes the key and certificate files, and answers the name-constraint question with
@@ -155,12 +161,12 @@ def test_apply_makes_everything_in_order(env: dict[str, str]) -> None:
     # monitoring namespace (with its labels, before anything is installed into it), and ok3d.
     assert first("openssl req") < first("k3d cluster create") < first("helm upgrade --install ok3d-platform")
     assert first("helm upgrade --install ok3d-platform") < first("kubectl --context k3d-ok3d --namespace cert-manager create secret tls ok3d-ca")
-    # Two applies come before ok3d's release: the authority's Secret and the monitoring
-    # namespace. (The Secret's create and apply run as a pipe, whose two halves start
-    # together, so their order in the log isn't fixed.)
+    # Three applies come before ok3d's release: the authority's Secret, the monitoring
+    # namespace, and the alerts Secret. (A Secret's create and apply run as a pipe, whose two
+    # halves start together, so their order in the log isn't fixed.)
     release_at = first("helm upgrade --install ok3d chart/ok3d")
     applies = [i for i, line in enumerate(log) if line.startswith("kubectl --context k3d-ok3d apply --filename -")]
-    assert len(applies) == 2 and max(applies) < release_at
+    assert len(applies) == 3 and max(applies) < release_at
     assert first("kubectl --context k3d-ok3d --namespace cert-manager create secret") < release_at
     stdin = Path(env["FAKE_LOG"] + ".stdin").read_text()
     assert "name: monitoring" in stdin and "pod-security.kubernetes.io/enforce: restricted" in stdin
@@ -173,6 +179,8 @@ def test_apply_makes_everything_in_order(env: dict[str, str]) -> None:
     assert f"securityContext.runAsUser={uid}" in release
     assert "retention=30d" in release and "retentionSize=40GB" in release
     assert (Path(env["FAKE_DATA_ROOT"]) / "prometheus").is_dir()
+    assert (Path(env["FAKE_DATA_ROOT"]) / "alertmanager").is_dir()
+    assert f"alertmanagerSpec.securityContext.runAsUser={uid}" in release
 
     create = log[first("k3d cluster create")]
     data_root = env["FAKE_DATA_ROOT"]
@@ -248,6 +256,44 @@ def test_apply_moves_a_0_3_release_out_of_ok3d_system(env: dict[str, str]) -> No
     assert uninstall < next(i for i, line in enumerate(log) if line.startswith("helm upgrade --install ok3d chart/ok3d"))
 
 
+def dotenv(tmp_path: Path, env: dict[str, str], text: str) -> None:
+    path = tmp_path / ".env"
+    path.write_text(text)
+    path.chmod(0o600)
+    env["OK3D_ENV"] = str(path)
+
+
+def test_alert_secrets_go_to_kubectl_on_stdin_only_for_what_is_on(env: dict[str, str], tmp_path: Path) -> None:
+    dotenv(tmp_path, env, "NTFY_TOPIC=ok3d-7f3k9q\nSMTP_PASSWORD=mail-secret\nDEADMAN_URL=https://hc.example.com/ping/abc\n")
+    env.update(FAKE_NTFY="true", FAKE_DEADMAN="true")
+    result = ok3d(env, "apply")
+    assert result.returncode == 0, result.stdout + result.stderr
+    secrets = Path(env["FAKE_LOG"] + ".alerts").read_text()
+    # ntfy's address is built from the server and the topic, with ntfy's Alertmanager template.
+    assert "NTFY_URL=https://ntfy.sh/ok3d-7f3k9q?template=alertmanager&tags=ok3d" in secrets
+    assert "DEADMAN_URL=https://hc.example.com/ping/abc" in secrets
+    # Email is off, so its password stays out, and nothing secret is on a command line.
+    assert "mail-secret" not in secrets
+    log = Path(env["FAKE_LOG"]).read_text()
+    assert "ok3d-7f3k9q" not in log and "hc.example.com" not in log
+
+
+def test_the_alerts_secret_is_made_even_with_nothing_on(env: dict[str, str]) -> None:
+    # Alertmanager mounts it either way.
+    assert ok3d(env, "apply").returncode == 0
+    assert "NONE=" in Path(env["FAKE_LOG"] + ".alerts").read_text()
+
+
+def test_check_finds_a_missing_alert_secret_and_warns_with_no_destination(env: dict[str, str], tmp_path: Path) -> None:
+    result = ok3d(env, "check")
+    assert "WARN  no alert destination is on" in result.stdout
+    dotenv(tmp_path, env, "NTFY_TOPIC=\n")
+    env["FAKE_NTFY"] = "true"
+    result = ok3d(env, "check")
+    assert result.returncode == 1
+    assert "alerts.ntfy is on, but NTFY_TOPIC in .env is empty" in result.stdout
+
+
 def test_apply_keeps_an_existing_cluster_and_authority(env: dict[str, str]) -> None:
     certs = Path(env["FAKE_DATA_ROOT"]) / "certs"
     certs.mkdir(mode=0o700)
@@ -301,3 +347,14 @@ def test_version_matches_the_package() -> None:
 
     result = subprocess.run([str(ROOT / "ok3d"), "version"], capture_output=True, text=True, check=True)
     assert result.stdout.strip() == f"ok3d {__version__}"
+
+
+def test_test_alert_sends_through_alertmanagers_own_amtool(env: dict[str, str]) -> None:
+    result = ok3d(env, "test-alert")
+    assert result.returncode == 0, result.stderr
+    call = next(line for line in calls(env) if "amtool alert add" in line)
+    assert "--namespace monitoring exec alertmanager-ok3d-kube-prometheus-stack-alertmanager-0" in call
+    assert "OK3DTestAlert severity=warning" in call
+    # The summary goes as one quoted matcher value, the form Alertmanager's parser wants.
+    assert '--annotation=summary="A test alert from ./ok3d test-alert.' in call
+    assert "--end=" in call
