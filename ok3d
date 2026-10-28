@@ -116,6 +116,12 @@ load_settings() {
 	context="k3d-$CLUSTER_NAME"
 }
 
+# env_value_if_any KEY: like env_value, but empty when there's no .env at all.
+env_value_if_any() {
+	[ -f "$envfile" ] || return 0
+	env_value "$1"
+}
+
 # env_value KEY: the value of KEY in .env, read as plain text (never run as shell), with
 # surrounding quotes removed. Refuses a .env that anyone else can read.
 env_value() {
@@ -298,9 +304,11 @@ make_cluster() {
 		--wait --timeout 300s
 }
 
-# The monitoring namespace, made before Helm installs into it, with the restricted Pod
+# The namespaces Secrets must be in before Helm runs, made first, with the restricted Pod
 # Security Standard's labels already on (so nothing is ever admitted without them).
-make_monitoring_namespace() {
+# monitoring is the release's own namespace. gateway is the chart's (templates/namespaces.yaml),
+# so it also gets Helm's ownership marks, which let the release take it over as its own.
+make_namespaces() {
 	kubectl --context "$context" apply --filename - >/dev/null <<EOF
 apiVersion: v1
 kind: Namespace
@@ -312,7 +320,50 @@ metadata:
     pod-security.kubernetes.io/enforce-version: latest
     pod-security.kubernetes.io/warn: restricted
     pod-security.kubernetes.io/audit: restricted
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gateway
+  labels:
+    app.kubernetes.io/part-of: ok3d
+    app.kubernetes.io/managed-by: Helm
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted
+  annotations:
+    meta.helm.sh/release-name: ok3d
+    meta.helm.sh/release-namespace: monitoring
 EOF
+}
+
+# ok3d's admin password: OK3D_ADMIN_PASSWORD from .env, or one made the first time and kept in
+# the data root (admin-password, readable only by you). It's Grafana's admin login, and the
+# login for the Prometheus and Alertmanager pages.
+admin_password() {
+	password=$(env_value_if_any OK3D_ADMIN_PASSWORD)
+	if [ -n "$password" ]; then
+		printf '%s' "$password"
+		return
+	fi
+	if [ ! -s "$DATA_ROOT/admin-password" ]; then
+		(umask 077 && openssl rand -base64 18 | tr -d '\n' >"$DATA_ROOT/admin-password")
+		echo "Made ok3d's admin password: it's in $DATA_ROOT/admin-password" >&2
+	fi
+	cat "$DATA_ROOT/admin-password"
+}
+
+# The ok3d-admin Secret, in monitoring (for Grafana) and gateway (for the pages' basic auth),
+# with the password on kubectl's standard input.
+load_admin_secret() {
+	password=$1
+	for namespace in monitoring gateway; do
+		printf 'admin-user=admin\nadmin-password=%s\n' "$password" |
+			kubectl --context "$context" --namespace "$namespace" create secret generic ok3d-admin \
+				--from-env-file=/dev/stdin --dry-run=client --output yaml |
+			kubectl --context "$context" apply --filename - >/dev/null
+	done
 }
 
 # 0.3 installed the ok3d release into ok3d-system. From 0.4 it lives in monitoring, the
@@ -370,9 +421,11 @@ deploy() {
 		--cert "$DATA_ROOT/certs/ca.crt" --key "$DATA_ROOT/certs/ca.key" \
 		--dry-run=client --output yaml | kubectl --context "$context" apply --filename -
 	move_release_from_0_3
-	make_monitoring_namespace
+	make_namespaces
 	load_unifi_key
 	load_alert_secrets
+	password=$(admin_password)
+	load_admin_secret "$password"
 	echo "Deploying ok3d."
 	# Prometheus runs as you (the data root's owner), and keeps the history your settings ask
 	# for. Those go to the kube-prometheus-stack chart directly, since a chart's settings can't
@@ -381,11 +434,18 @@ deploy() {
 	gid=$(id -g)
 	p=kube-prometheus-stack.prometheus.prometheusSpec
 	a=kube-prometheus-stack.alertmanager.alertmanagerSpec
+	g=kube-prometheus-stack.grafana
+	# The gateway restarts when the password changes: it gets a checksum, never the password.
+	checksum=$(printf '%s' "$password" | openssl dgst -sha256 -r | cut -d' ' -f1)
 	# shellcheck disable=SC2046 # values_args prints one argument per line, on purpose
 	helm upgrade --install ok3d chart/ok3d $(values_args) \
 		--set "host.uid=$uid,host.gid=$gid" \
 		--set "$p.securityContext.runAsUser=$uid,$p.securityContext.runAsGroup=$gid,$p.securityContext.fsGroup=$gid" \
 		--set "$a.securityContext.runAsUser=$uid,$a.securityContext.runAsGroup=$gid,$a.securityContext.fsGroup=$gid" \
+		--set "$g.securityContext.runAsUser=$uid,$g.securityContext.runAsGroup=$gid,$g.securityContext.fsGroup=$gid" \
+		--set "$g.grafana\.ini.server.root_url=https://grafana.$DOMAIN:$HTTPS_PORT/" \
+		--set-file "tls.caCertificate=$DATA_ROOT/certs/ca.crt" \
+		--set "gateway.adminChecksum=$checksum" \
 		--set "$p.retention=$METRICS_RETENTION,$p.retentionSize=$METRICS_RETENTION_SIZE" \
 		--kube-context "$context" --namespace monitoring \
 		--wait --timeout 10m
@@ -416,14 +476,23 @@ cmd_apply() {
 	install -d -m 0755 "$DATA_ROOT/kagent-ate"
 	install -d -m 0750 "$DATA_ROOT/prometheus"
 	install -d -m 0750 "$DATA_ROOT/alertmanager"
+	install -d -m 0750 "$DATA_ROOT/grafana"
 	make_certificate_authority
 	make_cluster
 	connect_demo
 	deploy
+	port=""
+	[ "$HTTPS_PORT" = 443 ] || port=":$HTTPS_PORT"
 	echo
-	echo "Done. The cluster $CLUSTER_NAME is up (kubectl context $context)."
-	echo "Trust the certificate authority on your devices: $DATA_ROOT/certs/ca.crt"
-	echo "(docs/certificate.md says how, from 0.4, when there are pages to open)."
+	echo "Done. The cluster $CLUSTER_NAME is up (kubectl context $context). Its pages:"
+	echo "  https://grafana.$DOMAIN$port/        Grafana: sign in as admin"
+	echo "  https://prometheus.$DOMAIN$port/     Prometheus: the same login"
+	echo "  https://alertmanager.$DOMAIN$port/   Alertmanager: the same login"
+	echo "  https://ca.$DOMAIN$port/             the certificate authority, to trust on your devices"
+	if [ -z "$(env_value_if_any OK3D_ADMIN_PASSWORD)" ]; then
+		echo "The admin password is in $DATA_ROOT/admin-password."
+	fi
+	echo "Point *.$DOMAIN at this computer in your router or local DNS server (docs/certificate.md)."
 }
 
 cmd_delete() {

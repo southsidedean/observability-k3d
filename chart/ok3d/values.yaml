@@ -92,6 +92,9 @@ tls:
   # reserved for home networks. Your router or local DNS server points the names at this
   # machine.
   domain: noc.home.arpa
+  # The certificate authority's public certificate, served at ca.<domain> for your devices to
+  # trust. ok3d apply fills it in from the data root; there's no need to set it by hand.
+  caCertificate: ""
 
 # The parts you can switch on or off. Each arrives in the release PLAN.md gives it; until
 # then, switching it on does nothing.
@@ -105,6 +108,17 @@ modules:
   agents: false
   remoteAccess: false
 
+# How ok3d sets up its gateway (templates/gateway.yaml). Not settings of yours.
+gateway:
+  images:
+    # agentgateway v1.7.0 and httpd 2.4.69 (for its htpasswd), pinned by digest. Renovate
+    # proposes newer versions.
+    agentgateway: ghcr.io/agentgateway/agentgateway:v1.7.0@sha256:60216aafb03d37f94e952ff3d51d2f630a65b10ecaebdc0a864882f92610c45b
+    htpasswd: httpd:2.4.69-alpine@sha256:070da7661f0be8a05430b2c125c0cde9e53176b4048c813024021969a0e3893c
+  # A checksum of the admin password, which ok3d apply passes so the gateway restarts with a
+  # changed one. Never the password itself.
+  adminChecksum: ""
+
 # ----------------------------------------------------------------------------------------
 # The charts ok3d is built from. These are how ok3d needs them set up, not settings of
 # yours: changing them in settings.yaml isn't supported.
@@ -113,9 +127,59 @@ kube-prometheus-stack:
   # The operator's definitions come from the platform chart instead, installed first.
   crds:
     enabled: false
-  # Grafana is switched on by the 0.4 change that sets up the front door.
   grafana:
-    enabled: false
+    enabled: true
+    # kube-prometheus-stack's own dashboards are about Kubernetes' internals, mostly from the
+    # metrics ok3d leaves out. ok3d's (templates/dashboards.yaml) are loaded instead.
+    defaultDashboardsEnabled: false
+    testFramework:
+      enabled: false
+    # The admin login, from the ok3d-admin Secret ok3d apply makes.
+    admin:
+      existingSecret: ok3d-admin
+      userKey: admin-user
+      passwordKey: admin-password
+    # Grafana's database (users, stars, edited dashboards) in the data root's grafana folder.
+    persistence:
+      enabled: true
+      existingClaim: ok3d-grafana
+    # Making the folder's owner match needs root, which nothing here runs as: ok3d apply makes
+    # the folder, owned by you, and Grafana runs as you (ok3d apply passes your ids).
+    initChownData:
+      enabled: false
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+      runAsGroup: 1000
+      fsGroup: 1000
+      seccompProfile:
+        type: RuntimeDefault
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop: ["ALL"]
+      seccompProfile:
+        type: RuntimeDefault
+    resources:
+      requests: { cpu: 20m, memory: 128Mi }
+      limits: { memory: 512Mi }
+    grafana.ini:
+      # root_url is https://grafana.<domain>:<port>/, which ok3d apply passes.
+      server:
+        root_url: https://grafana.noc.home.arpa:8443/
+      # Nothing sent anywhere: no usage reports, no update checks.
+      analytics:
+        reporting_enabled: false
+        check_for_updates: false
+        check_for_plugin_updates: false
+      users:
+        allow_sign_up: false
+      auth.anonymous:
+        enabled: false
+      security:
+        cookie_secure: true
+        cookie_samesite: strict
+        disable_gravatar: true
   alertmanager:
     enabled: true
     alertmanagerSpec:
