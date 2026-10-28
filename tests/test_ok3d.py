@@ -397,6 +397,8 @@ def test_the_admin_password_can_come_from_dotenv(env: dict[str, str], tmp_path: 
     assert result.returncode == 0
     assert "admin-password=chosen-by-you" in Path(env["FAKE_LOG"] + ".monitoring.ok3d-admin").read_text()
     assert not (Path(env["FAKE_DATA_ROOT"]) / "admin-password").exists()
-    # The page list names Grafana's address as a word of its own.
-    words = {word for line in result.stdout.splitlines() for word in line.split()}
-    assert "https://grafana.noc.home.arpa:8443/" in words
+    # The page list names Grafana's address: compared part by part, after parsing.
+    from urllib.parse import urlsplit
+
+    pages = [urlsplit(word) for line in result.stdout.splitlines() for word in line.split() if "://" in word]
+    assert any((p.scheme, p.hostname, p.port, p.path) == ("https", "grafana.noc.home.arpa", 8443, "/") for p in pages)
