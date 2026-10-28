@@ -340,3 +340,27 @@ def test_grafana_sends_nothing_anywhere_and_lets_no_one_sign_up() -> None:
     for setting in ("reporting_enabled = false", "check_for_updates = false", "allow_sign_up = false",
                     "cookie_secure = true"):
         assert setting in ini, setting
+
+
+def test_every_ok3d_namespace_turns_away_what_it_doesnt_list() -> None:
+    import yaml
+
+    policies = [yaml.safe_load(d) for d in documents(render(), "NetworkPolicy")]
+    deny = {p["metadata"]["namespace"] for p in policies
+            if p["metadata"]["name"] == "ok3d-deny-by-default" and p["spec"] == {"podSelector": {}, "policyTypes": ["Ingress"]}}
+    assert deny == {"monitoring", "gateway", "auth", "agents"}
+
+
+def test_the_gateway_reaches_only_the_pages_web_ports() -> None:
+    import yaml
+
+    policies = {p["metadata"]["name"]: p for p in (yaml.safe_load(d) for d in documents(render(), "NetworkPolicy"))}
+    pages = policies["ok3d-pages-from-the-gateway"]["spec"]
+    assert sorted(pages["podSelector"]["matchExpressions"][0]["values"]) == ["alertmanager", "grafana", "prometheus"]
+    rule = pages["ingress"][0]
+    assert rule["from"][0]["podSelector"] == {"matchLabels": {"app.kubernetes.io/name": "ok3d-gateway"}}
+    assert sorted(port["port"] for port in rule["ports"]) == [3000, 9090, 9093]
+    gateway = policies["ok3d-gateway"]["spec"]["ingress"]
+    assert [port["port"] for rule in gateway for port in rule["ports"]] == [8443, 15020]
+    # Its metrics are for monitoring only.
+    assert gateway[1]["from"][0]["namespaceSelector"]["matchLabels"]["kubernetes.io/metadata.name"] == "monitoring"
