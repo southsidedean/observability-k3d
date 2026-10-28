@@ -8,13 +8,17 @@ unescaped.
 
 from __future__ import annotations
 
+import concurrent.futures
 import http.client
 import json
+import os
 import shutil
+import socket
 import ssl
 import stat
 import subprocess
 import threading
+import time
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -155,10 +159,48 @@ def test_the_pause_ends(tmp_path: Path) -> None:
     auth = Auth(tmp_path)
     auth.ensure()
     for _ in range(auth_module.MAX_FAILURES):
-        assert auth.sign_in("wrong", now=1000.0) is None
+        assert auth.sign_in("wrong", "192.0.2.9", now=1000.0) is None
     password = (tmp_path / "password").read_text().strip()
-    assert auth.sign_in(password, now=1000.0 + auth_module.LOCKOUT - 1) is None
-    assert auth.sign_in(password, now=1000.0 + auth_module.LOCKOUT + 1) is not None
+    with pytest.raises(auth_module.Paused):
+        auth.sign_in(password, "192.0.2.9", now=1000.0 + auth_module.LOCKOUT - 1)
+    assert auth.sign_in(password, "192.0.2.9", now=1000.0 + auth_module.LOCKOUT + 1) is not None
+
+
+def test_one_device_guessing_doesnt_lock_out_another(tmp_path: Path) -> None:
+    auth = Auth(tmp_path)
+    auth.ensure()
+    for _ in range(auth_module.MAX_FAILURES):
+        auth.sign_in("wrong", "192.0.2.66", now=1000.0)
+    password = (tmp_path / "password").read_text().strip()
+    with pytest.raises(auth_module.Paused):
+        auth.sign_in(password, "192.0.2.66", now=1001.0)
+    assert auth.sign_in(password, "192.0.2.10", now=1001.0) is not None
+
+
+def test_guesses_from_many_addresses_pause_everyone(tmp_path: Path) -> None:
+    auth = Auth(tmp_path)
+    auth.ensure()
+    for n in range(auth_module.GLOBAL_FAILURES):
+        auth.sign_in("wrong", f"192.0.2.{n % 200}", now=1000.0)
+    password = (tmp_path / "password").read_text().strip()
+    with pytest.raises(auth_module.Paused):
+        auth.sign_in(password, "192.0.2.250", now=1001.0)
+    assert auth.sign_in(password, "192.0.2.250", now=1000.0 + auth_module.LOCKOUT + 1) is not None
+
+
+def test_guesses_sent_together_still_count_one_by_one(dash: Dashboard) -> None:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=20) as pool:
+        codes = list(pool.map(lambda _: dash.post("/sign-in", "password=wrong").status, range(20)))
+    assert codes.count(401) == auth_module.MAX_FAILURES
+    assert codes.count(429) == 20 - auth_module.MAX_FAILURES
+
+
+def test_the_addresses_remembered_are_capped(tmp_path: Path) -> None:
+    auth = Auth(tmp_path)
+    auth.ensure()
+    for n in range(auth_module.MAX_CLIENTS + 50):
+        auth._count_failure(f"client-{n}", now=1000.0 + n * 10)
+    assert len(auth.failures) <= auth_module.MAX_CLIENTS
 
 
 def test_a_session_ends(tmp_path: Path) -> None:
@@ -197,7 +239,8 @@ def test_every_page_carries_the_safety_headers(dash: Dashboard) -> None:
         assert "frame-ancestors 'none'" in csp
         assert response.getheader("X-Content-Type-Options") == "nosniff"
         assert response.getheader("Cache-Control") == "no-store"
-        assert response.getheader("Strict-Transport-Security")
+        # No HSTS: it would cover every other web page on the server's name, on every port.
+        assert response.getheader("Strict-Transport-Security") is None
         assert response.getheader("Server") == "ok3d-dashboard"
 
 
@@ -230,3 +273,115 @@ def test_it_wont_start_without_a_certificate(tmp_path: Path) -> None:
     with pytest.raises(SystemExit, match="HTTPS only"):
         main(["--state", str(tmp_path), "--helper", str(tmp_path), "--cert", str(tmp_path / "no.crt"),
               "--key", str(tmp_path / "no.key")])  # fmt: skip
+
+
+def test_a_silent_connection_doesnt_hold_up_anyone_else(dash: Dashboard) -> None:
+    # A client that connects and never starts TLS.
+    idle = socket.create_connection(("127.0.0.1", dash.port))
+    try:
+        assert dash.get("/sign-in").status == 200
+    finally:
+        idle.close()
+
+
+def test_connections_beyond_the_limit_are_closed(dash: Dashboard, monkeypatch: pytest.MonkeyPatch) -> None:
+    import ok3d.dashboard.server as server_module
+
+    idle = [socket.create_connection(("127.0.0.1", dash.port)) for _ in range(server_module.MAX_CONNECTIONS)]
+    try:
+        time.sleep(0.3)
+        extra = socket.create_connection(("127.0.0.1", dash.port))
+        extra.settimeout(5)
+        assert extra.recv(1) == b""  # closed straight away
+        extra.close()
+    finally:
+        for s in idle:
+            s.close()
+    # Once they've gone, it serves again.
+    for _ in range(50):
+        try:
+            if dash.get("/sign-in").status == 200:
+                break
+        except OSError:
+            pass
+        time.sleep(0.1)
+    else:
+        pytest.fail("it didn't serve again after the idle connections closed")
+
+
+def test_another_apps_odd_cookie_doesnt_sign_you_out(dash: Dashboard) -> None:
+    session = dash.sign_in()
+    response = dash.request("GET", "/", headers={"Cookie": f'a={{"x":1}}; {COOKIE}={session}; b=2'})
+    assert response.status == 200
+
+
+def test_the_cookie_is_host_only(dash: Dashboard) -> None:
+    cookie = dash.post("/sign-in", f"password={dash.password}").getheader("Set-Cookie") or ""
+    assert cookie.startswith("__Host-")
+    assert "Domain" not in cookie
+
+
+def test_a_form_a_browser_marks_cross_site_is_refused(dash: Dashboard) -> None:
+    response = dash.request("POST", "/sign-in", f"password={dash.password}", {
+        "Content-Type": "application/x-www-form-urlencoded", "Origin": f"https://127.0.0.1:{dash.port}",
+        "Sec-Fetch-Site": "same-site"})  # fmt: skip
+    assert response.status == 403
+
+
+def test_a_form_with_too_many_fields_gets_an_answer(dash: Dashboard) -> None:
+    assert dash.post("/sign-in", "&".join(f"f{n}=x" for n in range(20))).status == 400
+
+
+def test_a_form_shorter_than_it_says_doesnt_keep_its_thread(dash: Dashboard, monkeypatch: pytest.MonkeyPatch) -> None:
+    from ok3d.dashboard import server as server_module
+
+    monkeypatch.setattr(server_module.Handler, "timeout", 1)
+    started = time.monotonic()
+    with pytest.raises((http.client.HTTPException, OSError)):
+        dash.request("POST", "/sign-in", "password=x", {
+            "Content-Type": "application/x-www-form-urlencoded", "Origin": f"https://127.0.0.1:{dash.port}",
+            "Content-Length": "100"})  # fmt: skip
+    assert time.monotonic() - started < 5
+
+
+def test_a_request_too_long_gets_an_answer(dash: Dashboard) -> None:
+    assert dash.get("/" + "x" * 70000).status == 414
+
+
+def test_control_characters_never_reach_the_log(dash: Dashboard, capsys: pytest.CaptureFixture[str]) -> None:
+    context = ssl.create_default_context()
+    context.check_hostname = False
+    context.verify_mode = ssl.CERT_NONE
+    with socket.create_connection(("127.0.0.1", dash.port)) as raw, context.wrap_socket(raw) as tls:
+        tls.sendall(b"GET /\x1b[31mred HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n")
+        while tls.recv(4096):
+            pass
+    out = capsys.readouterr().out
+    assert "\x1b" not in out
+    assert "\\x1b[31mred" in out
+
+
+def test_a_password_record_it_cant_read_stops_it_rather_than_replacing_it(tmp_path: Path) -> None:
+    auth = Auth(tmp_path)
+    auth.ensure()
+    password = (tmp_path / "password").read_text()
+    (tmp_path / "password.json").chmod(0)
+    try:
+        if os.access(tmp_path / "password.json", os.R_OK):
+            pytest.skip("running as root, which reads anything")
+        with pytest.raises(SystemExit, match="can't read"):
+            Auth(tmp_path).ensure()
+    finally:
+        (tmp_path / "password.json").chmod(0o600)
+    assert (tmp_path / "password").read_text() == password
+
+
+def test_a_folder_it_cant_write_stops_it_with_a_clear_message(tmp_path: Path) -> None:
+    tmp_path.chmod(0o500)
+    try:
+        if os.access(tmp_path, os.W_OK):
+            pytest.skip("running as root, which writes anywhere")
+        with pytest.raises(SystemExit, match="can't write its password"):
+            Auth(tmp_path).ensure()
+    finally:
+        tmp_path.chmod(0o700)

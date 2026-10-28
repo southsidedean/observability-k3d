@@ -16,24 +16,47 @@ jobs:
   scan:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        # Trivy scans one platform of a multi-platform image at a time.
+        platform: [amd64, arm64]
     permissions:
       contents: read
       security-events: write
+    env:
+      IMAGE: ghcr.io/${{ github.repository_owner }}/ok3d-dashboard:latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # :latest arrives with the first release that has the image (0.5.0); until then there's
+      # nothing to scan, and that isn't a failure.
+      - id: released
+        name: Is there a released image yet?
+        run: |
+          if docker buildx imagetools inspect "$IMAGE" >/dev/null 2>&1; then
+            echo "yes=true" >>"$GITHUB_OUTPUT"
+          else
+            echo "No $IMAGE yet: nothing to scan."
+            echo "yes=false" >>"$GITHUB_OUTPUT"
+          fi
       - name: Trivy scan of the published image
+        if: steps.released.outputs.yes == 'true'
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          TRIVY_PLATFORM: linux/${{ matrix.platform }}
         with:
-          image-ref: ghcr.io/${{ github.repository_owner }}/ok3d-dashboard:latest
+          image-ref: ${{ env.IMAGE }}
           scanners: vuln,secret
           severity: MEDIUM,HIGH,CRITICAL
           trivyignores: .trivyignore
           format: sarif
           output: trivy.sarif
       - name: Show the results in the Security tab
+        if: steps.released.outputs.yes == 'true'
         uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
         with:
           sarif_file: trivy.sarif
-          category: dashboard-image-release  # :latest, weekly; images.yml's scans of main have their own
+          # :latest, weekly; images.yml's scans of main have their own.
+          category: dashboard-image-release-${{ matrix.platform }}

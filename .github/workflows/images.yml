@@ -138,10 +138,15 @@ jobs:
 
   scan:
     # The image just pushed, by its digest (a scan of :latest could run before a release's
-    # image is there, and scan the one before).
+    # image is there, and scan the one before). Each architecture separately: Trivy scans
+    # only one platform of a multi-platform image at a time.
     needs: publish
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [amd64, arm64]
     permissions:
       contents: read
       security-events: write
@@ -151,6 +156,8 @@ jobs:
           persist-credentials: false
       - name: Trivy scan of the pushed image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          TRIVY_PLATFORM: linux/${{ matrix.platform }}
         with:
           image-ref: ${{ env.IMAGE }}@${{ needs.publish.outputs.digest }}
           scanners: vuln,secret
@@ -162,4 +169,5 @@ jobs:
         uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
         with:
           sarif_file: trivy.sarif
-          category: dashboard-image-main  # this run's image; image-scan.yml's weekly scan of the release has its own
+          # This run's image; image-scan.yml's weekly scan of the release has its own.
+          category: dashboard-image-main-${{ matrix.platform }}

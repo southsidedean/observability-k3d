@@ -4,26 +4,36 @@ This first version has the sign-in and one page, which shows ok3d's version and 
 last answer. The pages for settings, devices, and Check and Apply build on it.
 
 Every page is made here, with every value escaped, and carries headers that keep it out of
-frames, stop other sites' scripts, and keep it out of caches. A form can only be sent from
-the Dashboard's own pages: every POST must come with an Origin header naming the Dashboard,
-and the session cookie is never sent with requests from other sites.
+frames, stop other sites' scripts, and keep it out of caches. A form is accepted only from
+the Dashboard's own pages: every POST must come with an Origin header naming the Dashboard
+(and, from browsers that send it, Sec-Fetch-Site: same-origin). GET never changes anything.
+
+A slow or silent client can't hold it up: each connection's TLS handshake happens in its own
+thread, with a time limit, every connection has a time limit, and only so many run at once.
 """
 
 from __future__ import annotations
 
 import html
+import socket
 import ssl
+import threading
 import time
 import urllib.parse
 from dataclasses import dataclass
-from http.cookies import CookieError, SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from ok3d import __version__
-from ok3d.dashboard.auth import SESSION_TTL, Auth
+from ok3d.dashboard.auth import SESSION_TTL, Auth, Paused
 
-COOKIE = "ok3d_session"
+# __Host-: browsers accept it only over HTTPS, for this host and every path, so no other site
+# or name can set it.
+COOKIE = "__Host-ok3d_session"
+# Seconds a connection may take for its handshake, and between reads and writes after.
+TIMEOUT = 10
+# The most connections served at once; the rest are closed straight away.
+MAX_CONNECTIONS = 32
 # The most of a form that's read. The sign-in form is a few dozen bytes.
 MAX_FORM = 4096
 # The most of the helper's answer that's read.
@@ -32,7 +42,6 @@ MAX_RESULT = 256 * 1024
 HEADERS = {
     "Content-Security-Policy": "default-src 'none'; style-src 'self'; img-src 'self'; form-action 'self'; "
     "frame-ancestors 'none'; base-uri 'none'",
-    "Strict-Transport-Security": "max-age=31536000",
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "no-referrer",
     "Cache-Control": "no-store",
@@ -146,18 +155,38 @@ def sign_in_page(message: str = "") -> str:
     )
 
 
+def printable(text: str) -> str:
+    """Text safe for the log: control characters (which could rewrite a terminal) escaped."""
+    return "".join(c if c.isprintable() else f"\\x{ord(c):02x}" for c in text)
+
+
 class Handler(BaseHTTPRequestHandler):
-    # Names the server without its Python version, which would only help someone looking for holes.
-    def version_string(self) -> str:
-        return "ok3d-dashboard"
+    # Each read and write after the handshake may wait this long, so a slow client gives up
+    # its thread instead of keeping it.
+    timeout = TIMEOUT
 
     # Set on the class by make_server().
     config: Config
     auth: Auth
 
-    def log_message(self, format: str, *args: object) -> None:  # the base class names it format
+    def setup(self) -> None:
+        # The TLS handshake, here in the connection's own thread rather than where connections
+        # are accepted, so a client that never finishes it holds up nobody else.
+        self.request.settimeout(TIMEOUT)
+        self.request.do_handshake()
+        super().setup()
+
+    # Names the server without its Python version, which would only help someone looking for holes.
+    def version_string(self) -> str:
+        return "ok3d-dashboard"
+
+    def log_request(self, code: int | str = "-", size: int | str = "-") -> None:
         # One line a request, without the query string, which could hold anything.
-        print(f"{self.address_string()} {self.command} {self.path.split('?')[0]}", flush=True)
+        path = getattr(self, "path", "").split("?")[0]
+        print(printable(f"{self.client_address[0]} {self.command} {path} {code}"), flush=True)
+
+    def log_message(self, format: str, *args: object) -> None:  # the base class names it format
+        print(printable(f"{self.client_address[0]} {format % args}"), flush=True)
 
     def send(self, status: int, body: bytes, content_type: str = "text/html; charset=utf-8",
              extra: dict[str, str] | None = None) -> None:  # fmt: skip
@@ -174,21 +203,24 @@ class Handler(BaseHTTPRequestHandler):
         self.send(303, b"", extra={"Location": to} | (extra or {}))
 
     def session(self) -> str | None:
-        try:
-            cookie = SimpleCookie(self.headers.get("Cookie", ""))
-        except CookieError:
-            return None
-        morsel = cookie.get(COOKIE)
-        return morsel.value if morsel else None
+        """The session cookie's value. Read by hand: Python's cookie parser drops every cookie
+        after one it can't read, so another app's odd cookie on the same host would sign you out."""
+        for header in self.headers.get_all("Cookie") or []:
+            for part in header.split(";"):
+                name, sep, value = part.strip().partition("=")
+                if sep and name == COOKIE:
+                    return value
+        return None
 
     def signed_in(self) -> bool:
         return self.auth.valid(self.session())
 
     def same_origin(self) -> bool:
         """Whether a POST came from one of the Dashboard's own pages."""
-        origin = self.headers.get("Origin")
-        host = self.headers.get("Host")
-        return bool(origin and host) and origin == f"https://{host}"
+        origin = (self.headers.get("Origin") or "").lower()
+        host = (self.headers.get("Host") or "").lower()
+        fetch_site = self.headers.get("Sec-Fetch-Site")
+        return bool(origin and host) and origin == f"https://{host}" and fetch_site in (None, "same-origin")
 
     def read_form(self) -> dict[str, str] | None:
         try:
@@ -199,8 +231,14 @@ class Handler(BaseHTTPRequestHandler):
             return None
         if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/x-www-form-urlencoded":
             return None
-        body = self.rfile.read(length).decode("utf-8", errors="replace")
-        return {k: v[0] for k, v in urllib.parse.parse_qs(body, max_num_fields=10).items()}
+        body = self.rfile.read(length)
+        if len(body) != length:
+            return None
+        try:
+            fields = urllib.parse.parse_qs(body.decode("utf-8", errors="replace"), max_num_fields=10)
+        except ValueError:
+            return None
+        return {k: v[0] for k, v in fields.items()}
 
     def do_GET(self) -> None:
         path = urllib.parse.urlsplit(self.path).path
@@ -233,10 +271,11 @@ class Handler(BaseHTTPRequestHandler):
             if form is None:
                 self.send(400, page("Sign in", sign_in_page("That didn't arrive in one piece. Try again.")))
                 return
-            if self.auth.locked():
+            try:
+                session = self.auth.sign_in(form.get("password", ""), self.client_address[0])
+            except Paused:
                 self.send(429, page("Sign in", sign_in_page("Too many wrong passwords. Wait a minute, then try again.")))
                 return
-            session = self.auth.sign_in(form.get("password", ""))
             if session is None:
                 time.sleep(0.5)  # a little slower, for anyone guessing
                 self.send(401, page("Sign in", sign_in_page("That's not the password.")))
@@ -250,16 +289,48 @@ class Handler(BaseHTTPRequestHandler):
             self.send(404, page("Not found", "<section><h2>Not found</h2></section>", self.signed_in()))
 
 
-def make_server(config: Config, host: str, port: int, cert: Path, key: Path) -> ThreadingHTTPServer:
+class Server(ThreadingHTTPServer):
+    """A thread for each connection, up to MAX_CONNECTIONS at once."""
+
+    daemon_threads = True
+
+    def __init__(self, address: tuple[str, int], handler: type[Handler]) -> None:
+        super().__init__(address, handler)
+        self.slots = threading.BoundedSemaphore(MAX_CONNECTIONS)
+
+    def process_request(self, request: socket.socket | tuple[bytes, socket.socket], client_address: object) -> None:
+        if not self.slots.acquire(blocking=False):
+            self.shutdown_request(request)
+            return
+        try:
+            super().process_request(request, client_address)
+        except Exception:
+            self.slots.release()
+            raise
+
+    def process_request_thread(self, request: socket.socket | tuple[bytes, socket.socket], client_address: object) -> None:
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self.slots.release()
+
+    def handle_error(self, request: object, client_address: object) -> None:
+        # A handshake that failed or timed out, or a client that went away: one line, not a traceback.
+        address = client_address[0] if isinstance(client_address, tuple) else client_address
+        print(printable(f"{address} connection dropped"), flush=True)
+
+
+def make_server(config: Config, host: str, port: int, cert: Path, key: Path) -> Server:
     """The server, with TLS 1.2 or newer and the Dashboard's certificate. It serves nothing
     without TLS."""
     auth = Auth(config.state)
     if auth.ensure():
         print(f"ok3d-dashboard: made a password; it's in {config.state / 'password'}", flush=True)
     handler = type("DashboardHandler", (Handler,), {"config": config, "auth": auth})
-    server = ThreadingHTTPServer((host, port), handler)
+    server = Server((host, port), handler)
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     context.minimum_version = ssl.TLSVersion.TLSv1_2
     context.load_cert_chain(cert, key)
-    server.socket = context.wrap_socket(server.socket, server_side=True)
+    # The handshake waits for each connection's own thread (Handler.setup).
+    server.socket = context.wrap_socket(server.socket, server_side=True, do_handshake_on_connect=False)
     return server
