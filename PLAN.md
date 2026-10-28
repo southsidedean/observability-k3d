@@ -384,7 +384,7 @@ turn up. Production moves to ok3d at 0.4.0.
 ### 0.4: Metrics, alerts, and a safe front door (production moves here)
 
 - The simulated network and `ok3d demo`, which the smoke test and the screenshots use from
-  here on. `scripts/screenshots.sh`, with Grafana's dashboards as its first pages.
+  here on.
 - Metrics: kube-prometheus-stack with volumes bound to the data root's folders by label, the
   k3s scrapes off, the blackbox exporter with `icmp` and `NET_RAW`, and unpoller with DPI
   metrics off by default. Probes and scrape targets from `devices.yaml`.
@@ -398,8 +398,9 @@ turn up. Production moves to ok3d at 0.4.0.
   Prometheus, and Alertmanager (both behind basic auth until 0.8). The authority's
   certificate on a download page.
 - Retire the old stack: `vars.sh`, the setup script, kgateway, loki-stack, and the old
-  manifests go. `docs/upgrading.md` covers the move: Grafana's database and Prometheus's
-  history carry over, and old Loki data doesn't (the storage format changed).
+  manifests go. `docs/upgrading.md` covers the move, which starts fresh (decided
+  2026-10-28): old series don't match ok3d's labels, so carrying old Prometheus history or
+  Grafana's database is an optional, untested step, and old Loki data can't come across.
 - Test: every target in `devices.yaml` shows as up or down, `ok3d test --send-test-alert`
   reaches your phone, nothing answers on the network except through the gateway and syslog,
   and a recreated cluster keeps its history.
@@ -413,6 +414,8 @@ turn up. Production moves to ok3d at 0.4.0.
   (Apply stays off until Check finds no problems, asks first when it would stop something,
   and keeps the settings from before), What's next, and upgrades (back up, recreate from the
   new release, check). Each choice shown as its `ok3d` command.
+- `scripts/screenshots.sh` (moved from 0.4, decided 2026-10-28), with Grafana's dashboards
+  and the Dashboard's pages as its first shots, so one script covers both.
 - The helper, and its tests for every request it must refuse.
 - Test: from a bare test VM, the installer and the Dashboard alone give the 0.4 stack, with
   no terminal after the installer, and the upgrade from 0.4 works from the Dashboard.
