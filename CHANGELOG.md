@@ -15,6 +15,18 @@ in 0.4. [PLAN.md](PLAN.md) has the roadmap.
 - Tests check that nothing in the repository describes a real home network, that every link
   in the docs leads somewhere, and that no test reaches the network.
 - Renovate keeps the pinned versions current.
+- `./ok3d check` says whether this machine is ready and the settings are valid. `./ok3d apply`
+  makes the data root's folders, ok3d's own certificate authority, and the k3d cluster, then
+  deploys two Helm releases: `ok3d-platform` (cert-manager) and `ok3d` (the namespaces and the
+  web pages' certificate). `./ok3d delete` deletes the cluster and keeps the data root, so
+  `./ok3d apply` brings it back.
+- Settings live in `settings.yaml`, started from `settings.example.yaml`. A schema refuses
+  values that can't work, with the reason, before anything changes. Devices and secrets have
+  examples too (`devices.example.yaml`, `.env.example`), for the releases that use them.
+- The certificate authority can only vouch for names under your ok3d domain, so trusting it
+  on a device can't let it impersonate any other site.
+- Every ok3d namespace refuses pods that run as root, keep capabilities, or can escalate
+  their privileges (Kubernetes' restricted Pod Security Standard).
 - `tests/vm/cloud-init.yaml` makes the test VM: a generic Ubuntu server with ok3d's
   prerequisites.
 - `SECURITY.md`, `CONTRIBUTING.md`, and templates for pull requests and issues.
