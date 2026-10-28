@@ -48,6 +48,8 @@ class Dashboard:
         context = ssl.create_default_context()
         context.check_hostname = False
         context.verify_mode = ssl.CERT_NONE
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+        context.minimum_version = ssl.TLSVersion.TLSv1_2
         conn = http.client.HTTPSConnection("127.0.0.1", self.port, context=context, timeout=10)
         conn.request(method, path, body=body.encode() or None, headers=headers or {})
         response = conn.getresponse()
@@ -352,6 +354,7 @@ def test_control_characters_never_reach_the_log(dash: Dashboard, capsys: pytest.
     context = ssl.create_default_context()
     context.check_hostname = False
     context.verify_mode = ssl.CERT_NONE
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
     with socket.create_connection(("127.0.0.1", dash.port)) as raw, context.wrap_socket(raw) as tls:
         tls.sendall(b"GET /\x1b[31mred HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n")
         while tls.recv(4096):
