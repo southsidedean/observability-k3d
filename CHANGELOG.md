@@ -1,9 +1,11 @@
 # Changelog
 
-## 0.3.0 (unreleased)
+## 0.3.0 (2026-10-27)
 
-The start of the rebuild as ok3d. This release sets up the project itself; the stack arrives
-in 0.4. [PLAN.md](PLAN.md) has the roadmap.
+The start of the rebuild as ok3d. This release sets up the project and its foundation: `ok3d`
+makes the cluster and its own certificate authority, and keeps both across a rebuild. The
+monitoring arrives in 0.4, which is the first release to run in place of the old stack.
+[PLAN.md](PLAN.md) has the roadmap.
 
 ### Changes
 
