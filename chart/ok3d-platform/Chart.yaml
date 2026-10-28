@@ -11,8 +11,8 @@ apiVersion: v2
 name: ok3d-platform
 description: The definitions and controllers the ok3d chart builds on.
 type: application
-version: 0.3.0-dev0
-appVersion: 0.3.0.dev0
+version: 0.3.0
+appVersion: 0.3.0
 home: https://github.com/southsidedean/observability-k3d
 dependencies:
   # Issues the web pages' certificates, from ok3d's own authority (and, from 1.1, from

@@ -7,6 +7,6 @@ name: ok3d
 description: A home network operations center on k3d, with AI agents.
 type: application
 # The chart's version follows ok3d's own.
-version: 0.3.0-dev0
-appVersion: 0.3.0.dev0
+version: 0.3.0
+appVersion: 0.3.0
 home: https://github.com/southsidedean/observability-k3d
