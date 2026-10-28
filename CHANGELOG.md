@@ -1,5 +1,7 @@
 # Changelog
 
+## 0.5.0 (unreleased)
+
 ## 0.4.0 (2026-10-28)
 
 ### Upgrading from the old stack

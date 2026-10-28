@@ -4,14 +4,14 @@ Where ok3d is, release by release. Every pull request updates this page when it 
 starts, or changes something here. [PLAN.md](../PLAN.md#roadmap) has the detail of each
 release and the reasons behind it.
 
-**Now:** 0.4.0 is being released. Production moves to ok3d once it is.
+**Now:** 0.4.0 is released, and production is moving to it. 0.5.0 is in progress.
 
 | Release | What it brings | Status |
 |---|---|---|
 | 0.2.0 | The old stack's last version | Released ([v0.2.0](https://github.com/southsidedean/observability-k3d/tree/v0.2.0)) |
 | 0.3.0 | Groundwork: CI, hooks, tests, the charts, the `ok3d` command, the certificate authority | Released ([v0.3.0](https://github.com/southsidedean/observability-k3d/releases/tag/v0.3.0)) |
-| 0.4.0 | Metrics, alerts that reach you, and a safe front door | In progress |
-| 0.5.0 | The Dashboard: set up and change ok3d from a web page, and screenshots in the docs | Planned |
+| 0.4.0 | Metrics, alerts that reach you, and a safe front door | Released ([v0.4.0](https://github.com/southsidedean/observability-k3d/releases/tag/v0.4.0)) |
+| 0.5.0 | The Dashboard: set up and change ok3d from a web page, and screenshots in the docs | In progress |
 | 0.6.0 | Logs and changes: syslog, host logs, what-changed markers, new devices | Planned |
 | 0.7.0 | The NOC: the board, alerts that know the layout, the internet link's record, backups | Planned |
 | 0.8.0 | One sign-in for every page, the mesh, and traces | Planned |
@@ -31,4 +31,5 @@ release and the reasons behind it.
 | NetworkPolicies: inside the cluster, each part accepts only what it should | Done ([#16](https://github.com/southsidedean/observability-k3d/pull/16)) |
 | Screenshots of the pages for the docs (`scripts/screenshots.sh` on the test VM) | Moved to 0.5 |
 | Retire the old stack, and the guide for moving from it | Done ([#17](https://github.com/southsidedean/observability-k3d/pull/17)) |
-| Release 0.4.0, install it on the test VM, then move production to it | In progress |
+| Release 0.4.0 ([#18](https://github.com/southsidedean/observability-k3d/pull/18)), installed on the test VM from its base snapshot | Done |
+| Move production to 0.4.0 | In progress |
