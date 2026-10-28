@@ -62,7 +62,7 @@ The helper makes both folders when it starts, readable only by you.
    exit=0
    finished=2026-10-28T18:05:12Z
 
-   PASS  the settings in /home/you/ok3d/settings.yaml
+   PASS  the settings in ~/ok3d/settings.yaml
    ...
    ```
 

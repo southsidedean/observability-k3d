@@ -9,6 +9,11 @@
   exactly one of those two. The Dashboard that uses it comes later in 0.5.
   [docs/helper-under-the-hood.md](docs/helper-under-the-hood.md) says how it works.
 
+### Fixes
+
+- `.env.example` no longer says ok3d reads none of its secrets: 0.4 reads all but the agents'
+  key.
+
 ## 0.4.0 (2026-10-28)
 
 ### Upgrading from the old stack
