@@ -2,6 +2,13 @@
 
 ## 0.4.0 (unreleased)
 
+### Upgrading from the old stack
+
+The old stack (`vars.sh`, `scripts/cluster-setup-k3d-observability-everything.sh`, and
+`manifests/`) is gone. [docs/upgrading.md](docs/upgrading.md#from-the-old-stack-v020-and-before)
+covers moving to ok3d: the settings that replace `vars.sh`, bringing Prometheus's history
+across, and Grafana.
+
 ### Changes
 
 - A simulated network, for trying ok3d before pointing it at your own and for its tests and
@@ -39,6 +46,8 @@
 - Inside the cluster, each of ok3d's namespaces turns away every connection it doesn't
   expect: the gateway may reach Grafana's, Prometheus's, and Alertmanager's pages and
   nothing else, and a pod outside ok3d can reach none of them directly.
+- A new README, and [docs/upgrading.md](docs/upgrading.md) for new releases and for moving
+  from the old stack.
 - ok3d leaves out Kubernetes' own internal metrics, which k3s serves in bulk: an empty
   cluster now keeps about 5,000 series instead of about 100,000.
 

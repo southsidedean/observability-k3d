@@ -1,8 +1,7 @@
 """The docs hold together: every link leads somewhere, every image says what it shows, every
 diagram's images match its current source, and the house style holds (no em or en dashes).
 
-The vendored Grafana dashboards are left out of the style check: they're Grafana.com's text,
-not ours.
+The UniFi dashboards are left out of the style check: they're Grafana.com's text, not ours.
 """
 
 from __future__ import annotations
@@ -14,7 +13,7 @@ import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-VENDORED = "manifests/monitoring/dashboards/"
+VENDORED = "chart/ok3d/dashboards/unifi-"
 
 # Markdown links and images: [text](target) and ![alt](target). HTML images: <img ... >.
 LINK = re.compile(r"(!?)\[([^\]]*)\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")

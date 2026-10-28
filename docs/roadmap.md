@@ -30,5 +30,5 @@ release and the reasons behind it.
 | The front door: HTTPS through agentgateway, Grafana and its dashboards, one admin login, the certificate download | Done ([#15](https://github.com/southsidedean/observability-k3d/pull/15)) |
 | NetworkPolicies: inside the cluster, each part accepts only what it should | In progress |
 | Screenshots of the pages for the docs (`scripts/screenshots.sh` on the test VM) | Planned |
-| Retire the old stack, and the guide for moving from it | Planned |
+| Retire the old stack, and the guide for moving from it | In progress |
 | Release 0.4.0, install it on the test VM, then move production to it | Planned |
