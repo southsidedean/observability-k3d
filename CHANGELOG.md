@@ -1,5 +1,7 @@
 # Changelog
 
+## 0.4.0 (unreleased)
+
 ## 0.3.0 (2026-10-27)
 
 The start of the rebuild as ok3d. This release sets up the project and its foundation: `ok3d`

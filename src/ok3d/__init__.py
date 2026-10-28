@@ -6,4 +6,4 @@ arrives in the release the roadmap in PLAN.md gives it.
 
 # The version every part reports. A release pull request sets it; the next pull request
 # moves it on to the following version's .dev0.
-__version__ = "0.3.0"
+__version__ = "0.4.0.dev0"
