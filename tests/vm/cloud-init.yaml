@@ -1,0 +1,45 @@
+#cloud-config
+# The ok3d test VM: a generic home server with ok3d's prerequisites and nothing of ok3d
+# itself. Used for install tests, upgrade tests, and screenshots. Make one with Multipass:
+#   multipass launch 24.04 --name noc-test --cpus 8 --memory 16G --disk 80G \
+#     --cloud-init tests/vm/cloud-init.yaml --timeout 1800
+# Then stop it and take the clean snapshot that every test run restores first:
+#   multipass stop noc-test && multipass snapshot noc-test --name base
+# Before each install test or screenshot run, go back to it:
+#   multipass stop noc-test && multipass restore noc-test.base --destructive && multipass start noc-test
+# After a release is installed, keep a snapshot of it for upgrade tests:
+#   multipass stop noc-test && multipass snapshot noc-test --name v0.4.0
+
+package_update: true
+package_upgrade: true
+packages:
+  - ca-certificates
+  - curl
+  - git
+  - jq
+  - python3
+  - python3-venv
+
+write_files:
+  # Two k3d clusters on one host run out of the default inotify instances (128), and
+  # ok3d's host check asks for at least these.
+  - path: /etc/sysctl.d/60-ok3d-inotify.conf
+    content: |
+      fs.inotify.max_user_instances = 1024
+      fs.inotify.max_user_watches = 1048576
+
+runcmd:
+  - sysctl --system
+  # Docker, from Docker's own packages, and the default user in its group.
+  - curl -fsSL https://get.docker.com | sh
+  - usermod -aG docker ubuntu
+  # k3d 5.9 or newer runs the Kubernetes 1.37 kagent 1.0 needs.
+  - curl -fsSL https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | TAG=v5.9.0 bash
+  # Helm 4, the version the charts are tested with.
+  - curl -fsSL https://get.helm.sh/helm-v4.3.1-linux-amd64.tar.gz | tar -xz -C /tmp linux-amd64/helm
+  - install -m 0755 /tmp/linux-amd64/helm /usr/local/bin/helm
+  # kubectl, the current stable release.
+  - curl -fsSLo /usr/local/bin/kubectl "https://dl.k8s.io/release/$(curl -fsSL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+  - chmod 0755 /usr/local/bin/kubectl
+  # The data root, empty, on the VM's own disk (not overlay).
+  - install -d -o ubuntu -g ubuntu -m 0755 /srv/ok3d

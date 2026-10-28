@@ -1,0 +1,7 @@
+# Blank issues are allowed for anything the forms don't cover. Security problems go to a
+# private report instead of a public issue.
+blank_issues_enabled: true
+contact_links:
+  - name: Report a security problem privately
+    url: https://github.com/southsidedean/observability-k3d/security/advisories/new
+    about: Please don't open a public issue for security problems.

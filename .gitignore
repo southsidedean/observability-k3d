@@ -1,23 +1,43 @@
-# Backup files
-*.bak
-
-# Environment files
+# Your own setup. None of it is ever committed; the repository carries a commented example of
+# each (settings.example.yaml, devices.example.yaml, .env.example). The pre-commit hook
+# refuses these too, in case one is ever added with --force.
+settings.yaml
+devices.yaml
+users.yml
 .env
 .env.*
+!.env.example
+local/
 
-# macOS
-.DS_Store
+# Keys and certificates: the certificate authority and everything it issues stay in the
+# data root, never in the repository.
+*.pem
+*.key
+*.p12
 
-# Editor and tool files
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.coverage
+build/
+dist/
+
+# Backup and temporary files
+*.bak
+*.tmp
+*~
 *.swp
 *.swo
-*~
+
+# macOS, editors, and tools
+.DS_Store
 .idea/
 .vscode/
 .claude/
-
-# Temporary files
-*.tmp
-
-# Claude files
 claude-session.txt

@@ -1,0 +1,17 @@
+# The form for suggesting something ok3d could do.
+name: Idea or request
+description: Something ok3d could watch, alert on, or do better.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like ok3d to do?
+      description: What you're trying to do, and how ok3d gets in the way or could help.
+    validations:
+      required: true
+  - type: textarea
+    id: network
+    attributes:
+      label: Your network, if it matters
+      description: The gear involved (a UniFi gateway, a NAS, a UPS), without names or addresses.

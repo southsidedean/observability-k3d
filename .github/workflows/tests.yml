@@ -1,0 +1,96 @@
+name: tests
+
+# The checks every pull request must pass before it can merge (each job is a required check
+# on main). scripts/check.sh runs the same checks locally. Jobs for the charts, the alert
+# rules, the dashboards, the images, the docs' generated pages, and the end-to-end smoke test
+# join this file in the releases that bring what they check (PLAN.md, "Workflows").
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # Weekly, so a new release of a tool or of Python that breaks something shows up even in a
+  # quiet week.
+  schedule:
+    - cron: "23 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push to the same pull request replaces the older run. Each push to main gets a run
+# of its own, so none is skipped when merges come close together.
+concurrency:
+  group: tests-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  lint:
+    name: lint and security checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.x"
+      - run: python -m pip install -e ".[dev]"
+      - name: ruff (bugs and risky code; settings in pyproject.toml)
+        run: python -m ruff check src tests
+      - name: bandit (security problems in the package)
+        run: python -m bandit -q -c pyproject.toml -r src
+      - name: mypy (types, strict)
+        run: python -m mypy
+      # shellcheck comes with the runner.
+      - name: shellcheck (the scripts and git hooks, as POSIX sh)
+        run: shellcheck -s sh scripts/check.sh .githooks/*
+      - name: zizmor (these workflows' security)
+        run: zizmor --offline --min-severity medium .github/workflows
+      # actionlint, pinned to a release and checked against that release's published checksum.
+      - name: actionlint (mistakes in these workflows)
+        run: |
+          curl -fsSLo "$RUNNER_TEMP/actionlint.tgz" \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+          echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  $RUNNER_TEMP/actionlint.tgz" | sha256sum -c
+          tar -xzf "$RUNNER_TEMP/actionlint.tgz" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint"
+      # Node.js comes with the runner. The validator's version is pinned like everything else.
+      - name: Renovate's settings
+        run: npx --yes --package renovate@44.155.1 -- renovate-config-validator --strict
+
+  pytest:
+    name: pytest (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        # The oldest Python ok3d supports (Ubuntu 24.04's), and the newest release.
+        python: ["3.12", "3.x"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m pip install -e ".[dev]"
+      - name: pytest, with coverage (lines the tests never run are listed, for reading)
+        run: python -m pytest -q --cov=ok3d --cov-report=term-missing:skip-covered
+
+  # The scripts' and hooks' macOS branches under macOS's own sh and tools, which the Linux
+  # runs only imitate.
+  pytest-macos:
+    name: pytest (macOS)
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.x"
+      - run: python -m pip install -e ".[dev]"
+      - run: python -m pytest -q
