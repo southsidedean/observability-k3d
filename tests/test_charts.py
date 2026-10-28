@@ -517,3 +517,19 @@ def test_ordinary_device_addresses_are_fine(tmp_path: Path, address: str) -> Non
     devices = tmp_path / "devices.yaml"
     devices.write_text(f"devices:\n  - name: d\n    address: {address}\n    role: other\n    checks: [ping]\n")
     assert ok3d_validate("devices", str(devices)).returncode == 0
+
+
+
+def test_grafana_gets_time_for_its_first_start() -> None:
+    # On a slow disk, Grafana's first start (making its database) took minutes, and the
+    # liveness probe restarted it partway, again and again. A startup probe holds liveness off.
+    import yaml
+
+    for doc in yaml.safe_load_all(render()):
+        if doc and doc.get("kind") == "Deployment" and doc["metadata"]["name"] == "ok3d-grafana":
+            grafana = next(c for c in doc["spec"]["template"]["spec"]["containers"] if c["name"] == "grafana")
+            probe = grafana["startupProbe"]
+            assert probe["httpGet"]["path"] == "/api/health"
+            assert probe["periodSeconds"] * probe["failureThreshold"] >= 600
+            return
+    pytest.fail("no Grafana Deployment")

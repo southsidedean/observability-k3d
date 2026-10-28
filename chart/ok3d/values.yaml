@@ -131,6 +131,15 @@ kube-prometheus-stack:
     enabled: false
   grafana:
     enabled: true
+    # Grafana's first start makes its database, hundreds of steps that take minutes on a slow
+    # disk. Until /api/health answers, this probe holds off the liveness probe (which would
+    # restart Grafana partway, so it starts over), for up to 15 minutes.
+    startupProbe:
+      httpGet:
+        path: /api/health
+        port: grafana
+      periodSeconds: 10
+      failureThreshold: 90
     # kube-prometheus-stack's own dashboards are about Kubernetes' internals, mostly from the
     # metrics ok3d leaves out. ok3d's (templates/dashboards.yaml) are loaded instead.
     defaultDashboardsEnabled: false
