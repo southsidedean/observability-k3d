@@ -148,3 +148,40 @@ jobs:
           python-version: "3.x"
       - run: python -m pip install -e ".[dev]"
       - run: python -m pytest -q
+
+  # The Dashboard's image, built and tried the way the installer runs it: read-only, with no
+  # capabilities. images.yml builds and publishes both architectures after a merge; this
+  # catches a broken image before one.
+  dashboard-image:
+    name: dashboard image
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build it
+        run: docker build -f Dockerfile.dashboard -t ok3d-dashboard:ci .
+      - name: It serves its sign-in page over HTTPS, read-only, as a non-root user
+        run: |
+          mkdir -p "$RUNNER_TEMP/state/tls" "$RUNNER_TEMP/helper"
+          openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 1 -subj /CN=localhost \
+            -keyout "$RUNNER_TEMP/state/tls/dashboard.key" -out "$RUNNER_TEMP/state/tls/dashboard.crt" 2>/dev/null
+          chmod -R a+rwX "$RUNNER_TEMP/state" "$RUNNER_TEMP/helper"
+          docker run -d --name dash --read-only --cap-drop ALL --security-opt no-new-privileges \
+            -p 127.0.0.1:8444:8444 -v "$RUNNER_TEMP/state:/state" -v "$RUNNER_TEMP/helper:/helper:ro" ok3d-dashboard:ci
+          for _ in $(seq 1 30); do curl -sk -o /dev/null https://127.0.0.1:8444/sign-in && break; sleep 1; done
+          test "$(curl -sk -o /dev/null -w '%{http_code}' https://127.0.0.1:8444/sign-in)" = 200
+          test "$(curl -sk -o /dev/null -w '%{http_code}' https://127.0.0.1:8444/)" = 303
+          test "$(docker exec dash id -u)" != 0
+          test -s "$RUNNER_TEMP/state/password"
+          docker logs dash
+      - name: No fixable high or critical CVEs (known exceptions in .trivyignore)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ok3d-dashboard:ci
+          scanners: vuln,secret
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          trivyignores: .trivyignore
+          exit-code: "1"

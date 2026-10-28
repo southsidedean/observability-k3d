@@ -1,0 +1,39 @@
+name: image scan
+
+# Scans the published Dashboard image (ghcr.io/southsidedean/ok3d-dashboard:latest) every week,
+# so CVEs found after a release show up in the repository's Security tab (Code scanning) even
+# when nothing in ok3d changed. Each newly pushed image is scanned by images.yml.
+
+on:
+  schedule:
+    - cron: "41 6 * * 2"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Trivy scan of the published image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ghcr.io/${{ github.repository_owner }}/ok3d-dashboard:latest
+          scanners: vuln,secret
+          severity: MEDIUM,HIGH,CRITICAL
+          trivyignores: .trivyignore
+          format: sarif
+          output: trivy.sarif
+      - name: Show the results in the Security tab
+        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
+        with:
+          sarif_file: trivy.sarif
+          category: dashboard-image-release  # :latest, weekly; images.yml's scans of main have their own

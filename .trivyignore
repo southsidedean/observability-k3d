@@ -1,0 +1,2 @@
+# CVEs the image scans (.github/workflows/images.yml, image-scan.yml) may ignore, one per
+# line, each with why and when to look again. Empty: nothing is ignored.

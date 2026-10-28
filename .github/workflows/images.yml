@@ -1,0 +1,165 @@
+name: images
+
+# Builds the Dashboard's image (Dockerfile.dashboard) for amd64 and arm64 and publishes it to
+# ghcr.io/southsidedean/ok3d-dashboard:
+#   a release tag v1.2.3 -> 1.2.3, 1.2, and latest (a test tag like v1.2.3-rc1 -> only 1.2.3-rc1)
+#   main                 -> main (what's merged, before the next release)
+# The installer pulls the release's own version. The in-cluster image (ok3d) joins this file
+# when the first tool that runs in the cluster arrives.
+#
+# Before anything is pushed, both architectures are scanned: a fixable high or critical CVE
+# stops the publish. The pushed image carries an SBOM and build provenance, is attested
+# (gh attestation verify oci://ghcr.io/southsidedean/ok3d-dashboard:<tag> --owner
+# southsidedean), and is scanned again by digest, with the results in the Security tab.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: images-${{ github.ref }}
+  # Not on main: a cancelled run could leave the main tag pushed without its attestation and scan.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/ok3d-dashboard
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+      id-token: write  # to sign the attestation
+      attestations: write
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, '-') }}
+            type=ref,event=branch
+          labels: |
+            org.opencontainers.image.title=ok3d-dashboard
+            org.opencontainers.image.description=The ok3d Dashboard: set up and change your home network operations center from a web page
+            org.opencontainers.image.licenses=AGPL-3.0-only
+      # One base image for the three builds below, by digest: wolfi-base:latest changes often,
+      # and the image pushed should be built on the one the scans saw.
+      - id: base
+        name: Pin the base image for this run
+        env:
+          BASE: cgr.dev/chainguard/wolfi-base:latest
+        run: |
+          digest=$(docker buildx imagetools inspect --raw "$BASE" | sha256sum | cut -d' ' -f1)
+          echo "image=${BASE%:*}@sha256:$digest" >>"$GITHUB_OUTPUT"
+          echo "Base image: ${BASE%:*}@sha256:$digest"
+      - name: Build the amd64 image to scan before anything is pushed
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: Dockerfile.dashboard
+          platforms: linux/amd64
+          load: true
+          pull: true
+          build-args: BASE_IMAGE=${{ steps.base.outputs.image }}
+          tags: ok3d-dashboard-scan:amd64
+          cache-from: type=gha
+      - name: No fixable high or critical CVEs (known exceptions in .trivyignore)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ok3d-dashboard-scan:amd64
+          scanners: vuln,secret
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          trivyignores: .trivyignore
+          exit-code: "1"
+      - name: Build the arm64 image to scan too
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: Dockerfile.dashboard
+          platforms: linux/arm64
+          load: true
+          pull: true
+          build-args: BASE_IMAGE=${{ steps.base.outputs.image }}
+          tags: ok3d-dashboard-scan:arm64
+          cache-from: type=gha
+      - name: No fixable high or critical CVEs on arm64 either (its packages can differ)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ok3d-dashboard-scan:arm64
+          scanners: vuln,secret
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          trivyignores: .trivyignore
+          exit-code: "1"
+      - id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: Dockerfile.dashboard
+          platforms: linux/amd64,linux/arm64
+          push: true
+          pull: true
+          build-args: BASE_IMAGE=${{ steps.base.outputs.image }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          sbom: true
+          provenance: mode=max
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Attest where the image came from
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+  scan:
+    # The image just pushed, by its digest (a scan of :latest could run before a release's
+    # image is there, and scan the one before).
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Trivy scan of the pushed image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}@${{ needs.publish.outputs.digest }}
+          scanners: vuln,secret
+          severity: MEDIUM,HIGH,CRITICAL
+          trivyignores: .trivyignore
+          format: sarif
+          output: trivy.sarif
+      - name: Show the results in the Security tab
+        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
+        with:
+          sarif_file: trivy.sarif
+          category: dashboard-image-main  # this run's image; image-scan.yml's weekly scan of the release has its own
