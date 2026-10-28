@@ -7,6 +7,7 @@ installed; CI installs it.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -364,3 +365,29 @@ def test_the_gateway_reaches_only_the_pages_web_ports() -> None:
     assert [port["port"] for rule in gateway for port in rule["ports"]] == [8443, 15020]
     # Its metrics are for monitoring only.
     assert gateway[1]["from"][0]["namespaceSelector"]["matchLabels"]["kubernetes.io/metadata.name"] == "monitoring"
+
+
+def test_validate_refuses_settings_the_schema_refuses(tmp_path: Path) -> None:
+    # ./ok3d validate, with the real Helm and schema: what the helper runs before it saves a
+    # file the Dashboard sent.
+    good = tmp_path / "good.yaml"
+    good.write_text(EXAMPLE.read_text())
+    bad = tmp_path / "bad.yaml"
+    bad.write_text(EXAMPLE.read_text() + "\ncluster:\n  ports:\n    https: lots\n")
+    def run(*args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run([str(ROOT / "ok3d"), *args], cwd=ROOT, capture_output=True, text=True, check=False)
+
+    assert run("validate", "settings", str(good)).returncode == 0
+    refused = run("validate", "settings", str(bad))
+    assert refused.returncode != 0
+    assert "aren't valid" in refused.stderr
+
+
+def test_validate_refuses_devices_the_schema_refuses(tmp_path: Path) -> None:
+    bad = tmp_path / "devices.yaml"
+    bad.write_text("devices:\n  - name: x\n    address: 192.0.2.1\n    role: toaster\n")
+    env = {**os.environ, "OK3D_SETTINGS": str(EXAMPLE)}
+    result = subprocess.run([str(ROOT / "ok3d"), "validate", "devices", str(bad)], cwd=ROOT,
+                            capture_output=True, text=True, check=False, env=env)  # fmt: skip
+    assert result.returncode == 1
+    assert "FAIL  the devices in" in result.stdout

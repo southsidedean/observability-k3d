@@ -59,8 +59,13 @@ Dashboard's container has been taken over:
 - It renames each request into its own folder, under a new name each time, before opening
   anything, so a link moves as a link and is never followed. It refuses links, hard links,
   folders, and pipes, and never removes a folder someone sent it.
-- It reads at most 4 KB, accepts exactly two fields (`id` and `action`), and runs only
-  `./ok3d check` or `./ok3d apply`, with no arguments from the request.
+- It reads at most 65 KB and accepts a fixed set of fields. The only commands it runs are
+  `./ok3d check`, `./ok3d apply`, and `./ok3d validate` on a file in its own folder, with
+  no arguments from the request.
+- It saves a settings or devices file only after `./ok3d validate` passes it, keeping a
+  copy of the old one. It sets only the secrets listed in `.env.example`, one plain-text
+  line at a time, and never sends a secret back: copies of `.env` go to `local/backups/` in
+  the ok3d checkout, which the Dashboard can't see.
 - It refuses requests older than 5 minutes, and any of the last 100 ids it carried out.
 - Every request it takes gets an answer, from a fixed list, that repeats nothing from the
   request but a valid id.

@@ -32,7 +32,14 @@ def make_ok3d(tmp_path: Path) -> Path:
     ok3d_dir = tmp_path / "ok3d"
     ok3d_dir.mkdir()
     command = ok3d_dir / "ok3d"
-    command.write_text('#!/bin/sh\necho "$@" >> "$(dirname "$0")/ran"\necho "checked: $1"\n')
+    command.write_text(
+        '#!/bin/sh\necho "$@" >> "$(dirname "$0")/ran"\n'
+        'if [ "$1" = validate ]; then\n'
+        '  if grep -q bad "$3"; then echo "FAIL  the $2 in $3"; exit 1; fi\n'
+        '  echo "PASS  the $2 in $3"; exit 0\n'
+        'fi\n'
+        'echo "checked: $1"\n'
+    )
     command.chmod(0o755)
     return ok3d_dir
 
@@ -90,7 +97,7 @@ def test_a_failing_command_reports_its_exit_status(h: helper.Opened) -> None:
 def test_a_command_that_cant_start_still_gets_an_answer(h: helper.Opened) -> None:
     (h.folders.ok3d_dir / "ok3d").chmod(0o644)
     send(h)
-    assert helper.handle_once(h) == f"couldn't run ./ok3d check for {ID}"
+    assert helper.handle_once(h) == f"couldn't carry out check for {ID}"
     assert {"id": ID, "state": "failed", "reason": "the ok3d command couldn't run"}.items() <= result(h).items()
 
 
@@ -141,10 +148,12 @@ def test_only_the_last_lines_of_output_are_kept(h: helper.Opened) -> None:
         (f"id={ID}\n", "the request is missing a line"),
         (f"id={ID}\naction=check\naction=apply\n", "the request repeats a line"),
         (f"id={ID}\naction=check\nstack=all\n", "the request has a line the helper doesn't know"),
-        (f"id={ID}\n\naction=check\n", "the request has a line the helper doesn't know"),
+        (f"id={ID}\n\naction=check\n", "the request is missing a line"),
         (f"id={ID}\r\naction=check\r\n", "the request's id isn't valid"),
         (f" id={ID}\naction=check\n", "the request has a line the helper doesn't know"),
-        (f"id={ID}\naction=check\n" + "#" * 5000 + "\n", "the request is too big"),
+        (f"id={ID}\naction=check\n" + "#" * 70000 + "\n", "the request is too big"),
+        (f"id={ID}\naction=check\n\nextra", "the request has something after it"),
+        (f"id={ID}\naction=check\nname=NTFY_TOPIC\n", "the request has a line the helper doesn't know"),
         (f"id={ID}\naction=chéck\n", "the request isn't plain text"),
         (f"id={ID}\naction=check\x00\n", "the request asks for something the helper doesn't do"),
     ],
@@ -337,9 +346,13 @@ def test_any_bytes_are_either_a_valid_request_or_refused(data: bytes, age: float
         return
     assert request.action in helper.ACTIONS
     assert helper.ID.fullmatch(request.id)
-    assert data == f"id={request.id}\naction={request.action}\n".encode() or data == (
-        f"action={request.action}\nid={request.id}\n".encode()
-    )
+    if request.action in ("check", "apply"):
+        assert data in (f"id={request.id}\naction={request.action}\n".encode(),
+                        f"action={request.action}\nid={request.id}\n".encode())  # fmt: skip
+        assert request.body == b""
+    if request.action == "set-secret":
+        assert request.name in helper.SECRETS
+        assert helper.SECRET_VALUE.fullmatch(request.body.decode())
 
 
 @settings(max_examples=300, deadline=None)
@@ -377,3 +390,141 @@ def test_it_runs_isolated_with_only_the_standard_library(h: helper.Opened) -> No
     )
     assert out.stdout.strip() == f"ran ./ok3d check for {ID}: exit 0"
     assert ran(h) == ["check"]
+
+
+# Saving settings and devices, and setting secrets.
+
+SETTINGS = "settingsVersion: 1\nhost:\n  dataRoot: /srv/ok3d\n"
+
+
+def ask(h: helper.Opened, head: str, body: str | bytes) -> str | None:
+    data = body.encode() if isinstance(body, str) else body
+    send(h, head.encode() + b"\n" + data)
+    return helper.handle_once(h)
+
+
+def test_a_valid_settings_file_is_checked_then_saved(h: helper.Opened) -> None:
+    (h.folders.ok3d_dir / "settings.yaml").write_text("settingsVersion: 1\n")
+    assert ask(h, f"id={ID}\naction=save-settings\n", SETTINGS) == f"ran save-settings for {ID}: exit 0"
+    saved = h.folders.ok3d_dir / "settings.yaml"
+    assert saved.read_text() == SETTINGS
+    assert stat.S_IMODE(saved.stat().st_mode) == 0o600
+    assert ran(h)[0].startswith("validate settings ")
+    assert "Saved settings.yaml." in (h.folders.own / "result").read_text()
+    # The old one is kept, where the Dashboard can't see it.
+    [backup] = (h.folders.ok3d_dir / "local" / "backups").glob("settings.yaml.*")
+    assert backup.read_text() == "settingsVersion: 1\n"
+    assert not list(os.listdir(h.folders.own / "taken"))
+    assert not (h.folders.own / "staged-settings.yaml").exists()
+
+
+def test_a_settings_file_that_fails_the_check_isnt_saved(h: helper.Opened) -> None:
+    (h.folders.ok3d_dir / "settings.yaml").write_text("settingsVersion: 1\n")
+    ask(h, f"id={ID}\naction=save-settings\n", "settingsVersion: bad\n")
+    assert (h.folders.ok3d_dir / "settings.yaml").read_text() == "settingsVersion: 1\n"
+    answer = result(h)
+    assert answer["exit"] == "1"
+    assert "Not saved: your settings.yaml is unchanged." in (h.folders.own / "result").read_text()
+    assert not (h.folders.ok3d_dir / "local").exists()
+
+
+def test_devices_are_saved_the_same_way(h: helper.Opened) -> None:
+    ask(h, f"id={ID}\naction=save-devices\n", "devices: []\n")
+    assert (h.folders.ok3d_dir / "devices.yaml").read_text() == "devices: []\n"
+    assert ran(h)[0].startswith("validate devices ")
+
+
+def test_only_the_last_backups_are_kept(h: helper.Opened) -> None:
+    for n in range(helper.BACKUPS + 3):
+        ask(h, f"id={n:016x}\naction=save-devices\n", f"devices: []  # {n}\n")
+    backups = list((h.folders.ok3d_dir / "local" / "backups").glob("devices.yaml.*"))
+    assert len(backups) == helper.BACKUPS
+
+
+@pytest.mark.parametrize(
+    ("body", "reason"),
+    [
+        (b"", "the file is empty"),
+        (b"x" * (helper.MAX_FILE + 1), "the file is too big"),
+        (b"devices: []\x00\n", "the file has control characters"),
+        (b"devices: []\r\n", "the file has control characters"),
+        (b"devices: []\x1b[31m\n", "the file has control characters"),
+        ("devices: [] # caf\u00e9\n".encode("latin-1"), "the file isn't UTF-8 text"),
+    ],
+    ids=["empty", "too-big", "nul", "carriage-return", "escape", "latin-1"],
+)
+def test_a_bad_file_is_refused_before_anything_runs(h: helper.Opened, body: bytes, reason: str) -> None:
+    assert ask(h, f"id={ID}\naction=save-devices\n", body) == f"refused a request: {reason}"
+    assert ran(h) == []
+    assert not (h.folders.ok3d_dir / "devices.yaml").exists()
+
+
+def test_a_save_needs_its_file(h: helper.Opened) -> None:
+    send(h, f"id={ID}\naction=save-settings\n")
+    assert helper.handle_once(h) == "refused a request: the request isn't finished"
+
+
+def test_a_secret_is_set_in_dotenv_and_never_answered_back(h: helper.Opened) -> None:
+    env = h.folders.ok3d_dir / ".env"
+    env.write_text("# my notes\nNTFY_TOPIC=old\nSMTP_PASSWORD=keep\nNTFY_TOPIC=older\n")
+    value = "ok3d-7f3k9q2m8x"
+    assert ask(h, f"id={ID}\naction=set-secret\nname=NTFY_TOPIC\n", value) == f"ran set-secret for {ID}: exit 0"
+    assert env.read_text() == f"# my notes\nNTFY_TOPIC={value}\nSMTP_PASSWORD=keep\n"
+    assert stat.S_IMODE(env.stat().st_mode) == 0o600
+    for name in ("result", "output", "seen"):
+        path = h.folders.own / name
+        assert not path.exists() or value not in path.read_text(), name
+    assert result(h)["name"] == "NTFY_TOPIC"
+    assert ran(h) == []
+    [backup] = (h.folders.ok3d_dir / "local" / "backups").glob(".env.*")
+    assert stat.S_IMODE(backup.stat().st_mode) == 0o600
+    assert stat.S_IMODE((h.folders.ok3d_dir / "local" / "backups").stat().st_mode) == 0o700
+
+
+def test_a_secret_is_added_when_dotenv_has_none(h: helper.Opened) -> None:
+    ask(h, f"id={ID}\naction=set-secret\nname=UNIFI_API_KEY\n", "abc123\n")
+    assert (h.folders.ok3d_dir / ".env").read_text() == "UNIFI_API_KEY=abc123\n"
+
+
+def test_an_empty_value_clears_a_secret(h: helper.Opened) -> None:
+    (h.folders.ok3d_dir / ".env").write_text("NTFY_TOKEN=abc\n")
+    ask(h, f"id={ID}\naction=set-secret\nname=NTFY_TOKEN\n", "")
+    assert (h.folders.ok3d_dir / ".env").read_text() == "NTFY_TOKEN=\n"
+
+
+@pytest.mark.parametrize(
+    ("head", "value", "reason"),
+    [
+        (f"id={ID}\naction=set-secret\nname=PATH\n", "x", "the request names a secret the helper doesn't set"),
+        (f"id={ID}\naction=set-secret\nname=ntfy_topic\n", "x", "the request names a secret the helper doesn't set"),
+        (f"id={ID}\naction=set-secret\n", "x", "the request is missing a line"),
+        (f"id={ID}\naction=set-secret\nname=NTFY_TOPIC\n", "two\nlines", "the secret has characters .env can't hold safely"),
+        (f"id={ID}\naction=set-secret\nname=NTFY_TOPIC\n", "a b", "the secret has characters .env can't hold safely"),
+        (f"id={ID}\naction=set-secret\nname=NTFY_TOPIC\n", "$(reboot)", "the secret has characters .env can't hold safely"),
+        (f"id={ID}\naction=set-secret\nname=NTFY_TOPIC\n", "'quoted'", "the secret has characters .env can't hold safely"),
+        (f"id={ID}\naction=set-secret\nname=NTFY_TOPIC\n", "back\\slash", "the secret has characters .env can't hold safely"),
+        (f"id={ID}\naction=set-secret\nname=NTFY_TOPIC\n", "caf\u00e9", "the secret has characters .env can't hold safely"),
+        (f"id={ID}\naction=set-secret\nname=NTFY_TOPIC\n", "x" * 1025, "the secret has characters .env can't hold safely"),
+    ],
+)
+def test_a_bad_secret_is_refused_and_dotenv_is_untouched(h: helper.Opened, head: str, value: str, reason: str) -> None:
+    env = h.folders.ok3d_dir / ".env"
+    env.write_text("NTFY_TOPIC=keep\n")
+    assert ask(h, head, value) == f"refused a request: {reason}"
+    assert env.read_text() == "NTFY_TOPIC=keep\n"
+    assert value not in (h.folders.own / "result").read_text() or value == "x"
+
+
+def test_a_dotenv_that_is_a_link_is_left_alone(h: helper.Opened, tmp_path: Path) -> None:
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.write_text("NTFY_TOPIC=keep\n")
+    (h.folders.ok3d_dir / ".env").symlink_to(elsewhere)
+    ask(h, f"id={ID}\naction=set-secret\nname=NTFY_TOPIC\n", "new")
+    assert result(h)["state"] == "failed"
+    assert elsewhere.read_text() == "NTFY_TOPIC=keep\n"
+
+
+def test_an_id_in_the_body_is_never_taken_for_the_requests(h: helper.Opened) -> None:
+    send(h, b"action=save-devices\n\nid=" + ID.encode() + b"\n")
+    helper.handle_once(h)
+    assert "id" not in result(h)

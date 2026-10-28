@@ -12,6 +12,11 @@
 #                     home network's devices, and a fake UniFi controller. docs/demo.md says
 #                     more. Also: demo down, demo status, demo fail <device>, demo fix <device>.
 #   ./ok3d test-alert Send a test alert through Alertmanager, to check that alerts reach you.
+#   ./ok3d validate settings FILE
+#   ./ok3d validate devices FILE
+#                     Check a settings or devices file that isn't in place yet, the way check
+#                     does (devices against your settings). Changes nothing. The helper runs
+#                     this before it saves a file the Dashboard sent.
 #   ./ok3d version    Print ok3d's version.
 #
 # Settings come from settings.yaml next to this script (start from settings.example.yaml),
@@ -633,6 +638,37 @@ cmd_test_alert() {
 	echo "Sent. It should arrive within a minute, wherever your alerts go (docs/alerts.md)."
 }
 
+# cmd_validate KIND FILE: the same checks check runs on settings.yaml or devices.yaml, on
+# another file, so a new one can be checked before it replaces yours.
+cmd_validate() {
+	kind=${1:-}
+	file=${2:-}
+	if [ -z "$file" ] || [ ! -f "$file" ]; then
+		echo "Usage: ./ok3d validate settings|devices FILE" >&2
+		exit 2
+	fi
+	case "$kind" in
+	settings)
+		settings=$file
+		load_settings
+		pass "the settings in $file"
+		;;
+	devices)
+		load_settings
+		if helm template ok3d chart/ok3d --values "$settings" --values "$file" >/dev/null; then
+			pass "the devices in $file"
+		else
+			fail "the devices in $file (above)"
+			exit 1
+		fi
+		;;
+	*)
+		echo "Usage: ./ok3d validate settings|devices FILE" >&2
+		exit 2
+		;;
+	esac
+}
+
 cmd_version() {
 	sed -n 's/^__version__ = "\(.*\)"$/ok3d \1/p' src/ok3d/__init__.py
 }
@@ -643,6 +679,7 @@ apply) cmd_apply ;;
 delete) cmd_delete "${2:-}" ;;
 demo) cmd_demo "${2:-}" "${3:-}" ;;
 test-alert) cmd_test_alert ;;
+validate) cmd_validate "${2:-}" "${3:-}" ;;
 version | --version) cmd_version ;;
 help | --help | -h) usage ;;
 *)

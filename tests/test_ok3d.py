@@ -402,3 +402,26 @@ def test_the_admin_password_can_come_from_dotenv(env: dict[str, str], tmp_path: 
 
     pages = [urlsplit(word) for line in result.stdout.splitlines() for word in line.split() if "://" in word]
     assert any((p.scheme, p.hostname, p.port, p.path) == ("https", "grafana.noc.home.arpa", 8443, "/") for p in pages)
+
+
+def test_validate_checks_a_settings_file_that_isnt_in_place(env: dict[str, str], tmp_path: Path) -> None:
+    other = tmp_path / "new-settings.yaml"
+    other.write_text("settingsVersion: 1\n")
+    result = ok3d(env, "validate", "settings", str(other))
+    assert result.returncode == 0, result.stderr
+    assert f"PASS  the settings in {other}" in result.stdout
+    assert any(f"--values {other}" in line for line in calls(env))
+
+
+def test_validate_checks_devices_against_your_settings(env: dict[str, str], tmp_path: Path) -> None:
+    other = tmp_path / "new-devices.yaml"
+    other.write_text("devices: []\n")
+    result = ok3d(env, "validate", "devices", str(other))
+    assert result.returncode == 0, result.stderr
+    assert any(f"--values {env['OK3D_SETTINGS']} --values {other}" in line for line in calls(env))
+
+
+@pytest.mark.parametrize("args", [["validate"], ["validate", "settings"], ["validate", "secrets", "x"],
+                                  ["validate", "settings", "/no/such/file"]])  # fmt: skip
+def test_validate_needs_a_kind_and_a_file(env: dict[str, str], args: list[str]) -> None:
+    assert ok3d(env, *args).returncode == 2
