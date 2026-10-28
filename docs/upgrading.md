@@ -24,17 +24,17 @@ authority come through unchanged, so your devices keep trusting the pages.
 ## From the old stack (v0.2.0 and before)
 
 The old stack (`scripts/cluster-setup-k3d-observability-everything.sh` and `vars.sh`) is
-gone from 0.4. Moving to ok3d takes a few steps, because the two keep their data in
-different layouts, and ok3d makes its own certificate authority and admin login.
+gone from 0.4. ok3d starts fresh: a new data folder, its own certificate authority, its own
+admin login, and its own dashboards.
 
-### 1. Stop the old cluster
+### 1. Stop the old cluster, if it's still running
 
 ```sh
+k3d cluster list
 k3d cluster delete observability-cluster   # CLUSTER_NAME from your old vars.sh
 ```
 
-Its data folder (`PERSISTENT_DATA_PATH` in `vars.sh`) stays as it was. Prometheus's history
-goes with the cluster, unless it's in that folder (step 3 says how to tell).
+Deleting it leaves its data folder (`PERSISTENT_DATA_PATH` in `vars.sh`) as it was.
 
 ### 2. Make ok3d's settings
 
@@ -51,52 +51,44 @@ The pages move too: from `http://<server>:7001/grafana` to
 `https://grafana.noc.home.arpa:8443/` and its neighbours ([opening the pages](certificate.md)).
 Syslog on port 30114 comes back in 0.6.
 
-### 3. Bring Prometheus's history across (optional)
-
-Early versions of the old stack kept Prometheus's history in the data folder, in
-`prometheus/prometheus-db/`. v0.2.0 kept it inside the cluster instead, so if that folder
-isn't there, the history went with the cluster and there's nothing to bring.
-
-If it's there, copy it into `prometheus/` under ok3d's data root before the first
-`./ok3d apply`, and make it yours:
-
-```sh
-mkdir -p /srv/ok3d/prometheus
-sudo cp -a /old/data/prometheus/prometheus-db/. /srv/ok3d/prometheus/
-sudo chown -R "$USER": /srv/ok3d/prometheus
-```
-
-Prometheus reads the old history as it is, and keeps what fits in `metrics.retention`. Old
-series keep their old labels, so the new dashboards and alerts start from what ok3d
-collects.
-
-### 4. Grafana: start fresh
-
-ok3d brings its own dashboards, so starting Grafana with an empty database is simplest. If
-you edited dashboards in the old Grafana, export them first (each dashboard's Share menu,
-Export, Save to file) and import them into the new one.
-
-To keep the old database instead, copy `grafana/grafana.db` into the data root's `grafana/`
-folder before the first apply, make it yours (the old Grafana ran as user 472, so
-`sudo chown "$USER": grafana.db`), and then reset the admin password, since
-Grafana reads ok3d's only when it makes a new database:
-
-```sh
-kubectl --context k3d-ok3d -n monitoring exec deploy/ok3d-grafana -c grafana -- \
-  grafana cli admin reset-admin-password "$(cat /srv/ok3d/admin-password)"
-```
-
-### 5. Logs
-
-The old Loki's data doesn't carry over: its storage format is older than the one ok3d's
-Loki uses from 0.6. Its logs stay in the old folder if you want them.
-
-### 6. Apply
+### 3. Apply
 
 ```sh
 ./ok3d check
 ./ok3d apply
 ```
 
-This guide hasn't yet been tried on a real old stack's data: back up the old data folder
-first, and keep it until ok3d is working.
+Keep the old data folder for a week or two, in case you want something from it, then delete
+it.
+
+### Keeping old history (optional, untested)
+
+The old history is rarely worth keeping: its labels don't match what ok3d collects, so
+ok3d's dashboards and alerts won't show it. If you want it anyway, copy it into the new data
+root before the first `./ok3d apply`. Nobody has tried this on a real old stack's data yet,
+so keep the old folder until it works.
+
+- **Prometheus:** only early versions of the old stack kept history in the data folder, in
+  `prometheus/prometheus-db/`. v0.2.0 kept it inside the cluster, so it went when the cluster
+  did. If the folder is there:
+
+  ```sh
+  mkdir -p /srv/ok3d/prometheus
+  sudo cp -a /old/data/prometheus/prometheus-db/. /srv/ok3d/prometheus/
+  sudo chown -R "$USER": /srv/ok3d/prometheus
+  ```
+
+- **Grafana:** if you made dashboards by hand, it's simpler to export each one (its Share
+  menu, Export, Save to file) and import it into ok3d's Grafana. To keep the whole database
+  instead, copy `grafana/grafana.db` into the new data root's `grafana/` folder, make it
+  yours (`sudo chown "$USER": grafana.db`, since the old Grafana ran as user 472), and after
+  applying, reset the admin password, because Grafana only takes ok3d's when it makes a new
+  database:
+
+  ```sh
+  kubectl --context k3d-ok3d -n monitoring exec deploy/ok3d-grafana -c grafana -- \
+    grafana cli admin reset-admin-password "$(cat /srv/ok3d/admin-password)"
+  ```
+
+- **Logs:** the old Loki's data can't come across: ok3d's Loki, from 0.6, uses a newer
+  storage format.

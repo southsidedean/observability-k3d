@@ -6,8 +6,7 @@
 
 The old stack (`vars.sh`, `scripts/cluster-setup-k3d-observability-everything.sh`, and
 `manifests/`) is gone. [docs/upgrading.md](docs/upgrading.md#from-the-old-stack-v020-and-before)
-covers moving to ok3d: the settings that replace `vars.sh`, bringing Prometheus's history
-across, and Grafana.
+covers moving to ok3d: start fresh, with the settings that replace `vars.sh`.
 
 ### Changes
 
