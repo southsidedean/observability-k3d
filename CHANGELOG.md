@@ -2,6 +2,11 @@
 
 ## 0.5.0 (unreleased)
 
+### Fixes
+
+- `.env.example` no longer says ok3d reads none of its secrets: 0.4 reads all but the agents'
+  key.
+
 ## 0.4.0 (2026-10-28)
 
 ### Upgrading from the old stack
