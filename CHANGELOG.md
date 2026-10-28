@@ -2,6 +2,14 @@
 
 ## 0.4.0 (unreleased)
 
+### Changes
+
+- A simulated network, for trying ok3d before pointing it at your own and for its tests and
+  screenshots: `./ok3d demo up` starts a router, a switch, two access points, a NAS, a printer,
+  and a fake UniFi controller that reports on them under unpoller's metric names, on addresses
+  set aside for documentation. `./ok3d demo fail <device>` takes one down and
+  `./ok3d demo fix <device>` brings it back. [docs/demo.md](docs/demo.md) has the details.
+
 ## 0.3.0 (2026-10-27)
 
 The start of the rebuild as ok3d. This release sets up the project and its foundation: `ok3d`

@@ -8,6 +8,9 @@
 #                     different.
 #   ./ok3d delete     Delete the cluster. The data root stays, so `./ok3d apply` brings
 #                     everything back. Asks first; --yes skips the question.
+#   ./ok3d demo up    Start the simulated network: a few small containers that stand in for a
+#                     home network's devices, and a fake UniFi controller. docs/demo.md says
+#                     more. Also: demo down, demo status, demo fail <device>, demo fix <device>.
 #   ./ok3d version    Print ok3d's version.
 #
 # Settings come from settings.yaml next to this script (start from settings.example.yaml),
@@ -32,8 +35,21 @@ min_watches=1048576
 # agents off (PLAN.md, "The host").
 warn_memory_gib=7
 
+# The simulated network (docs/demo.md): its devices are listed in demo/network.tsv, on a Docker
+# network of their own in 198.51.100.0/24, a range reserved for documentation. The gateway
+# Docker needs takes .254, leaving .1 for the simulated router. Docker gives addresses it
+# picks itself (to the cluster's node, say) only from .192 to .223, so it never hands out a
+# stopped device's fixed address. Every container runs this image, pinned by digest
+# (Renovate proposes newer ones).
+demo_image=python:3.12.13-alpine3.22@sha256:a190708a2dec1bd18b1decb539f8e8f5407abaa9bf39cacda583f7f8c11db322
+demo_network=ok3d-demo
+demo_subnet=198.51.100.0/24
+demo_gateway=198.51.100.254
+demo_dynamic=198.51.100.192/27
+
+# The comment at the top of this file, from its second line to its last, without the #s.
 usage() {
-	sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
+	awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"
 }
 
 failures=0
@@ -233,11 +249,25 @@ deploy() {
 		--for=condition=Ready --timeout=120s
 }
 
+# Puts the cluster's node on the demo network, if both are there, so Prometheus can reach the
+# simulated devices. A new cluster needs this again, so apply and demo up both call it.
+connect_demo() {
+	docker network inspect "$demo_network" >/dev/null 2>&1 || return 0
+	node="k3d-$CLUSTER_NAME-server-0"
+	docker container inspect "$node" >/dev/null 2>&1 || return 0
+	if ! docker network inspect "$demo_network" --format '{{range .Containers}}{{.Name}} {{end}}' |
+		grep -qw "$node"; then
+		docker network connect "$demo_network" "$node"
+		echo "The cluster's node is on the demo network."
+	fi
+}
+
 cmd_apply() {
 	cmd_check
 	install -d -m 0755 "$DATA_ROOT/kagent-ate"
 	make_certificate_authority
 	make_cluster
+	connect_demo
 	deploy
 	echo
 	echo "Done. The cluster $CLUSTER_NAME is up (kubectl context $context)."
@@ -265,6 +295,111 @@ cmd_delete() {
 	echo "Deleted. Everything in $DATA_ROOT is still there: ./ok3d apply brings the cluster back."
 }
 
+# Reads demo/network.tsv: one "name address role unifi_type model http" line per device,
+# without the comments.
+demo_devices() {
+	grep -v -e '^#' -e '^[[:space:]]*$' demo/network.tsv
+}
+
+# demo_known NAME: whether NAME is one of the demo's devices.
+demo_known() {
+	demo_devices | awk '{print $1}' | grep -qx "$1"
+}
+
+demo_up() {
+	if ! docker network inspect "$demo_network" >/dev/null 2>&1; then
+		docker network create --subnet "$demo_subnet" --gateway "$demo_gateway" --ip-range "$demo_dynamic" \
+			--label ok3d.demo=true "$demo_network" >/dev/null
+		echo "Made the demo network, $demo_subnet."
+	fi
+	# The image, fetched quietly the first time, instead of Docker's layer-by-layer progress.
+	if ! docker image inspect "$demo_image" >/dev/null 2>&1; then
+		echo "Fetching the demo's image (once)."
+		docker pull --quiet "$demo_image" >/dev/null
+	fi
+	# The failed list starts empty: every device comes up working.
+	install -d -m 0755 "$state"
+	: >"$state/failed"
+	demo_devices | while read -r name address _role _unifi _model http; do
+		container="ok3d-demo-$name"
+		if docker container inspect "$container" >/dev/null 2>&1; then
+			docker start "$container" >/dev/null
+			continue
+		fi
+		# What the device runs: the fake UniFi controller, a web page, or nothing but its
+		# network stack, which answers ping.
+		case "$name:$http" in
+		unifi-controller:*) set -- python /app/ok3d/demo_exporter.py --network /app/network.tsv --state /state --port 9130 ;;
+		*:http) set -- python /app/ok3d/demo_device.py --name "$name" --port 80 ;;
+		*) set -- sleep 2147483647 ;;
+		esac
+		# Locked down like everything ok3d runs: read-only, no capabilities, not root, no way
+		# to gain privileges, and small limits. Serving port 80 as a normal user takes only a
+		# setting inside the container's own network namespace. --init stops a device at once
+		# when it's failed, instead of after Docker's 10-second wait.
+		docker run --detach --init --name "$container" --hostname "$name" \
+			--network "$demo_network" --ip "$address" --label ok3d.demo=true \
+			--read-only --cap-drop ALL --security-opt no-new-privileges --user 65534:65534 \
+			--sysctl net.ipv4.ip_unprivileged_port_start=0 --memory 64m --pids-limit 64 \
+			--volume "$root/src/ok3d:/app/ok3d:ro" --volume "$root/demo/network.tsv:/app/network.tsv:ro" \
+			--volume "$state:/state:ro" \
+			"$demo_image" "$@" >/dev/null
+		echo "Started $name at $address."
+	done
+	connect_demo
+}
+
+demo_down() {
+	containers=$(docker ps --all --quiet --filter label=ok3d.demo=true)
+	# One argument per container ID, so the list is split on purpose.
+	# shellcheck disable=SC2086
+	[ -z "$containers" ] || docker rm --force $containers >/dev/null
+	if docker network inspect "$demo_network" >/dev/null 2>&1; then
+		node="k3d-$CLUSTER_NAME-server-0"
+		docker network disconnect "$demo_network" "$node" >/dev/null 2>&1 || true
+		docker network rm "$demo_network" >/dev/null
+	fi
+	rm -rf "$state"
+	echo "The simulated network is gone."
+}
+
+cmd_demo() {
+	sub=${1:-}
+	device=${2:-}
+	load_settings
+	state="$DATA_ROOT/demo"
+	case "$sub" in
+	up) demo_up ;;
+	down) demo_down ;;
+	status)
+		docker ps --all --filter label=ok3d.demo=true --format '{{.Names}}\t{{.Status}}' |
+			sed 's/^ok3d-demo-//' | sort
+		;;
+	fail | fix)
+		if [ -z "$device" ] || ! demo_known "$device"; then
+			echo "Name one of the demo's devices: $(demo_devices | awk '{print $1}' | tr '\n' ' ')" >&2
+			exit 2
+		fi
+		install -d -m 0755 "$state"
+		touch "$state/failed"
+		grep -vx "$device" "$state/failed" >"$state/failed.new" || true
+		if [ "$sub" = fail ]; then
+			echo "$device" >>"$state/failed.new"
+			docker stop "ok3d-demo-$device" >/dev/null
+			echo "$device is down. ./ok3d demo fix $device brings it back."
+		else
+			docker start "ok3d-demo-$device" >/dev/null
+			echo "$device is back."
+		fi
+		mv "$state/failed.new" "$state/failed"
+		;;
+	*)
+		echo "./ok3d demo up | down | status | fail <device> | fix <device>" >&2
+		exit 2
+		;;
+	esac
+}
+
 cmd_version() {
 	sed -n 's/^__version__ = "\(.*\)"$/ok3d \1/p' src/ok3d/__init__.py
 }
@@ -273,6 +408,7 @@ case "${1:-}" in
 check) cmd_check ;;
 apply) cmd_apply ;;
 delete) cmd_delete "${2:-}" ;;
+demo) cmd_demo "${2:-}" "${3:-}" ;;
 version | --version) cmd_version ;;
 help | --help | -h) usage ;;
 *)

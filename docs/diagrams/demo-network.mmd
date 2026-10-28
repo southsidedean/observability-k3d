@@ -1,0 +1,26 @@
+---
+config:
+  flowchart:
+    wrappingWidth: 300
+---
+%% The simulated network `./ok3d demo up` starts. Rendered to
+%% images/diagrams/demo-network-light.png and -dark.png by scripts/diagrams.sh; docs/demo.md
+%% shows them.
+flowchart TD
+    subgraph demo["The demo network, 198.51.100.0/24 (a Docker network on the server)"]
+        router["router<br/>198.51.100.1<br/>(answers ping and HTTP)"]
+        switch["office-switch<br/>198.51.100.2"]
+        ap1["living-room-ap<br/>198.51.100.3"]
+        ap2["upstairs-ap<br/>198.51.100.4"]
+        nas["nas<br/>198.51.100.20<br/>(answers ping and HTTP)"]
+        printer["printer<br/>198.51.100.30"]
+        controller["unifi-controller<br/>198.51.100.50<br/>(UniFi metrics, like unpoller)"]
+        router --- switch
+        switch --- ap1
+        switch --- ap2
+        switch --- nas
+        switch --- printer
+        switch --- controller
+    end
+    node["The cluster's node<br/>(joins the demo network)"]
+    node -. "pings, HTTP checks, and scrapes" .-> demo
