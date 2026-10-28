@@ -1,0 +1,24 @@
+# The platform chart's settings. These aren't yours to change: they're how ok3d needs its
+# foundations set up. Your own settings go in settings.yaml, for the ok3d chart.
+
+cert-manager:
+  # cert-manager's own definitions (Certificate, ClusterIssuer, and the rest) come with it.
+  crds:
+    enabled: true
+    # Kept if the release is ever removed, so removing it can't delete every certificate.
+    keep: true
+  # Small enough for a home server; cert-manager is idle almost all the time.
+  resources:
+    requests: { cpu: 10m, memory: 64Mi }
+    limits: { memory: 256Mi }
+  webhook:
+    resources:
+      requests: { cpu: 10m, memory: 32Mi }
+      limits: { memory: 128Mi }
+  cainjector:
+    resources:
+      requests: { cpu: 10m, memory: 64Mi }
+      limits: { memory: 256Mi }
+  # Metrics for Prometheus (from 0.4).
+  prometheus:
+    enabled: true

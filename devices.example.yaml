@@ -1,0 +1,32 @@
+# Your network's devices. Copy this file to devices.yaml (which is never committed) and list
+# your own. ok3d checks each one and shows it on the NOC board; adding a device is one entry.
+# This file is read from 0.4 on.
+#
+# Each device has:
+#   name:      what you call it, shown on the board and in alerts
+#   address:   its IP address or host name
+#   role:      gateway, switch, access-point, server, nas, ups, camera, printer, or other
+#   behind:    the device it connects through (by name), so a failed switch is one alert,
+#              not one for every device behind it (UniFi gear reports this by itself)
+#   checks:    what to check: ping, http, https, dns, or a TCP port such as tcp:22
+#   protected: true means no action may ever touch it, even with your approval
+
+devices:
+  - name: router
+    address: 192.168.1.1
+    role: gateway
+    checks: [ping, https]
+    protected: true
+
+  - name: office-switch
+    address: 192.168.1.2
+    role: switch
+    behind: router
+    checks: [ping]
+
+  - name: nas
+    address: 192.168.1.20
+    role: nas
+    behind: office-switch
+    checks: [ping, https, tcp:22]
+    protected: true

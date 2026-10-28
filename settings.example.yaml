@@ -1,0 +1,26 @@
+# Your ok3d settings. Copy this file to settings.yaml (which is never committed) and change
+# what you need. Anything you leave out keeps its default from chart/ok3d/values.yaml, where
+# every setting is listed and explained. `ok3d check` tells you if a value can't work.
+#
+# Secrets (passwords, API keys) don't go here: they go in .env (start from .env.example).
+
+# The layout of this file. Leave it as it is; ok3d uses it when a release changes the layout.
+settingsVersion: 1
+
+host:
+  # The folder that holds everything ok3d keeps, which survives the cluster being deleted and
+  # made again. Make it first, owned by you: sudo install -d -o "$USER" -m 0755 /srv/ok3d
+  dataRoot: /srv/ok3d
+
+tls:
+  # The domain the web pages are named under: grafana.noc.home.arpa, and so on. Point
+  # *.noc.home.arpa at this machine in your router or local DNS server.
+  domain: noc.home.arpa
+
+cluster:
+  # The address the web pages are published on. 0.0.0.0 means every address this machine
+  # has; one address (such as 192.168.1.20) keeps them to that network.
+  publishAddress: 0.0.0.0
+  ports:
+    # The port for every web page: https://grafana.noc.home.arpa:8443, and so on.
+    https: 8443

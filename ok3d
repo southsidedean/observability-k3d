@@ -1,0 +1,282 @@
+#!/bin/sh
+# ok3d: check this machine, create the cluster and deploy, or delete the cluster.
+#
+#   ./ok3d check      Is this machine ready, and are the settings valid? Changes nothing.
+#   ./ok3d apply      Check, then make what's missing: the data root's folders, the
+#                     certificate authority, and the cluster. Then deploy both releases
+#                     (ok3d-platform, then ok3d). Safe to run again: it changes only what's
+#                     different.
+#   ./ok3d delete     Delete the cluster. The data root stays, so `./ok3d apply` brings
+#                     everything back. Asks first; --yes skips the question.
+#   ./ok3d version    Print ok3d's version.
+#
+# Settings come from settings.yaml next to this script (start from settings.example.yaml),
+# or the file named in OK3D_SETTINGS. Helm checks them against the chart's schema before
+# anything changes.
+#
+# The Dashboard (from 0.5) runs these same commands through the helper.
+set -eu
+
+root=$(cd "$(dirname "$0")" && pwd)
+cd "$root"
+settings=${OK3D_SETTINGS:-$root/settings.yaml}
+
+# The minimum versions ok3d is tested with. k3d 5.9 runs Kubernetes 1.37, which kagent 1.0
+# needs.
+min_k3d=5.9.0
+min_helm=3.0.0
+# The inotify limits two k3d clusters on one machine need (the defaults run out).
+min_instances=1024
+min_watches=1048576
+# Free memory below this gets a warning: the whole stack needs about 11 GiB, and about 7 with
+# agents off (PLAN.md, "The host").
+warn_memory_gib=7
+
+usage() {
+	sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
+}
+
+failures=0
+pass() { echo "PASS  $1"; }
+warn() { echo "WARN  $1"; }
+fail() {
+	echo "FAIL  $1"
+	failures=$((failures + 1))
+}
+
+# version_at_least HAVE NEED: whether dotted version HAVE is NEED or newer.
+version_at_least() {
+	[ "$(printf '%s\n%s\n' "$2" "$1" | sort -t. -k1,1n -k2,2n -k3,3n | head -n 1)" = "$2" ]
+}
+
+# Reads the settings ok3d needs as shell variables (CLUSTER_NAME, DATA_ROOT, and the rest),
+# from the chart's cluster-settings.yaml, rendered by Helm after the schema has checked them.
+load_settings() {
+	if [ ! -f "$settings" ]; then
+		echo "No settings file at $settings. Copy settings.example.yaml to settings.yaml and fill it in." >&2
+		exit 1
+	fi
+	rendered=$(helm template ok3d chart/ok3d --values "$settings" \
+		--show-only templates/cluster-settings.yaml) || {
+		echo "The settings in $settings aren't valid (above)." >&2
+		exit 1
+	}
+	# Lines look like:  CLUSTER_NAME: "ok3d". The schema limits values to safe characters, and
+	# a value with a quote, backslash, dollar sign, or backtick is refused here as well.
+	q="'"
+	assignments=$(printf '%s\n' "$rendered" |
+		sed -n "s/^  \([A-Z][A-Z0-9_]*\): \"\([^\"\\\\\$\`$q]*\)\"\$/\1=$q\2$q/p")
+	eval "$assignments"
+	: "${CLUSTER_NAME:?} ${K3S_IMAGE:?} ${NETWORK:?} ${API_PORT:?} ${PUBLISH_ADDRESS:?}"
+	: "${HTTPS_PORT:?} ${DATA_ROOT:?} ${TLS_MODE:?} ${DOMAIN:?}"
+	context="k3d-$CLUSTER_NAME"
+}
+
+check_tools() {
+	for tool in docker k3d helm kubectl openssl; do
+		if ! command -v "$tool" >/dev/null 2>&1; then
+			fail "$tool isn't installed (docs/install.md says how to get it)"
+		fi
+	done
+	if command -v docker >/dev/null 2>&1; then
+		if docker info >/dev/null 2>&1; then
+			pass "Docker is running"
+		else
+			fail "Docker isn't running, or you can't reach it (are you in the docker group?)"
+		fi
+	fi
+	if command -v k3d >/dev/null 2>&1; then
+		have=$(k3d version 2>/dev/null | sed -n 's/^k3d version v\{0,1\}\([0-9.]*\).*/\1/p' | head -n 1)
+		if [ -n "$have" ] && version_at_least "$have" "$min_k3d"; then
+			pass "k3d $have"
+		else
+			fail "k3d ${have:-of an unknown version}: ok3d needs $min_k3d or newer"
+		fi
+	fi
+	if command -v helm >/dev/null 2>&1; then
+		have=$(helm version --short 2>/dev/null | sed -n 's/^v\([0-9.]*\).*/\1/p')
+		if [ -n "$have" ] && version_at_least "$have" "$min_helm"; then
+			pass "Helm $have"
+		else
+			fail "Helm ${have:-of an unknown version}: ok3d needs $min_helm or newer"
+		fi
+	fi
+}
+
+check_linux_limits() {
+	[ "$(uname -s)" = Linux ] || return 0
+	instances=$(cat /proc/sys/fs/inotify/max_user_instances 2>/dev/null || echo 0)
+	watches=$(cat /proc/sys/fs/inotify/max_user_watches 2>/dev/null || echo 0)
+	if [ "$instances" -ge "$min_instances" ] && [ "$watches" -ge "$min_watches" ]; then
+		pass "inotify limits ($instances instances, $watches watches)"
+	else
+		fail "inotify limits are $instances instances and $watches watches; ok3d needs $min_instances and $min_watches. Add to /etc/sysctl.d/60-ok3d.conf, then run sudo sysctl --system:
+      fs.inotify.max_user_instances = $min_instances
+      fs.inotify.max_user_watches = $min_watches"
+	fi
+	available_kib=$(sed -n 's/^MemAvailable: *\([0-9]*\) kB$/\1/p' /proc/meminfo 2>/dev/null)
+	if [ -n "$available_kib" ]; then
+		available_gib=$((available_kib / 1024 / 1024))
+		if [ "$available_gib" -ge "$warn_memory_gib" ]; then
+			pass "$available_gib GiB of memory free"
+		else
+			warn "$available_gib GiB of memory free: the whole stack needs about 11 GiB (7 with agents off)"
+		fi
+	fi
+}
+
+check_data_root() {
+	if [ ! -d "$DATA_ROOT" ]; then
+		fail "the data root $DATA_ROOT doesn't exist. Make it, owned by you:
+      sudo install -d -o $(id -un) -m 0755 $DATA_ROOT"
+		return
+	fi
+	if [ ! -w "$DATA_ROOT" ]; then
+		fail "you can't write to the data root $DATA_ROOT. Give it to yourself:
+      sudo chown $(id -un) $DATA_ROOT"
+		return
+	fi
+	if [ "$(uname -s)" = Linux ]; then
+		fstype=$(stat -f -c %T "$DATA_ROOT" 2>/dev/null || echo unknown)
+		if [ "$fstype" = overlayfs ] || [ "$fstype" = overlay ]; then
+			fail "the data root $DATA_ROOT is on an overlay filesystem; it needs a real one (ext4, xfs, btrfs)"
+			return
+		fi
+	fi
+	pass "the data root $DATA_ROOT"
+}
+
+cmd_check() {
+	load_settings
+	pass "the settings in $settings"
+	check_tools
+	check_linux_limits
+	check_data_root
+	if [ "$failures" -gt 0 ]; then
+		echo "$failures problem(s) to fix before ./ok3d apply."
+		return 1
+	fi
+	echo "Ready."
+}
+
+# The certificate authority, made once in the data root and kept: every new cluster loads the
+# same one, so the devices that trust it keep trusting it. Its name constraint lets it vouch
+# only for names under the domain.
+make_certificate_authority() {
+	certs="$DATA_ROOT/certs"
+	install -d -m 0700 "$certs"
+	if [ -f "$certs/ca.crt" ] && [ -f "$certs/ca.key" ]; then
+		if openssl x509 -in "$certs/ca.crt" -noout -ext nameConstraints 2>/dev/null | grep -qF "DNS:.$DOMAIN"; then
+			echo "The certificate authority in $certs is kept."
+			return
+		fi
+		echo "The certificate authority in $certs is for another domain, not $DOMAIN. Move" >&2
+		echo "$certs aside (your devices will need to trust the new one), then run ./ok3d apply." >&2
+		exit 1
+	fi
+	echo "Making the certificate authority in $certs (for $DOMAIN and the names under it)."
+	(
+		umask 077
+		openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes \
+			-keyout "$certs/ca.key" -out "$certs/ca.crt" -days 3650 \
+			-subj "/O=ok3d/CN=ok3d certificate authority for $DOMAIN" \
+			-addext "basicConstraints=critical,CA:TRUE,pathlen:0" \
+			-addext "keyUsage=critical,keyCertSign,cRLSign" \
+			-addext "nameConstraints=critical,permitted;DNS:$DOMAIN,permitted;DNS:.$DOMAIN" \
+			2>/dev/null
+	)
+	chmod 0644 "$certs/ca.crt"
+}
+
+make_cluster() {
+	if k3d cluster get "$CLUSTER_NAME" >/dev/null 2>&1; then
+		echo "The cluster $CLUSTER_NAME is there already."
+		return
+	fi
+	echo "Making the cluster $CLUSTER_NAME."
+	# One server node and no agents. The data root goes into the node at /var/lib/ok3d, and
+	# kagent's sandbox folder at /var/lib/ate (it can't live on the node's overlay filesystem).
+	# The API listens on 127.0.0.1 only; the web pages are published on publishAddress. The
+	# default kubeconfig gets the cluster's context, but your current context stays as it is.
+	k3d cluster create "$CLUSTER_NAME" \
+		--image "$K3S_IMAGE" \
+		--servers 1 --agents 0 \
+		--network "$NETWORK" \
+		--api-port "127.0.0.1:$API_PORT" \
+		--port "$PUBLISH_ADDRESS:$HTTPS_PORT:443@loadbalancer" \
+		--volume "$DATA_ROOT:/var/lib/ok3d@server:0" \
+		--volume "$DATA_ROOT/kagent-ate:/var/lib/ate@server:0" \
+		--k3s-arg "--disable=traefik@server:0" \
+		--kubeconfig-update-default --kubeconfig-switch-context=false \
+		--wait --timeout 300s
+}
+
+deploy() {
+	if [ ! -d chart/ok3d-platform/charts ]; then
+		echo "Fetching the platform chart's dependencies, at the versions in its Chart.lock."
+		helm repo add jetstack https://charts.jetstack.io --force-update >/dev/null
+		helm dependency build chart/ok3d-platform >/dev/null
+	fi
+	echo "Deploying the platform: cert-manager."
+	helm upgrade --install ok3d-platform chart/ok3d-platform \
+		--kube-context "$context" --namespace cert-manager --create-namespace \
+		--wait --timeout 10m
+	echo "Loading the certificate authority into the cluster."
+	kubectl --context "$context" --namespace cert-manager create secret tls ok3d-ca \
+		--cert "$DATA_ROOT/certs/ca.crt" --key "$DATA_ROOT/certs/ca.key" \
+		--dry-run=client --output yaml | kubectl --context "$context" apply --filename -
+	echo "Deploying ok3d."
+	helm upgrade --install ok3d chart/ok3d --values "$settings" \
+		--kube-context "$context" --namespace ok3d-system --create-namespace \
+		--wait --timeout 10m
+	kubectl --context "$context" --namespace gateway wait certificate/ok3d-pages \
+		--for=condition=Ready --timeout=120s
+}
+
+cmd_apply() {
+	cmd_check
+	install -d -m 0755 "$DATA_ROOT/kagent-ate"
+	make_certificate_authority
+	make_cluster
+	deploy
+	echo
+	echo "Done. The cluster $CLUSTER_NAME is up (kubectl context $context)."
+	echo "Trust the certificate authority on your devices: $DATA_ROOT/certs/ca.crt"
+	echo "(docs/certificate.md says how, from 0.4, when there are pages to open)."
+}
+
+cmd_delete() {
+	yes=${1:-}
+	load_settings
+	if [ "$yes" != --yes ]; then
+		if [ ! -t 0 ]; then
+			echo "Deleting needs a yes: run ./ok3d delete --yes, or run it in a terminal to be asked." >&2
+			exit 1
+		fi
+		printf 'Delete the cluster %s? The data root %s stays. Type the cluster name to go ahead: ' \
+			"$CLUSTER_NAME" "$DATA_ROOT"
+		read -r answer
+		if [ "$answer" != "$CLUSTER_NAME" ]; then
+			echo "Not deleted."
+			exit 1
+		fi
+	fi
+	k3d cluster delete "$CLUSTER_NAME"
+	echo "Deleted. Everything in $DATA_ROOT is still there: ./ok3d apply brings the cluster back."
+}
+
+cmd_version() {
+	sed -n 's/^__version__ = "\(.*\)"$/ok3d \1/p' src/ok3d/__init__.py
+}
+
+case "${1:-}" in
+check) cmd_check ;;
+apply) cmd_apply ;;
+delete) cmd_delete "${2:-}" ;;
+version | --version) cmd_version ;;
+help | --help | -h) usage ;;
+*)
+	usage >&2
+	exit 2
+	;;
+esac

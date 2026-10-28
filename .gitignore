@@ -41,3 +41,6 @@ dist/
 .vscode/
 .claude/
 claude-session.txt
+
+# Helm chart dependencies, fetched at the versions in each Chart.lock.
+chart/*/charts/

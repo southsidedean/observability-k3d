@@ -40,6 +40,10 @@ For the old stack, until 0.4:
 For everything new:
 
 ```bash
+./ok3d check          # is this machine ready, and are the settings valid? changes nothing
+./ok3d apply          # make what's missing (data root folders, CA, cluster), then deploy
+./ok3d delete --yes   # delete the cluster; the data root stays
+
 python3 -m venv .venv && .venv/bin/python -m pip install -e '.[dev]'   # once
 git config core.hooksPath .githooks                                    # once: the git hooks
 scripts/check.sh                                   # every check that doesn't need a cluster

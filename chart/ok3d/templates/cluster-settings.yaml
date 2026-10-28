@@ -1,0 +1,25 @@
+{{- /*
+The settings the ok3d command needs before the cluster exists (its name, image, ports, and the
+data root), checked by values.schema.json and handed over in a form shell can read safely.
+`ok3d` renders only this file (helm template --show-only) and reads the KEY: "value" lines.
+The schema already limits every value to safe characters; ok3d refuses a quote or backslash
+again. The ConfigMap is also deployed, so what the cluster was made with can be looked up.
+*/ -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ok3d-cluster-settings
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ok3d.labels" . | nindent 4 }}
+data:
+  SETTINGS_VERSION: {{ .Values.settingsVersion | quote }}
+  CLUSTER_NAME: {{ .Values.cluster.name | quote }}
+  K3S_IMAGE: {{ .Values.cluster.k3sImage | quote }}
+  NETWORK: {{ .Values.cluster.network | quote }}
+  API_PORT: {{ .Values.cluster.apiPort | quote }}
+  PUBLISH_ADDRESS: {{ .Values.cluster.publishAddress | quote }}
+  HTTPS_PORT: {{ .Values.cluster.ports.https | quote }}
+  DATA_ROOT: {{ .Values.host.dataRoot | quote }}
+  TLS_MODE: {{ .Values.tls.mode | quote }}
+  DOMAIN: {{ .Values.tls.domain | quote }}

@@ -44,7 +44,7 @@ jobs:
         run: python -m mypy
       # shellcheck comes with the runner.
       - name: shellcheck (the scripts and git hooks, as POSIX sh)
-        run: shellcheck -s sh scripts/check.sh .githooks/*
+        run: shellcheck -s sh ok3d scripts/check.sh .githooks/*
       - name: zizmor (these workflows' security)
         run: zizmor --offline --min-severity medium .github/workflows
       # actionlint, pinned to a release and checked against that release's published checksum.
@@ -58,6 +58,46 @@ jobs:
       # Node.js comes with the runner. The validator's version is pinned like everything else.
       - name: Renovate's settings
         run: npx --yes --package renovate@44.155.1 -- renovate-config-validator --strict
+
+  charts:
+    name: charts
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Helm 4, the version the test VM and the docs use.
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: v4.3.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.x"
+      - run: python -m pip install -e ".[dev]"
+      # kubeconform, pinned to a release and checked against that release's published checksum.
+      - name: kubeconform
+        run: |
+          curl -fsSLo "$RUNNER_TEMP/kubeconform.tgz" \
+            https://github.com/yannh/kubeconform/releases/download/v0.8.0/kubeconform-linux-amd64.tar.gz
+          echo "9bc2bffbf71f261128533edaf912153948b7ff238f9a531ae6d34466ec287883  $RUNNER_TEMP/kubeconform.tgz" | sha256sum -c
+          mkdir "$RUNNER_TEMP/bin"
+          tar -xzf "$RUNNER_TEMP/kubeconform.tgz" -C "$RUNNER_TEMP/bin" kubeconform
+          echo "$RUNNER_TEMP/bin" >>"$GITHUB_PATH"
+      - name: the charts lint, render, and pass kubeconform
+        run: |
+          helm repo add jetstack https://charts.jetstack.io
+          helm dependency build chart/ok3d-platform
+          k8s=$(sed -n 's/^  k3sImage: rancher\/k3s:v\([0-9.]*\)-.*/\1/p' chart/ok3d/values.yaml)
+          helm lint --strict chart/ok3d --values settings.example.yaml
+          helm lint chart/ok3d-platform
+          { helm template ok3d chart/ok3d --namespace ok3d-system --values settings.example.yaml
+            helm template ok3d-platform chart/ok3d-platform --namespace cert-manager
+          } | kubeconform -strict -summary -kubernetes-version "$k8s" -skip CustomResourceDefinition \
+            -schema-location default \
+            -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'
+      - name: the charts' tests (what they render, and what the schema refuses), with Helm 4
+        run: python -m pytest -q tests/test_charts.py
 
   pytest:
     name: pytest (Python ${{ matrix.python }})

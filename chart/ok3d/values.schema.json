@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "ok3d settings",
+  "description": "Every setting ok3d has. Helm checks settings.yaml against this before anything is deployed, and docs/settings.md is made from the descriptions here.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["settingsVersion", "cluster", "host", "tls", "modules"],
+  "properties": {
+    "global": {
+      "description": "Set by Helm itself; not a setting.",
+      "type": "object"
+    },
+    "settingsVersion": {
+      "description": "The version of the settings' layout. This release reads version 1.",
+      "const": 1
+    },
+    "cluster": {
+      "description": "The k3d cluster ok3d runs in.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "k3sImage", "network", "apiPort", "publishAddress", "ports"],
+      "properties": {
+        "name": {
+          "description": "The cluster's name: lowercase letters, digits, and dashes, starting with a letter, up to 32 characters.",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,31}$"
+        },
+        "k3sImage": {
+          "description": "The k3s image, pinned to a version (never latest). Kubernetes 1.37 or newer.",
+          "type": "string",
+          "pattern": "^rancher/k3s:v1\\.(3[7-9]|[4-9][0-9])\\.[0-9]+-k3s[0-9]+$"
+        },
+        "network": {
+          "description": "The Docker network the cluster's containers join.",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,62}$"
+        },
+        "apiPort": {
+          "description": "The Kubernetes API's port, on 127.0.0.1 only.",
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 65535
+        },
+        "publishAddress": {
+          "description": "The address the web pages are published on: 0.0.0.0 for every address this machine has, or one IPv4 address.",
+          "type": "string",
+          "format": "ipv4",
+          "pattern": "^((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\\.){3}(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])$"
+        },
+        "ports": {
+          "description": "The ports published on publishAddress.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["https"],
+          "properties": {
+            "https": {
+              "description": "HTTPS for every web page.",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535
+            }
+          }
+        }
+      }
+    },
+    "host": {
+      "description": "This machine.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dataRoot"],
+      "properties": {
+        "dataRoot": {
+          "description": "The folder that holds everything ok3d keeps. An absolute path with no spaces or quotes.",
+          "type": "string",
+          "pattern": "^/[A-Za-z0-9._/-]*[A-Za-z0-9._-]$"
+        }
+      }
+    },
+    "tls": {
+      "description": "The web pages' certificates.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "domain"],
+      "properties": {
+        "mode": {
+          "description": "self-issued: ok3d makes its own certificate authority. (Public certificates come in 1.1.)",
+          "enum": ["self-issued"]
+        },
+        "domain": {
+          "description": "The domain the web pages are named under, such as noc.home.arpa.",
+          "type": "string",
+          "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$"
+        }
+      }
+    },
+    "modules": {
+      "description": "The parts you can switch on or off. Each is off by default.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["unifi", "plex", "snmp", "ups", "syslog", "mesh", "agents", "remoteAccess"],
+      "properties": {
+        "unifi": { "description": "UniFi controller metrics, through unpoller (0.4).", "type": "boolean" },
+        "plex": { "description": "Plex, watched as a service on your network (0.7).", "type": "boolean" },
+        "snmp": { "description": "Switches and NAS that aren't UniFi, through SNMP (0.7).", "type": "boolean" },
+        "ups": { "description": "A UPS, through NUT (0.7).", "type": "boolean" },
+        "syslog": { "description": "Syslog from your devices, over UDP and TCP (0.6).", "type": "boolean" },
+        "mesh": { "description": "Istio ambient between the cluster's parts (0.8).", "type": "boolean" },
+        "agents": { "description": "kagent and its tools (0.9).", "type": "boolean" },
+        "remoteAccess": { "description": "Tailscale, to reach ok3d away from home (0.8).", "type": "boolean" }
+      }
+    }
+  }
+}
