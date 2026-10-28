@@ -2,6 +2,13 @@
 
 ## 0.5.0 (unreleased)
 
+### Changes
+
+- The helper, which runs `./ok3d check` and `./ok3d apply` when the Dashboard asks. It's a
+  small service on the server, running as you, and it refuses any request that isn't
+  exactly one of those two. The Dashboard that uses it comes later in 0.5.
+  [docs/helper-under-the-hood.md](docs/helper-under-the-hood.md) says how it works.
+
 ## 0.4.0 (2026-10-28)
 
 ### Upgrading from the old stack

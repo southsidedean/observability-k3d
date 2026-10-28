@@ -37,7 +37,8 @@ has the details and the threat model's place in each release.
   uses it. The Dashboard sets secrets but never shows them back. Tests check that no secret
   reaches a log, a trace, a page, or an alert.
 - **The Dashboard can't run anything itself.** It asks a helper on the host, which accepts
-  only a short list of requests and checks each one again.
+  only a short list of requests and checks each one again
+  ([how](docs/helper-under-the-hood.md)).
 - **Agents read; people decide.** Agents can only read, except for a short list of safe
   actions that each need a signed-in person's approval. Nothing an agent reads (a device
   name, a log line) can give it a way to change your firewall, VLANs, routing, or
@@ -45,3 +46,20 @@ has the details and the threat model's place in each release.
 - **A checked supply chain.** Actions and base images are pinned by digest, every image is
   scanned before it's published, and every published image has an SBOM and a record of how
   it was built.
+
+## The helper
+
+The helper (`src/ok3d/helper.py`) runs on the server as you, and carries out requests the
+Dashboard leaves in `<data root>/dashboard/outbox/`. It's written for the case where the
+Dashboard's container has been taken over:
+
+- It renames the request into its own folder before opening anything, so a link moves as a
+  link and is never followed. It refuses links, hard links, folders, and pipes.
+- It reads at most 4 KB, accepts exactly two fields (`id` and `action`), and runs only
+  `./ok3d check` or `./ok3d apply`, with no arguments from the request.
+- It refuses requests older than 5 minutes and ids it has carried out before.
+- Its answers come from a fixed list and never repeat what a request said.
+- It runs one request at a time, with a time limit, and a second helper won't start.
+
+Tests in `tests/test_helper.py` send it every kind of bad request, and Hypothesis sends it
+random bytes, to check that only a valid request ever runs anything.
