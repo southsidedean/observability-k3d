@@ -1,0 +1,49 @@
+# The simulated network's devices, for trying ok3d without a network of your own, and for the
+# tests and screenshots. `./ok3d demo up` starts them; docs/demo.md says how to use them. They
+# match demo/network.tsv, and a test keeps the two in step.
+#
+# The layout is the same as devices.example.yaml, which explains each field.
+
+devices:
+  - name: router
+    address: 198.51.100.1
+    role: gateway
+    checks: [ping, http]
+    protected: true
+
+  - name: office-switch
+    address: 198.51.100.2
+    role: switch
+    behind: router
+    checks: [ping]
+
+  - name: living-room-ap
+    address: 198.51.100.3
+    role: access-point
+    behind: office-switch
+    checks: [ping]
+
+  - name: upstairs-ap
+    address: 198.51.100.4
+    role: access-point
+    behind: office-switch
+    checks: [ping]
+
+  - name: nas
+    address: 198.51.100.20
+    role: nas
+    behind: office-switch
+    checks: [ping, http]
+    protected: true
+
+  - name: printer
+    address: 198.51.100.30
+    role: printer
+    behind: office-switch
+    checks: [ping]
+
+  - name: unifi-controller
+    address: 198.51.100.50
+    role: controller
+    behind: office-switch
+    checks: [ping, tcp:9130]

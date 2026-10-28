@@ -1,0 +1,17 @@
+# The simulated network: the devices `./ok3d demo up` starts, one per line. `ok3d` reads this
+# to start them, and the fake UniFi controller reads it to report on them, so this is the one
+# list of the demo's devices. devices.demo.yaml lists the same devices for ok3d to watch, and
+# a test keeps the two in step.
+#
+# The addresses are in 198.51.100.0/24, a range reserved for documentation (RFC 5737), so they
+# can't clash with a real network, and screenshots plainly show a made-up one.
+#
+# Columns: name, address, role, UniFi type (ugw gateway, usw switch, uap access point, or - for
+# devices that aren't UniFi), model, and whether it answers HTTP on port 80 (http or -).
+router            198.51.100.1    gateway       ugw  UDM-Pro     http
+office-switch     198.51.100.2    switch        usw  USW-24-PoE  -
+living-room-ap    198.51.100.3    access-point  uap  U6-Pro      -
+upstairs-ap       198.51.100.4    access-point  uap  U6-Lite     -
+nas               198.51.100.20   nas           -    -           http
+printer           198.51.100.30   printer       -    -           -
+unifi-controller  198.51.100.50   controller    -    -           -
