@@ -23,3 +23,6 @@ data:
   DATA_ROOT: {{ .Values.host.dataRoot | quote }}
   TLS_MODE: {{ .Values.tls.mode | quote }}
   DOMAIN: {{ .Values.tls.domain | quote }}
+  METRICS_RETENTION: {{ .Values.metrics.retention | quote }}
+  METRICS_RETENTION_SIZE: {{ .Values.metrics.retentionSize | quote }}
+  MODULE_UNIFI: {{ .Values.modules.unifi | quote }}

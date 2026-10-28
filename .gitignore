@@ -1,13 +1,14 @@
 # Your own setup. None of it is ever committed; the repository carries a commented example of
 # each (settings.example.yaml, devices.example.yaml, .env.example). The pre-commit hook
-# refuses these too, in case one is ever added with --force.
-settings.yaml
-devices.yaml
-users.yml
-.env
-.env.*
-!.env.example
-local/
+# refuses these too, in case one is ever added with --force. They live at the repository's
+# root, so the patterns are anchored there (a chart template may share a name).
+/settings.yaml
+/devices.yaml
+/users.yml
+/.env
+/.env.*
+!/.env.example
+/local/
 
 # Keys and certificates: the certificate authority and everything it issues stay in the
 # data root, never in the repository.

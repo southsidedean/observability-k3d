@@ -25,8 +25,15 @@ Each device is a small container that answers ping. The router and the NAS also 
 page on port 80, and the UniFi controller serves UniFi metrics on port 9130, the way unpoller
 does, with numbers that change over time so the graphs move.
 
-To have ok3d watch it, use the demo's list of devices: copy `devices.demo.yaml` to
-`devices.yaml` (from 0.4, when ok3d reads it).
+To have ok3d watch it, use the demo's list of devices, then apply:
+
+```sh
+cp devices.demo.yaml devices.yaml
+./ok3d apply
+```
+
+Within a minute, Prometheus is pinging every device, checking the router's and the NAS's
+pages, and collecting the fake controller's UniFi metrics.
 
 The addresses are in `198.51.100.0/24`, a range set aside for documentation, so they can't
 clash with your own network.
@@ -38,7 +45,7 @@ clash with your own network.
 ```
 
 The access point stops answering, and the fake controller stops reporting it, the way a real
-controller loses a device. Within a few minutes ok3d raises an alert (from 0.4). Bring it back
+controller loses a device. Within a minute its checks fail, and from the next 0.4 change, an alert fires. Bring it back
 with:
 
 ```sh

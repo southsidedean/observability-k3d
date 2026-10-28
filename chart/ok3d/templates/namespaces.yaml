@@ -1,12 +1,14 @@
 {{- /*
-ok3d's namespaces, one per kind of work, so access rules can be written per namespace. Each
+ok3d's other namespaces, one per kind of work, so access rules can be written per namespace. Each
 enforces Kubernetes' "restricted" Pod Security Standard: a pod that runs as root, keeps
 capabilities, or allows privilege escalation is refused at the door. A piece that needs more
 (the blackbox exporter's ping, from 0.4) gets an exception in its own namespace, with the
 reason written next to it.
+
+The monitoring namespace isn't here: it's the release's own namespace, which must exist (with
+the same labels) before Helm installs anything into it, so `ok3d apply` makes it first.
 */ -}}
 {{- $namespaces := dict
-  "monitoring" "Prometheus, Alertmanager, Grafana, Loki, and the exporters."
   "gateway" "agentgateway: the one way into the web pages, and the route to the AI model."
   "auth" "Authelia and the Approvals page."
   "agents" "kagent, the MCP servers, and the action runner."

@@ -17,6 +17,18 @@ tls:
   # *.noc.home.arpa at this machine in your router or local DNS server.
   domain: noc.home.arpa
 
+# With UniFi gear: switch the module on and give your controller's address. Its API key, from
+# a view-only admin, goes in .env as UNIFI_API_KEY. docs/devices.md has the steps.
+# modules:
+#   unifi: true
+# unifi:
+#   url: https://192.168.1.1
+
+# How much history Prometheus keeps (the defaults are below).
+# metrics:
+#   retention: 30d
+#   retentionSize: 40GB
+
 cluster:
   # The address the web pages are published on. 0.0.0.0 means every address this machine
   # has; one address (such as 192.168.1.20) keeps them to that network.

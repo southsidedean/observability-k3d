@@ -1,0 +1,76 @@
+{{- /*
+What ok3d checks on each device in devices.yaml.
+
+Each check becomes a Probe, which Prometheus runs through the blackbox exporter every 30
+seconds: ping (icmp), http and https (a page that answers 2xx), and tcp:<port> (the port
+accepts a connection). Each metrics port becomes a ScrapeConfig, which Prometheus scrapes
+directly. Every result carries the device's name, role, and the device it's behind, which the
+alerts and the NOC board use.
+*/ -}}
+{{- $prober := printf "%s-prometheus-blackbox-exporter.%s.svc:9115" .Release.Name .Release.Namespace }}
+{{- range $device := .Values.devices }}
+{{- $labels := dict "device" $device.name "role" $device.role "behind" ($device.behind | default "") }}
+{{- range $check := $device.checks | default list }}
+{{- $module := "" }}
+{{- $target := "" }}
+{{- if eq $check "ping" }}
+{{- $module = "icmp" }}
+{{- $target = $device.address }}
+{{- else if eq $check "http" }}
+{{- $module = "http_2xx" }}
+{{- $target = printf "http://%s/" $device.address }}
+{{- else if eq $check "https" }}
+{{- $module = "https_2xx" }}
+{{- $target = printf "https://%s/" $device.address }}
+{{- else }}
+{{- $module = "tcp_connect" }}
+{{- $target = printf "%s:%s" $device.address (trimPrefix "tcp:" $check) }}
+{{- end }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: Probe
+metadata:
+  name: {{ printf "device-%s-%s" $device.name ($check | replace ":" "-") }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "ok3d.labels" $ | nindent 4 }}
+spec:
+  jobName: devices
+  interval: 30s
+  module: {{ $module }}
+  prober:
+    url: {{ $prober }}
+  targets:
+    staticConfig:
+      static:
+        - {{ $target | quote }}
+      labels:
+        {{- range $key, $value := $labels }}
+        {{ $key }}: {{ $value | quote }}
+        {{- end }}
+        check: {{ $check | quote }}
+{{- end }}
+{{- range $endpoint := $device.metrics | default list }}
+{{- $port := regexReplaceAll "/.*$" $endpoint "" }}
+{{- $path := ternary (trimPrefix $port $endpoint) "/metrics" (contains "/" $endpoint) }}
+---
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: ScrapeConfig
+metadata:
+  name: {{ printf "device-%s-%s" $device.name $port }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "ok3d.labels" $ | nindent 4 }}
+spec:
+  jobName: {{ printf "device-%s" $device.name }}
+  scrapeInterval: 30s
+  metricsPath: {{ $path }}
+  staticConfigs:
+    - targets:
+        - {{ printf "%s:%s" $device.address $port | quote }}
+      labels:
+        {{- range $key, $value := $labels }}
+        {{ $key }}: {{ $value | quote }}
+        {{- end }}
+{{- end }}
+{{- end }}

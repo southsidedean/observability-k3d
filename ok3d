@@ -23,6 +23,11 @@ set -eu
 root=$(cd "$(dirname "$0")" && pwd)
 cd "$root"
 settings=${OK3D_SETTINGS:-$root/settings.yaml}
+# Your devices (devices.yaml, from devices.example.yaml or devices.demo.yaml), if you've made
+# the file; ok3d works without one, watching nothing but itself.
+devices=${OK3D_DEVICES:-$root/devices.yaml}
+# Your secrets (.env, from .env.example), read only for the parts that need them.
+envfile=${OK3D_ENV:-$root/.env}
 
 # The minimum versions ok3d is tested with. k3d 5.9 runs Kubernetes 1.37, which kagent 1.0
 # needs.
@@ -65,6 +70,25 @@ version_at_least() {
 	[ "$(printf '%s\n%s\n' "$2" "$1" | sort -t. -k1,1n -k2,2n -k3,3n | head -n 1)" = "$2" ]
 }
 
+# The charts' dependencies, fetched once into chart/*/charts/ at the versions in each
+# Chart.lock. Helm fetches only from repositories it knows, so ok3d's are added first.
+fetch_dependencies() {
+	for chart in chart/ok3d-platform chart/ok3d; do
+		helm dependency list "$chart" 2>/dev/null | grep -q -e missing -e "wrong version" || continue
+		helm repo add jetstack https://charts.jetstack.io --force-update >/dev/null
+		helm repo add prometheus-community https://prometheus-community.github.io/helm-charts --force-update >/dev/null
+		echo "Fetching $chart's dependencies, at the versions in its Chart.lock."
+		helm dependency build "$chart" >/dev/null
+	done
+}
+
+# The values files for the ok3d chart, as Helm arguments: your settings, then your devices
+# if you have a devices.yaml.
+values_args() {
+	printf '%s\n' --values "$settings"
+	[ ! -f "$devices" ] || printf '%s\n' --values "$devices"
+}
+
 # Reads the settings ok3d needs as shell variables (CLUSTER_NAME, DATA_ROOT, and the rest),
 # from the chart's cluster-settings.yaml, rendered by Helm after the schema has checked them.
 load_settings() {
@@ -72,6 +96,7 @@ load_settings() {
 		echo "No settings file at $settings. Copy settings.example.yaml to settings.yaml and fill it in." >&2
 		exit 1
 	fi
+	fetch_dependencies
 	rendered=$(helm template ok3d chart/ok3d --values "$settings" \
 		--show-only templates/cluster-settings.yaml) || {
 		echo "The settings in $settings aren't valid (above)." >&2
@@ -85,7 +110,23 @@ load_settings() {
 	eval "$assignments"
 	: "${CLUSTER_NAME:?} ${K3S_IMAGE:?} ${NETWORK:?} ${API_PORT:?} ${PUBLISH_ADDRESS:?}"
 	: "${HTTPS_PORT:?} ${DATA_ROOT:?} ${TLS_MODE:?} ${DOMAIN:?}"
+	: "${METRICS_RETENTION:?} ${METRICS_RETENTION_SIZE:?} ${MODULE_UNIFI:?}"
 	context="k3d-$CLUSTER_NAME"
+}
+
+# env_value KEY: the value of KEY in .env, read as plain text (never run as shell), with
+# surrounding quotes removed. Refuses a .env that anyone else can read.
+env_value() {
+	if [ ! -f "$envfile" ]; then
+		echo "No .env at $envfile. Copy .env.example to .env, fill it in, and chmod 600 .env." >&2
+		exit 1
+	fi
+	# Any permission for the group or others (read, write, or run) is too much.
+	if [ -n "$(find "$envfile" \( -perm -040 -o -perm -020 -o -perm -010 -o -perm -004 -o -perm -002 -o -perm -001 \) -print)" ]; then
+		echo "$envfile can be read by others. Make it yours alone: chmod 600 $envfile" >&2
+		exit 1
+	fi
+	sed -n "s/^$1=//p" "$envfile" | tail -n 1 | sed "s/^[\"']//; s/[\"']\$//"
 }
 
 check_tools() {
@@ -165,6 +206,19 @@ check_data_root() {
 cmd_check() {
 	load_settings
 	pass "the settings in $settings"
+	if [ -f "$devices" ]; then
+		# shellcheck disable=SC2046 # one argument per line, on purpose
+		if helm template ok3d chart/ok3d $(values_args) >/dev/null; then
+			pass "the devices in $devices"
+		else
+			fail "the devices in $devices (above)"
+		fi
+	else
+		warn "no devices.yaml: ok3d will watch only itself (start from devices.example.yaml)"
+	fi
+	if [ "$MODULE_UNIFI" = true ] && [ -z "$(env_value UNIFI_API_KEY)" ]; then
+		fail "modules.unifi is on, but UNIFI_API_KEY in .env is empty"
+	fi
 	check_tools
 	check_linux_limits
 	check_data_root
@@ -227,13 +281,51 @@ make_cluster() {
 		--wait --timeout 300s
 }
 
+# The monitoring namespace, made before Helm installs into it, with the restricted Pod
+# Security Standard's labels already on (so nothing is ever admitted without them).
+make_monitoring_namespace() {
+	kubectl --context "$context" apply --filename - >/dev/null <<EOF
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+  labels:
+    app.kubernetes.io/part-of: ok3d
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted
+EOF
+}
+
+# 0.3 installed the ok3d release into ok3d-system. From 0.4 it lives in monitoring, the
+# namespace its charts install into, so a cluster made by 0.3 has its old release removed
+# first. (Its namespaces were empty, and the certificate is issued again from the same
+# authority.) A cluster made from scratch skips this.
+move_release_from_0_3() {
+	helm status ok3d --kube-context "$context" --namespace ok3d-system >/dev/null 2>&1 || return 0
+	echo "Moving the ok3d release from ok3d-system (0.3) to monitoring."
+	helm uninstall ok3d --kube-context "$context" --namespace ok3d-system --wait >/dev/null
+	kubectl --context "$context" delete namespace ok3d-system --wait=true >/dev/null
+}
+
+# With modules.unifi on: UNIFI_API_KEY from .env, in the ok3d-unifi Secret that only unpoller
+# reads. The key goes to kubectl on its standard input, never on a command line, where other
+# users on this machine could see it.
+load_unifi_key() {
+	[ "$MODULE_UNIFI" = true ] || return 0
+	key=$(env_value UNIFI_API_KEY)
+	[ -n "$key" ] || {
+		echo "modules.unifi is on, but UNIFI_API_KEY in .env is empty." >&2
+		exit 1
+	}
+	printf '%s' "$key" | kubectl --context "$context" --namespace monitoring create secret generic ok3d-unifi \
+		--from-file=api-key=/dev/stdin --dry-run=client --output yaml |
+		kubectl --context "$context" apply --filename - >/dev/null
+}
+
 deploy() {
-	if [ ! -d chart/ok3d-platform/charts ]; then
-		echo "Fetching the platform chart's dependencies, at the versions in its Chart.lock."
-		helm repo add jetstack https://charts.jetstack.io --force-update >/dev/null
-		helm dependency build chart/ok3d-platform >/dev/null
-	fi
-	echo "Deploying the platform: cert-manager."
+	echo "Deploying the platform: cert-manager and the Prometheus operator's definitions."
 	helm upgrade --install ok3d-platform chart/ok3d-platform \
 		--kube-context "$context" --namespace cert-manager --create-namespace \
 		--wait --timeout 10m
@@ -241,9 +333,22 @@ deploy() {
 	kubectl --context "$context" --namespace cert-manager create secret tls ok3d-ca \
 		--cert "$DATA_ROOT/certs/ca.crt" --key "$DATA_ROOT/certs/ca.key" \
 		--dry-run=client --output yaml | kubectl --context "$context" apply --filename -
+	move_release_from_0_3
+	make_monitoring_namespace
+	load_unifi_key
 	echo "Deploying ok3d."
-	helm upgrade --install ok3d chart/ok3d --values "$settings" \
-		--kube-context "$context" --namespace ok3d-system --create-namespace \
+	# Prometheus runs as you (the data root's owner), and keeps the history your settings ask
+	# for. Those go to the kube-prometheus-stack chart directly, since a chart's settings can't
+	# be read by the charts inside it.
+	uid=$(id -u)
+	gid=$(id -g)
+	p=kube-prometheus-stack.prometheus.prometheusSpec
+	# shellcheck disable=SC2046 # values_args prints one argument per line, on purpose
+	helm upgrade --install ok3d chart/ok3d $(values_args) \
+		--set "host.uid=$uid,host.gid=$gid" \
+		--set "$p.securityContext.runAsUser=$uid,$p.securityContext.runAsGroup=$gid,$p.securityContext.fsGroup=$gid" \
+		--set "$p.retention=$METRICS_RETENTION,$p.retentionSize=$METRICS_RETENTION_SIZE" \
+		--kube-context "$context" --namespace monitoring \
 		--wait --timeout 10m
 	kubectl --context "$context" --namespace gateway wait certificate/ok3d-pages \
 		--for=condition=Ready --timeout=120s
@@ -264,7 +369,13 @@ connect_demo() {
 
 cmd_apply() {
 	cmd_check
+	if [ "$(id -u)" = 0 ]; then
+		echo "Run ok3d as yourself, not as root: what it keeps in the data root should be yours." >&2
+		exit 1
+	fi
+	# The data root's folders, owned by you, before anything is deployed that uses them.
 	install -d -m 0755 "$DATA_ROOT/kagent-ate"
+	install -d -m 0750 "$DATA_ROOT/prometheus"
 	make_certificate_authority
 	make_cluster
 	connect_demo

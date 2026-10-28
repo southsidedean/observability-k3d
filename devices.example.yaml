@@ -8,7 +8,8 @@
 #   role:      gateway, switch, access-point, server, nas, ups, camera, printer, or other
 #   behind:    the device it connects through (by name), so a failed switch is one alert,
 #              not one for every device behind it (UniFi gear reports this by itself)
-#   checks:    what to check: ping, http, https, dns, or a TCP port such as tcp:22
+#   checks:    what to check: ping, http, https, or a TCP port such as tcp:22
+#   metrics:   ports where it serves Prometheus metrics, such as 9100 for node_exporter
 #   protected: true means no action may ever touch it, even with your approval
 
 devices:

@@ -1,0 +1,9 @@
+dependencies:
+- name: kube-prometheus-stack
+  repository: https://prometheus-community.github.io/helm-charts
+  version: 92.13.1
+- name: prometheus-blackbox-exporter
+  repository: https://prometheus-community.github.io/helm-charts
+  version: 11.20.0
+digest: sha256:46711f0b8f2e15cd85488b70a9b8553579f7c182f21a8d3423c38b09451d9144
+generated: "2026-10-27T20:47:29.046353-05:00"

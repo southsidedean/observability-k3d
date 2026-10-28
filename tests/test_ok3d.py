@@ -27,6 +27,8 @@ esac""",
     "helm": r"""echo "helm $*" >>"$FAKE_LOG"
 case "$*" in
 "version --short") echo "v4.3.1+g0" ;;
+"dependency list"*) ;;
+"status ok3d"*) exit "${FAKE_OLD_RELEASE:-1}" ;;
 *cluster-settings.yaml*)
 	cat <<EOF
 ---
@@ -43,11 +45,18 @@ data:
   DATA_ROOT: "$FAKE_DATA_ROOT"
   TLS_MODE: "self-issued"
   DOMAIN: "${FAKE_DOMAIN:-noc.home.arpa}"
+  METRICS_RETENTION: "30d"
+  METRICS_RETENTION_SIZE: "40GB"
+  MODULE_UNIFI: "${FAKE_UNIFI:-false}"
 EOF
 	;;
 esac""",
     "kubectl": r"""echo "kubectl $*" >>"$FAKE_LOG"
-case "$*" in *"--filename -"*) cat >/dev/null ;; *"--output yaml"*) echo "kind: Secret" ;; esac""",
+case "$*" in
+*"--filename -"*) cat >>"$FAKE_LOG.stdin" ;;
+*"--from-file=api-key=/dev/stdin"*) echo "stdin: $(cat)" >>"$FAKE_LOG.stdin"; echo "kind: Secret" ;;
+*"--output yaml"*) echo "kind: Secret" ;;
+esac""",
     # Makes the key and certificate files, and answers the name-constraint question with
     # FAKE_CA_DOMAIN (the domain the existing authority was made for).
     "openssl": r"""echo "openssl $*" >>"$FAKE_LOG"
@@ -142,10 +151,23 @@ def test_apply_makes_everything_in_order(env: dict[str, str]) -> None:
     def first(prefix: str) -> int:
         return next(i for i, line in enumerate(log) if line.startswith(prefix))
 
-    # The authority, then the cluster, then the platform, the authority's Secret, and ok3d.
+    # The authority, then the cluster, then the platform, the authority's Secret, the
+    # monitoring namespace (with its labels, before anything is installed into it), and ok3d.
     assert first("openssl req") < first("k3d cluster create") < first("helm upgrade --install ok3d-platform")
     assert first("helm upgrade --install ok3d-platform") < first("kubectl --context k3d-ok3d --namespace cert-manager create secret tls ok3d-ca")
-    assert first("kubectl --context k3d-ok3d --namespace cert-manager create secret") < first("helm upgrade --install ok3d chart/ok3d")
+    assert first("kubectl --context k3d-ok3d --namespace cert-manager create secret") < first("kubectl --context k3d-ok3d apply --filename -")
+    assert first("kubectl --context k3d-ok3d apply --filename -") < first("helm upgrade --install ok3d chart/ok3d")
+    stdin = Path(env["FAKE_LOG"] + ".stdin").read_text()
+    assert "name: monitoring" in stdin and "pod-security.kubernetes.io/enforce: restricted" in stdin
+
+    release = log[first("helm upgrade --install ok3d chart/ok3d")]
+    assert "--namespace monitoring" in release
+    # Prometheus runs as you, keeps what your settings ask, and nothing runs as root.
+    uid, gid = os.getuid(), os.getgid()
+    assert f"host.uid={uid},host.gid={gid}" in release
+    assert f"securityContext.runAsUser={uid}" in release
+    assert "retention=30d" in release and "retentionSize=40GB" in release
+    assert (Path(env["FAKE_DATA_ROOT"]) / "prometheus").is_dir()
 
     create = log[first("k3d cluster create")]
     data_root = env["FAKE_DATA_ROOT"]
@@ -162,6 +184,63 @@ def test_apply_makes_everything_in_order(env: dict[str, str]) -> None:
     certs = Path(data_root) / "certs"
     assert stat.S_IMODE(certs.stat().st_mode) == 0o700
     assert (Path(data_root) / "kagent-ate").is_dir()
+
+
+def test_apply_passes_devices_yaml_when_there_is_one(env: dict[str, str], tmp_path: Path) -> None:
+    devices = tmp_path / "devices.yaml"
+    devices.write_text("devices: []\n")
+    env["OK3D_DEVICES"] = str(devices)
+    assert ok3d(env, "apply").returncode == 0
+    release = next(line for line in calls(env) if line.startswith("helm upgrade --install ok3d chart/ok3d"))
+    assert f"--values {devices}" in release
+
+
+def test_without_devices_yaml_check_warns_and_apply_goes_on(env: dict[str, str], tmp_path: Path) -> None:
+    env["OK3D_DEVICES"] = str(tmp_path / "missing.yaml")
+    result = ok3d(env, "check")
+    assert result.returncode == 0
+    assert "WARN  no devices.yaml" in result.stdout
+
+
+def test_the_unifi_key_goes_to_kubectl_on_stdin_only(env: dict[str, str], tmp_path: Path) -> None:
+    dotenv = tmp_path / ".env"
+    dotenv.write_text("UNIFI_API_KEY='abc123secret'\n")
+    dotenv.chmod(0o600)
+    env.update(OK3D_ENV=str(dotenv), FAKE_UNIFI="true")
+    result = ok3d(env, "apply")
+    assert result.returncode == 0, result.stdout + result.stderr
+    # Never on a command line, where other users of the machine could see it.
+    assert "abc123secret" not in Path(env["FAKE_LOG"]).read_text()
+    assert "stdin: abc123secret" in Path(env["FAKE_LOG"] + ".stdin").read_text()
+
+
+def test_a_dotenv_others_can_read_is_refused(env: dict[str, str], tmp_path: Path) -> None:
+    dotenv = tmp_path / ".env"
+    dotenv.write_text("UNIFI_API_KEY=abc123secret\n")
+    dotenv.chmod(0o644)
+    env.update(OK3D_ENV=str(dotenv), FAKE_UNIFI="true")
+    result = ok3d(env, "apply")
+    assert result.returncode == 1
+    assert "chmod 600" in result.stderr
+    assert not any(line.startswith("helm upgrade") for line in calls(env))
+
+
+def test_unifi_on_with_no_key_is_a_problem_check_finds(env: dict[str, str], tmp_path: Path) -> None:
+    dotenv = tmp_path / ".env"
+    dotenv.write_text("UNIFI_API_KEY=\n")
+    dotenv.chmod(0o600)
+    env.update(OK3D_ENV=str(dotenv), FAKE_UNIFI="true")
+    result = ok3d(env, "check")
+    assert result.returncode == 1
+    assert "UNIFI_API_KEY in .env is empty" in result.stdout
+
+
+def test_apply_moves_a_0_3_release_out_of_ok3d_system(env: dict[str, str]) -> None:
+    env["FAKE_OLD_RELEASE"] = "0"
+    assert ok3d(env, "apply").returncode == 0
+    log = calls(env)
+    uninstall = log.index("helm uninstall ok3d --kube-context k3d-ok3d --namespace ok3d-system --wait")
+    assert uninstall < next(i for i, line in enumerate(log) if line.startswith("helm upgrade --install ok3d chart/ok3d"))
 
 
 def test_apply_keeps_an_existing_cluster_and_authority(env: dict[str, str]) -> None:
