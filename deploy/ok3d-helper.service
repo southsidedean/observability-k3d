@@ -2,7 +2,8 @@
 # the Dashboard (src/ok3d/helper.py, docs/helper-under-the-hood.md). It's a systemd user
 # service, running as you, because the Dashboard's container can't run anything on the host.
 # The installer fills in the paths:
-#   @DIR@        the ok3d checkout, with the ok3d command in it
+#   @DIR@        the ok3d checkout, with the ok3d command in it (the installer refuses a path
+#                with spaces, which this file can't hold)
 #   @DATA_ROOT@  host.dataRoot from settings.yaml
 #   @PATH@       your PATH, so ok3d finds docker, k3d, helm, and kubectl
 #
@@ -10,7 +11,6 @@
 #   journalctl --user -u ok3d-helper -f      what it has done
 [Unit]
 Description=ok3d-helper: runs ok3d check and apply when you ask on the Dashboard
-After=network-online.target
 
 [Service]
 Type=simple

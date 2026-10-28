@@ -53,13 +53,23 @@ The helper (`src/ok3d/helper.py`) runs on the server as you, and carries out req
 Dashboard leaves in `<data root>/dashboard/outbox/`. It's written for the case where the
 Dashboard's container has been taken over:
 
-- It renames the request into its own folder before opening anything, so a link moves as a
-  link and is never followed. It refuses links, hard links, folders, and pipes.
+- It opens its folders once, refusing links and folders that belong to someone else, and
+  works through those handles from then on, so a folder swapped for a link later leads
+  nowhere.
+- It renames each request into its own folder, under a new name each time, before opening
+  anything, so a link moves as a link and is never followed. It refuses links, hard links,
+  folders, and pipes, and never removes a folder someone sent it.
 - It reads at most 4 KB, accepts exactly two fields (`id` and `action`), and runs only
   `./ok3d check` or `./ok3d apply`, with no arguments from the request.
-- It refuses requests older than 5 minutes and ids it has carried out before.
-- Its answers come from a fixed list and never repeat what a request said.
+- It refuses requests older than 5 minutes, and any of the last 100 ids it carried out.
+- Every request it takes gets an answer, from a fixed list, that repeats nothing from the
+  request but a valid id.
 - It runs one request at a time, with a time limit, and a second helper won't start.
 
-Tests in `tests/test_helper.py` send it every kind of bad request, and Hypothesis sends it
-random bytes, to check that only a valid request ever runs anything.
+These hold only when the Dashboard's container gets the outbox read-write on its own, the
+helper's folder read-only, and runs as you. The installer sets it up that way
+([details](docs/helper-under-the-hood.md#what-the-dashboards-container-must-be-given)).
+
+Tests in `tests/test_helper.py` send it every kind of bad request, swap its folders for
+links, and send folders built to make removing them fail, and Hypothesis sends it random
+bytes, to check that only a valid request ever runs anything and the next one still works.

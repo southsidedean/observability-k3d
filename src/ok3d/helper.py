@@ -7,8 +7,8 @@ Check or Apply, it leaves a request file in its outbox, `<data root>/dashboard/o
     action=check
 
 This helper, a systemd user service running as you, looks for that file every few seconds.
-It renames it into its own folder, `<data root>/helper/`, which the Dashboard can read but not
-write, checks every value again, runs the `ok3d` command, and writes its answer to
+It renames it into its own folder, `<data root>/helper/taken/`, which the Dashboard can read
+but not write, checks every value again, runs the `ok3d` command, and writes its answer to
 `<data root>/helper/result` for the page to read.
 
 It assumes the Dashboard's container may have been taken over, so it trusts nothing in the
@@ -26,9 +26,9 @@ import argparse
 import contextlib
 import errno
 import fcntl
+import itertools
 import os
 import re
-import shutil
 import signal
 import stat
 import subprocess
@@ -71,15 +71,70 @@ class Request:
 
 @dataclass(frozen=True)
 class Folders:
-    """Where the helper reads and writes."""
+    """Where the helper reads and writes, by path. open_folders() opens them for use."""
 
     ok3d_dir: Path  # the ok3d checkout, with the ok3d command in it
-    outbox: Path  # <data root>/dashboard/outbox: the Dashboard writes requests here
-    own: Path  # <data root>/helper: only the helper writes here
+    data_root: Path  # host.dataRoot
+
+    @property
+    def outbox(self) -> Path:
+        """<data root>/dashboard/outbox: the Dashboard writes requests here."""
+        return self.data_root / "dashboard" / "outbox"
+
+    @property
+    def own(self) -> Path:
+        """<data root>/helper: only the helper writes here; the Dashboard may read it."""
+        return self.data_root / "helper"
 
     @classmethod
     def for_data_root(cls, ok3d_dir: Path, data_root: Path) -> Folders:
-        return cls(ok3d_dir, data_root / "dashboard" / "outbox", data_root / "helper")
+        return cls(ok3d_dir, data_root)
+
+
+@dataclass(frozen=True)
+class Opened:
+    """The helper's folders, opened once when it starts. Everything after goes through these
+    handles, never through the paths again, so a folder the Dashboard swaps for a link later
+    leads nowhere: the helper keeps using the folder it opened."""
+
+    folders: Folders
+    outbox: int  # the outbox
+    own: int  # <data root>/helper
+    taken: int  # <data root>/helper/taken: each request is renamed in here under a new name
+
+
+def open_dir(parent: int, name: str) -> int:
+    """Makes (if needed) and opens a folder in another, refusing a link or someone else's."""
+    with contextlib.suppress(FileExistsError):
+        os.mkdir(name, 0o700, dir_fd=parent)
+    try:
+        fd = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent)
+    except OSError:
+        raise SystemExit(f"ok3d-helper: {name} isn't a folder (a link, or something else)") from None
+    info = os.fstat(fd)
+    if info.st_uid != os.getuid():
+        os.close(fd)
+        raise SystemExit(f"ok3d-helper: {name} belongs to someone else")
+    os.fchmod(fd, 0o700)
+    return fd
+
+
+def open_folders(folders: Folders) -> Opened:
+    """Checks the ok3d command is there, then makes and opens the folders, readable only by
+    you. Each folder is opened from the one above it without following links."""
+    if not os.access(folders.ok3d_dir / "ok3d", os.X_OK):
+        raise SystemExit(f"ok3d-helper: no ok3d command in {folders.ok3d_dir}")
+    root = os.open(folders.data_root, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        dashboard = open_dir(root, "dashboard")
+        own = open_dir(root, "helper")
+    finally:
+        os.close(root)
+    try:
+        outbox = open_dir(dashboard, "outbox")
+    finally:
+        os.close(dashboard)
+    return Opened(folders, outbox, own, open_dir(own, "taken"))
 
 
 def parse_request(data: bytes, mtime: float, now: float) -> Request:
@@ -112,77 +167,83 @@ def parse_request(data: bytes, mtime: float, now: float) -> Request:
     return Request(fields["id"], fields["action"])
 
 
-def take_request(folders: Folders) -> tuple[bytes, float] | None:
-    """Moves the outbox's request into the helper's own folder and reads it.
+def find_id(data: bytes) -> str | None:
+    """The request's id, if it has a valid one, so even a refusal can say which request it
+    answers. Only an id that passes the check is ever repeated."""
+    match = re.search(rb"^id=([0-9a-f]{16,64})$", data[:MAX_REQUEST], re.MULTILINE)
+    return match.group(1).decode() if match else None
+
+
+# Makes each taken request's name new, with the time.
+_names = itertools.count()
+
+
+def take_request(opened: Opened) -> tuple[bytes, float] | None:
+    """Moves the outbox's request into the helper's folder and reads it.
 
     Returns its bytes and modification time, None when there's no request, or raises Refused.
-    The rename moves whatever is there (a link moves as a link, never what it points to), and
-    from then on nothing in the Dashboard's reach is opened. What arrived is removed after
-    reading, whatever it was.
+    The rename moves whatever is there (a link moves as a link, never what it points to), to a
+    name that's new each time, so nothing left from before is ever in the way. A plain file is
+    read and removed. Anything else is refused: a link or pipe is removed without being
+    opened, and a folder is left where it landed, unread and untouched, because removing a
+    tree someone else built is a way to make the helper fail.
     """
-    taken = folders.own / "request"
+    name = f"{time.time_ns()}-{next(_names)}"
     try:
-        os.rename(folders.outbox / "request", taken)
+        os.rename("request", name, src_dir_fd=opened.outbox, dst_dir_fd=opened.taken)
     except FileNotFoundError:
         return None
     except OSError as e:
         if e.errno == errno.EXDEV:
             raise Refused("the outbox and the helper's folder are on different filesystems") from None
-        if e.errno in (errno.EISDIR, errno.ENOTEMPTY, errno.EEXIST, errno.ENOTDIR):
-            # Something left in the helper's folder is in the way: clear it and try next time.
-            remove(taken)
-            return None
-        raise
+        raise Refused("the request couldn't be taken") from None
+    info = os.stat(name, dir_fd=opened.taken, follow_symlinks=False)
+    if stat.S_ISDIR(info.st_mode):
+        raise Refused("the request isn't a plain file")
     try:
-        info = os.lstat(taken)
         if not stat.S_ISREG(info.st_mode):
             raise Refused("the request isn't a plain file")
         if info.st_nlink != 1:
             raise Refused("the request is a link to another file")
-        fd = os.open(taken, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=opened.taken)
         with os.fdopen(fd, "rb") as f:
             data = f.read(MAX_REQUEST + 1)
         return data, info.st_mtime
     finally:
-        remove(taken)
+        with contextlib.suppress(OSError):
+            os.unlink(name, dir_fd=opened.taken)
 
 
-def remove(path: Path) -> None:
-    """Removes a file, link, or folder, without following links."""
+def write_file(opened: Opened, name: str, text: str) -> None:
+    """Writes a file in the helper's folder, readable only by you, through a temporary file
+    renamed into place, so the Dashboard never reads half of one."""
+    tmp = f".{name}.tmp"
     with contextlib.suppress(FileNotFoundError):
-        if stat.S_ISDIR(os.lstat(path).st_mode):
-            shutil.rmtree(path)
-        else:
-            os.unlink(path)
-
-
-def write_file(path: Path, text: str) -> None:
-    """Writes a file readable only by you, through a temporary file renamed into place, so
-    the Dashboard never reads half of one."""
-    tmp = path.with_name(f".{path.name}.tmp")
-    remove(tmp)
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        os.unlink(tmp, dir_fd=opened.own)
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
+    fd = os.open(tmp, flags, 0o600, dir_fd=opened.own)
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         f.write(text)
-    os.replace(tmp, path)
+    os.replace(tmp, name, src_dir_fd=opened.own, dst_dir_fd=opened.own)
 
 
-def write_result(folders: Folders, fields: dict[str, str], output: str = "") -> None:
+def write_result(opened: Opened, fields: dict[str, str], output: str = "") -> None:
     """The answer the Dashboard reads: one field per line, a blank line, then what ok3d printed."""
     lines = [f"{key}={value}" for key, value in fields.items()]
-    write_file(folders.own / "result", "\n".join(lines) + "\n\n" + output)
+    write_file(opened, "result", "\n".join(lines) + "\n\n" + output)
 
 
-def seen_before(folders: Folders, request_id: str) -> bool:
-    """Whether the id was carried out already. Records it if not."""
-    path = folders.own / "seen"
+def seen_before(opened: Opened, request_id: str) -> bool:
+    """Whether the id is one of the last SEEN carried out. Records it if not."""
     try:
-        seen = path.read_text(encoding="ascii").split()
+        fd = os.open("seen", os.O_RDONLY | os.O_NOFOLLOW, dir_fd=opened.own)
+        with os.fdopen(fd, encoding="ascii") as f:
+            seen = f.read().split()
     except FileNotFoundError:
         seen = []
     if request_id in seen:
         return True
-    write_file(path, "\n".join([*seen[-(SEEN - 1) :], request_id]) + "\n")
+    write_file(opened, "seen", "\n".join([*seen[-(SEEN - 1) :], request_id]) + "\n")
     return False
 
 
@@ -190,16 +251,16 @@ def now_utc() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def run_ok3d(folders: Folders, action: str) -> tuple[int, str]:
+def run_ok3d(opened: Opened, action: str) -> tuple[int, str]:
     """Runs ./ok3d <action> and returns its exit status and the last lines it printed."""
-    log = folders.own / "output"
-    remove(log)
-    fd = os.open(log, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
-    with os.fdopen(fd, "w") as out:
+    ok3d_dir = opened.folders.ok3d_dir
+    flags = os.O_RDWR | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW
+    fd = os.open("output", flags, 0o600, dir_fd=opened.own)
+    with os.fdopen(fd, "w+", encoding="utf-8", errors="replace") as out:
         # Its own process group, so a timeout stops everything it started, Helm and k3d too.
         process = subprocess.Popen(
-            [str(folders.ok3d_dir / "ok3d"), action],
-            cwd=folders.ok3d_dir,
+            [str(ok3d_dir / "ok3d"), action],
+            cwd=ok3d_dir,
             stdin=subprocess.DEVNULL,
             stdout=out,
             stderr=subprocess.STDOUT,
@@ -208,56 +269,50 @@ def run_ok3d(folders: Folders, action: str) -> tuple[int, str]:
         try:
             status = process.wait(timeout=TIMEOUTS[action])
         except subprocess.TimeoutExpired:
-            os.killpg(process.pid, signal.SIGKILL)
-            process.wait()
             out.write(f"\nok3d-helper: stopped ./ok3d {action} after {TIMEOUTS[action]} seconds.\n")
             status = 124
-    lines = log.read_text(encoding="utf-8", errors="replace").splitlines()
+        # Anything it left running in its group goes too, whether it finished or was stopped.
+        with contextlib.suppress(ProcessLookupError, PermissionError):
+            os.killpg(process.pid, signal.SIGKILL)
+        process.wait()
+        out.flush()
+        out.seek(0)
+        lines = out.read().splitlines()
     return status, "\n".join(lines[-TAIL:]) + "\n"
 
 
-def handle_once(folders: Folders, now: float | None = None) -> str | None:
-    """Carries out the outbox's request, if there is one. Returns what happened, for the log."""
+def handle_once(opened: Opened, now: float | None = None) -> str | None:
+    """Carries out the outbox's request, if there is one. Returns what happened, for the log.
+
+    Every request that's taken gets an answer, so the page never waits forever."""
+    request_id = None
     try:
-        taken = take_request(folders)
+        taken = take_request(opened)
         if taken is None:
             return None
+        request_id = find_id(taken[0])
         request = parse_request(*taken, now=time.time() if now is None else now)
-        if seen_before(folders, request.id):
+        if seen_before(opened, request.id):
             raise Refused("the request was carried out already")
     except Refused as e:
-        write_result(folders, {"state": "refused", "reason": str(e), "finished": now_utc()})
+        fields = {"id": request_id} if request_id else {}
+        write_result(opened, fields | {"state": "refused", "reason": str(e), "finished": now_utc()})
         return f"refused a request: {e}"
-    write_result(folders, {"id": request.id, "action": request.action, "state": "running"})
-    status, output = run_ok3d(folders, request.action)
-    write_result(
-        folders,
-        {
-            "id": request.id,
-            "action": request.action,
-            "state": "finished",
-            "exit": str(status),
-            "finished": now_utc(),
-        },
-        output,
-    )
+    answer = {"id": request.id, "action": request.action}
+    write_result(opened, answer | {"state": "running"})
+    try:
+        status, output = run_ok3d(opened, request.action)
+    except OSError:
+        write_result(opened, answer | {"state": "failed", "reason": "the ok3d command couldn't run", "finished": now_utc()})
+        return f"couldn't run ./ok3d {request.action} for {request.id}"
+    write_result(opened, answer | {"state": "finished", "exit": str(status), "finished": now_utc()}, output)
     return f"ran ./ok3d {request.action} for {request.id}: exit {status}"
-
-
-def prepare(folders: Folders) -> None:
-    """Makes the folders, readable only by you, and checks the ok3d command is there."""
-    if not os.access(folders.ok3d_dir / "ok3d", os.X_OK):
-        raise SystemExit(f"ok3d-helper: no ok3d command in {folders.ok3d_dir}")
-    for folder in (folders.outbox, folders.own):
-        folder.mkdir(mode=0o700, parents=True, exist_ok=True)
-        if folder.is_symlink() or not folder.is_dir():
-            raise SystemExit(f"ok3d-helper: {folder} isn't a folder")
 
 
 def watch(folders: Folders) -> None:
     """Looks for requests until stopped. A second helper on the same data root won't start."""
-    prepare(folders)
-    lock = os.open(folders.own / "lock", os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+    opened = open_folders(folders)
+    lock = os.open("lock", os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW, 0o600, dir_fd=opened.own)
     try:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
@@ -265,7 +320,7 @@ def watch(folders: Folders) -> None:
     print(f"ok3d-helper: watching {folders.outbox}", flush=True)
     while True:
         try:
-            message = handle_once(folders)
+            message = handle_once(opened)
         except Exception as e:  # one bad request mustn't stop the helper
             message = f"couldn't handle a request: {type(e).__name__}"
         if message:
@@ -283,8 +338,7 @@ def main(argv: list[str] | None = None) -> None:
     if args.command == "watch":
         watch(folders)
     else:
-        prepare(folders)
-        print(handle_once(folders) or "ok3d-helper: no request")
+        print(handle_once(open_folders(folders)) or "ok3d-helper: no request")
 
 
 if __name__ == "__main__":
