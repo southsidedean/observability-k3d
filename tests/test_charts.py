@@ -531,5 +531,7 @@ def test_grafana_gets_time_for_its_first_start() -> None:
             probe = grafana["startupProbe"]
             assert probe["httpGet"]["path"] == "/api/health"
             assert probe["periodSeconds"] * probe["failureThreshold"] >= 600
+            # Pulling its images and its first start together took over 10 minutes on the test VM.
+            assert doc["spec"]["progressDeadlineSeconds"] >= 1800
             return
     pytest.fail("no Grafana Deployment")

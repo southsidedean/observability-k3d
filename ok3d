@@ -477,7 +477,7 @@ deploy() {
 		--set "gateway.adminChecksum=$checksum" \
 		--set "$p.retention=$METRICS_RETENTION,$p.retentionSize=$METRICS_RETENTION_SIZE" \
 		--kube-context "$context" --namespace monitoring \
-		--wait --timeout 10m
+		--wait --timeout 30m
 	kubectl --context "$context" --namespace gateway wait certificate/ok3d-pages \
 		--for=condition=Ready --timeout=120s
 }

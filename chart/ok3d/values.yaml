@@ -132,8 +132,12 @@ kube-prometheus-stack:
   grafana:
     enabled: true
     # Grafana's first start makes its database, hundreds of steps that take minutes on a slow
-    # disk. Until /api/health answers, this probe holds off the liveness probe (which would
-    # restart Grafana partway, so it starts over), for up to 15 minutes.
+    # disk, after its images (about 500 MB) are pulled. On the test VM the two took over 10
+    # minutes, Kubernetes' default before it calls a Deployment failed, so it gets 30; ./ok3d
+    # apply waits as long.
+    progressDeadlineSeconds: 1800
+    # Until /api/health answers, this probe holds off the liveness probe (which would restart
+    # Grafana partway, so it starts over), for up to 15 minutes from when Grafana starts.
     startupProbe:
       httpGet:
         path: /api/health
