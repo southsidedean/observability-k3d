@@ -1,0 +1,51 @@
+# Every setting ok3d has, with its default. Don't edit this file: put the settings you change
+# in settings.yaml (start from settings.example.yaml), which `ok3d apply` puts on top of these.
+# values.schema.json describes each setting and refuses values that can't work, before
+# anything is deployed. docs/settings.md is made from that schema.
+
+# The version of the settings' layout. ok3d uses it to tell which migrations a settings file
+# needs when a release changes the layout.
+settingsVersion: 1
+
+cluster:
+  # The k3d cluster's name. Its kubectl context is k3d-<name>.
+  name: ok3d
+  # The k3s image, pinned. kagent 1.0 needs Kubernetes 1.37 or newer.
+  k3sImage: rancher/k3s:v1.37.1-k3s1
+  # The Docker network the cluster's containers join.
+  network: ok3d
+  # The Kubernetes API's port. It listens on 127.0.0.1 only, never on your network.
+  apiPort: 6445
+  # The address the web pages are published on: 0.0.0.0 for every address this machine has,
+  # or one address to limit them to one network.
+  publishAddress: 0.0.0.0
+  ports:
+    # HTTPS for every web page, through the gateway (from 0.4).
+    https: 8443
+
+host:
+  # The folder on this machine that holds everything ok3d keeps: Prometheus's history,
+  # Grafana's database, the certificate authority, and more. It survives the cluster being
+  # deleted and made again. A filesystem of its own is best.
+  dataRoot: /srv/ok3d
+
+tls:
+  # self-issued: ok3d makes its own certificate authority, which you trust on your devices
+  # once. (Public certificates from Let's Encrypt come in 1.1.)
+  mode: self-issued
+  # The domain the web pages are named under (grafana.<domain>, and so on). home.arpa is
+  # reserved for home networks. Your router or local DNS server points the names at this
+  # machine.
+  domain: noc.home.arpa
+
+# The parts you can switch on or off. Each arrives in the release PLAN.md gives it; until
+# then, switching it on does nothing.
+modules:
+  unifi: false
+  plex: false
+  snmp: false
+  ups: false
+  syslog: false
+  mesh: false
+  agents: false
+  remoteAccess: false

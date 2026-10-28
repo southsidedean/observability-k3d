@@ -1,0 +1,45 @@
+{{- /*
+The web pages' certificate. With tls.mode self-issued, `ok3d apply` makes a certificate
+authority in the data root (certs/) the first time, and loads it into the cluster as the
+ok3d-ca Secret in cert-manager's namespace. cert-manager then issues one wildcard certificate
+from it for every page under the domain, and renews it on its own. A new cluster gets the same
+authority, so the devices that trust it keep trusting it.
+
+The authority can only vouch for names under the domain (a name constraint ok3d puts in it),
+so trusting it on a device can't let it impersonate any other site.
+*/ -}}
+{{- if eq .Values.tls.mode "self-issued" }}
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: ok3d-ca
+  labels:
+    {{- include "ok3d.labels" . | nindent 4 }}
+spec:
+  ca:
+    secretName: ok3d-ca
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: ok3d-pages
+  namespace: gateway
+  labels:
+    {{- include "ok3d.labels" . | nindent 4 }}
+spec:
+  secretName: ok3d-pages-tls
+  issuerRef:
+    kind: ClusterIssuer
+    name: ok3d-ca
+  dnsNames:
+    - {{ .Values.tls.domain | quote }}
+    - {{ printf "*.%s" .Values.tls.domain | quote }}
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    # A new key at every renewal, so an old key stops being useful once replaced.
+    rotationPolicy: Always
+  # 90 days, renewed a month before it runs out, like a public certificate.
+  duration: 2160h
+  renewBefore: 720h
+{{- end }}
