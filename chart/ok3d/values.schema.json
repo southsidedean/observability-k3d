@@ -4,7 +4,16 @@
   "description": "Every setting ok3d has. Helm checks settings.yaml against this before anything is deployed, and docs/settings.md is made from the descriptions here.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["settingsVersion", "cluster", "host", "tls", "modules"],
+  "required": [
+    "settingsVersion",
+    "cluster",
+    "host",
+    "metrics",
+    "tls",
+    "unifi",
+    "modules",
+    "devices"
+  ],
   "properties": {
     "global": {
       "description": "Set by Helm itself; not a setting.",
@@ -18,7 +27,14 @@
       "description": "The k3d cluster ok3d runs in.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "k3sImage", "network", "apiPort", "publishAddress", "ports"],
+      "required": [
+        "name",
+        "k3sImage",
+        "network",
+        "apiPort",
+        "publishAddress",
+        "ports"
+      ],
       "properties": {
         "name": {
           "description": "The cluster's name: lowercase letters, digits, and dashes, starting with a letter, up to 32 characters.",
@@ -51,7 +67,9 @@
           "description": "The ports published on publishAddress.",
           "type": "object",
           "additionalProperties": false,
-          "required": ["https"],
+          "required": [
+            "https"
+          ],
           "properties": {
             "https": {
               "description": "HTTPS for every web page.",
@@ -67,12 +85,28 @@
       "description": "This machine.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["dataRoot"],
+      "required": [
+        "dataRoot",
+        "uid",
+        "gid"
+      ],
       "properties": {
         "dataRoot": {
           "description": "The folder that holds everything ok3d keeps. An absolute path with no spaces or quotes.",
           "type": "string",
           "pattern": "^/[A-Za-z0-9._/-]*[A-Za-z0-9._-]$"
+        },
+        "uid": {
+          "description": "The user ID that owns the data root; ok3d apply sets it to yours. Never 0: nothing of ok3d's keeps data as root.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967294
+        },
+        "gid": {
+          "description": "The group ID that owns the data root; ok3d apply sets it to yours. Never 0: nothing of ok3d's keeps data as root.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967294
         }
       }
     },
@@ -80,11 +114,16 @@
       "description": "The web pages' certificates.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["mode", "domain"],
+      "required": [
+        "mode",
+        "domain"
+      ],
       "properties": {
         "mode": {
           "description": "self-issued: ok3d makes its own certificate authority. (Public certificates come in 1.1.)",
-          "enum": ["self-issued"]
+          "enum": [
+            "self-issued"
+          ]
         },
         "domain": {
           "description": "The domain the web pages are named under, such as noc.home.arpa.",
@@ -97,17 +136,166 @@
       "description": "The parts you can switch on or off. Each is off by default.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["unifi", "plex", "snmp", "ups", "syslog", "mesh", "agents", "remoteAccess"],
+      "required": [
+        "unifi",
+        "plex",
+        "snmp",
+        "ups",
+        "syslog",
+        "mesh",
+        "agents",
+        "remoteAccess"
+      ],
       "properties": {
-        "unifi": { "description": "UniFi controller metrics, through unpoller (0.4).", "type": "boolean" },
-        "plex": { "description": "Plex, watched as a service on your network (0.7).", "type": "boolean" },
-        "snmp": { "description": "Switches and NAS that aren't UniFi, through SNMP (0.7).", "type": "boolean" },
-        "ups": { "description": "A UPS, through NUT (0.7).", "type": "boolean" },
-        "syslog": { "description": "Syslog from your devices, over UDP and TCP (0.6).", "type": "boolean" },
-        "mesh": { "description": "Istio ambient between the cluster's parts (0.8).", "type": "boolean" },
-        "agents": { "description": "kagent and its tools (0.9).", "type": "boolean" },
-        "remoteAccess": { "description": "Tailscale, to reach ok3d away from home (0.8).", "type": "boolean" }
+        "unifi": {
+          "description": "UniFi controller metrics, through unpoller (0.4).",
+          "type": "boolean"
+        },
+        "plex": {
+          "description": "Plex, watched as a service on your network (0.7).",
+          "type": "boolean"
+        },
+        "snmp": {
+          "description": "Switches and NAS that aren't UniFi, through SNMP (0.7).",
+          "type": "boolean"
+        },
+        "ups": {
+          "description": "A UPS, through NUT (0.7).",
+          "type": "boolean"
+        },
+        "syslog": {
+          "description": "Syslog from your devices, over UDP and TCP (0.6).",
+          "type": "boolean"
+        },
+        "mesh": {
+          "description": "Istio ambient between the cluster's parts (0.8).",
+          "type": "boolean"
+        },
+        "agents": {
+          "description": "kagent and its tools (0.9).",
+          "type": "boolean"
+        },
+        "remoteAccess": {
+          "description": "Tailscale, to reach ok3d away from home (0.8).",
+          "type": "boolean"
+        }
       }
+    },
+    "metrics": {
+      "description": "How much history Prometheus keeps.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "retention",
+        "retentionSize"
+      ],
+      "properties": {
+        "retention": {
+          "description": "How long Prometheus keeps its history, such as 30d or 12w.",
+          "type": "string",
+          "pattern": "^[1-9][0-9]*(h|d|w|y)$"
+        },
+        "retentionSize": {
+          "description": "The most room Prometheus's history may take in the data root, such as 40GB.",
+          "type": "string",
+          "pattern": "^[1-9][0-9]*(MB|GB|TB)$"
+        }
+      }
+    },
+    "unifi": {
+      "description": "The UniFi controller, for modules.unifi. Its API key goes in .env as UNIFI_API_KEY.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "url",
+        "verifyTls"
+      ],
+      "properties": {
+        "url": {
+          "description": "The controller's address, such as https://192.168.1.1. Empty while modules.unifi is off.",
+          "type": "string",
+          "pattern": "^(https?://[A-Za-z0-9.-]+(:[0-9]{1,5})?/?)?$"
+        },
+        "verifyTls": {
+          "description": "Whether to check the controller's certificate. Most have a self-signed one, so false.",
+          "type": "boolean"
+        }
+      }
+    },
+    "devices": {
+      "description": "The devices ok3d watches, from devices.yaml.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "address",
+          "role"
+        ],
+        "properties": {
+          "name": {
+            "description": "What you call it: lowercase letters, digits, and dashes. Shown on the board and in alerts.",
+            "type": "string",
+            "pattern": "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$"
+          },
+          "address": {
+            "description": "Its IPv4 address or host name.",
+            "type": "string",
+            "pattern": "^([0-9]{1,3}(\\.[0-9]{1,3}){3}|[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?)$"
+          },
+          "role": {
+            "description": "What kind of device it is.",
+            "enum": [
+              "gateway",
+              "switch",
+              "access-point",
+              "server",
+              "nas",
+              "ups",
+              "camera",
+              "printer",
+              "controller",
+              "other"
+            ]
+          },
+          "behind": {
+            "description": "The device it connects through, by name, so a failed one is one alert, not one for every device behind it.",
+            "type": "string",
+            "pattern": "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$"
+          },
+          "checks": {
+            "description": "What to check: ping, http, https, or tcp:<port>.",
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^(ping|http|https|tcp:[1-9][0-9]{0,4})$"
+            }
+          },
+          "metrics": {
+            "description": "Ports where it serves Prometheus metrics, such as 9100 for node_exporter, or 9100/metrics with a path.",
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]{0,4}(/[A-Za-z0-9._/-]*)?$"
+            }
+          },
+          "protected": {
+            "description": "True means no action may ever touch it, even with your approval.",
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "kube-prometheus-stack": {
+      "description": "How ok3d sets up the kube-prometheus-stack chart. Not a setting of yours.",
+      "type": "object"
+    },
+    "prometheus-blackbox-exporter": {
+      "description": "How ok3d sets up the prometheus-blackbox-exporter chart. Not a setting of yours.",
+      "type": "object"
     }
   }
 }

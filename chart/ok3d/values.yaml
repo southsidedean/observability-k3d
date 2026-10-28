@@ -28,6 +28,32 @@ host:
   # Grafana's database, the certificate authority, and more. It survives the cluster being
   # deleted and made again. A filesystem of its own is best.
   dataRoot: /srv/ok3d
+  # The user and group that own the data root. ok3d's parts that keep data there run as them,
+  # so the files stay yours: you can back them up or look at them without sudo. `ok3d apply`
+  # sets these to yours; there's no need to set them by hand.
+  uid: 1000
+  gid: 1000
+
+metrics:
+  # How long Prometheus keeps its history, and the most room it may use in the data root.
+  # When it reaches either, it drops the oldest data first.
+  retention: 30d
+  retentionSize: 40GB
+
+unifi:
+  # With modules.unifi on: your UniFi controller's address, such as https://192.168.1.1 for a
+  # UniFi gateway or https://unifi.example.com:8443 for a controller of its own. Its API key
+  # goes in .env (UNIFI_API_KEY), from a view-only admin, so ok3d can read and change nothing.
+  url: ""
+  # UniFi gateways and controllers usually have a self-signed certificate. Set this to true
+  # if yours has one your devices trust.
+  verifyTls: false
+
+# The devices ok3d watches. They come from devices.yaml, which `ok3d apply` adds to these
+# settings when it's there (start from devices.example.yaml; devices.demo.yaml lists the
+# simulated network's). Each device's checks become probes, and its metrics ports become
+# scrape targets.
+devices: []
 
 tls:
   # self-issued: ok3d makes its own certificate authority, which you trust on your devices
@@ -49,3 +75,166 @@ modules:
   mesh: false
   agents: false
   remoteAccess: false
+
+# ----------------------------------------------------------------------------------------
+# The charts ok3d is built from. These are how ok3d needs them set up, not settings of
+# yours: changing them in settings.yaml isn't supported.
+
+kube-prometheus-stack:
+  # The operator's definitions come from the platform chart instead, installed first.
+  crds:
+    enabled: false
+  # Grafana and Alertmanager are switched on by the later 0.4 changes that set them up.
+  grafana:
+    enabled: false
+  alertmanager:
+    enabled: false
+  # node-exporter needs the host's network, processes, and filesystem, which the restricted
+  # Pod Security Standard forbids. Hosts, this server included, are watched the way every
+  # host is: node_exporter or Alloy on the host itself, listed in devices.yaml.
+  nodeExporter:
+    enabled: false
+  # k3s runs these inside its one binary and doesn't expose their metrics, so scraping them
+  # would only ever fail, and their alerts would fire forever.
+  kubeControllerManager:
+    enabled: false
+  kubeScheduler:
+    enabled: false
+  kubeProxy:
+    enabled: false
+  kubeEtcd:
+    enabled: false
+  # The API server's own metrics are about Kubernetes' internals, not your network, and they
+  # are tens of thousands of series. k3s also serves them on the kubelet's metrics endpoint,
+  # since it runs both in one process, so that endpoint is off too. cAdvisor stays: it's each
+  # pod's CPU and memory, which is how ok3d watches its own parts.
+  kubeApiServer:
+    enabled: false
+  kubelet:
+    serviceMonitor:
+      kubelet: false
+      probes: false
+      cAdvisor: true
+  defaultRules:
+    rules:
+      kubeApiserverAvailability: false
+      kubeApiserverBurnrate: false
+      kubeApiserverHistogram: false
+      kubeApiserverSlos: false
+      kubelet: false
+      etcd: false
+      kubeControllerManager: false
+      kubeSchedulerAlerting: false
+      kubeSchedulerRecording: false
+      kubeProxy: false
+      nodeExporterAlerting: false
+      nodeExporterRecording: false
+      node: false
+      windows: false
+  prometheusOperator:
+    resources:
+      requests: { cpu: 20m, memory: 64Mi }
+      limits: { memory: 256Mi }
+  kube-state-metrics:
+    resources:
+      requests: { cpu: 10m, memory: 32Mi }
+      limits: { memory: 128Mi }
+  prometheus:
+    prometheusSpec:
+      # Find every ServiceMonitor, PodMonitor, Probe, ScrapeConfig, and rule in the cluster,
+      # not only those carrying this chart's release label. (The old stack's probes were
+      # never scraped because they lacked that label.)
+      ruleSelectorNilUsesHelmValues: false
+      serviceMonitorSelectorNilUsesHelmValues: false
+      podMonitorSelectorNilUsesHelmValues: false
+      probeSelectorNilUsesHelmValues: false
+      scrapeConfigSelectorNilUsesHelmValues: false
+      # metrics.retention and metrics.retentionSize; ok3d apply passes yours.
+      retention: 30d
+      retentionSize: 40GB
+      # The data root's prometheus folder, through the volume chart/ok3d/templates/volumes.yaml
+      # makes, picked by its label. Mounted whole: by default the operator mounts a subfolder,
+      # which Kubernetes would make owned by root, where Prometheus (running as you) can't write.
+      storageSpec:
+        disableMountSubPath: true
+        volumeClaimTemplate:
+          spec:
+            storageClassName: ""
+            accessModes: ["ReadWriteOnce"]
+            selector:
+              matchLabels:
+                ok3d/volume: prometheus
+            resources:
+              requests:
+                storage: 50Gi
+      # Runs as the data root's owner (host.uid and host.gid, which ok3d apply passes), so
+      # the history it writes there is yours. The restricted Pod Security Standard's rules.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      resources:
+        requests: { cpu: 100m, memory: 512Mi }
+        limits: { memory: 2Gi }
+
+prometheus-blackbox-exporter:
+  # Ping without root or the NET_RAW capability: Linux allows "unprivileged" ping to the
+  # groups in this sysctl, which Kubernetes counts as safe under the restricted standard,
+  # and blackbox_exporter uses it when it can.
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+    runAsGroup: 65534
+    seccompProfile:
+      type: RuntimeDefault
+    sysctls:
+      - name: net.ipv4.ping_group_range
+        value: "0 2147483647"
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+    runAsGroup: 65534
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+  resources:
+    requests: { cpu: 10m, memory: 32Mi }
+    limits: { memory: 128Mi }
+  # The checks devices.yaml can ask for: ping, http, https, and tcp:<port>.
+  config:
+    modules:
+      icmp:
+        prober: icmp
+        timeout: 5s
+        icmp:
+          preferred_ip_protocol: ip4
+      # Many home devices (printers, NAS pages, small switches) still answer in HTTP/1.0,
+      # which blackbox refuses unless it's listed.
+      http_2xx:
+        prober: http
+        timeout: 5s
+        http:
+          preferred_ip_protocol: ip4
+          follow_redirects: true
+          valid_http_versions: ["HTTP/1.0", "HTTP/1.1", "HTTP/2.0"]
+      # Home devices mostly have self-signed certificates, so the check is that the page
+      # answers over TLS, not that its certificate is publicly trusted.
+      https_2xx:
+        prober: http
+        timeout: 5s
+        http:
+          preferred_ip_protocol: ip4
+          follow_redirects: true
+          valid_http_versions: ["HTTP/1.0", "HTTP/1.1", "HTTP/2.0"]
+          fail_if_not_ssl: true
+          tls_config:
+            insecure_skip_verify: true
+      tcp_connect:
+        prober: tcp
+        timeout: 5s
+        tcp:
+          preferred_ip_protocol: ip4

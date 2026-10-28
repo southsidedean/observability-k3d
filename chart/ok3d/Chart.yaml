@@ -10,3 +10,17 @@ type: application
 version: 0.4.0-dev0
 appVersion: 0.4.0.dev0
 home: https://github.com/southsidedean/observability-k3d
+# Pinned, and fetched by `helm dependency build chart/ok3d` (into charts/, which isn't
+# committed) at the versions in Chart.lock. `ok3d apply` does that for you. Renovate proposes
+# newer versions. Their settings are under their names in values.yaml.
+dependencies:
+  # Prometheus and its operator, and kube-state-metrics. Grafana and Alertmanager come from
+  # here too, as later 0.4 changes switch them on. The operator's definitions come from the
+  # platform chart, for the same operator version (v0.94.1).
+  - name: kube-prometheus-stack
+    version: 92.13.1
+    repository: https://prometheus-community.github.io/helm-charts
+  # Ping, HTTP, and TCP checks for every device in devices.yaml.
+  - name: prometheus-blackbox-exporter
+    version: 11.20.0
+    repository: https://prometheus-community.github.io/helm-charts

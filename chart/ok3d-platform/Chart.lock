@@ -2,5 +2,8 @@ dependencies:
 - name: cert-manager
   repository: https://charts.jetstack.io
   version: v1.21.3
-digest: sha256:2762aafdd75a7e316b0aacf572c3decd0bcbff10e4fb207b2bd76385cd39281f
-generated: "2026-10-27T19:18:42.699322-05:00"
+- name: prometheus-operator-crds
+  repository: https://prometheus-community.github.io/helm-charts
+  version: 32.0.1
+digest: sha256:faa036b21736d82cafb16075bf991a82191d1b62dcc629cf18ea854a37ca5f39
+generated: "2026-10-27T20:46:40.039038-05:00"

@@ -111,6 +111,17 @@ else
 	missing "8. the tests (pytest)"
 fi
 
+# fetch_chart_dependencies: both charts' dependencies, at the versions in their Chart.lock
+# files, unless they're already here.
+fetch_chart_dependencies() {
+	for chart in chart/ok3d-platform chart/ok3d; do
+		helm dependency list "$chart" 2>/dev/null | grep -q -e missing -e "wrong version" || continue
+		helm repo add jetstack https://charts.jetstack.io --force-update >/dev/null &&
+			helm repo add prometheus-community https://prometheus-community.github.io/helm-charts --force-update >/dev/null &&
+			helm dependency build "$chart" >/dev/null || return 1
+	done
+}
+
 # 9. The charts: both lint, and every object they render is valid for the cluster's
 # Kubernetes version, the custom resources too (checked against the CRDs catalog). The
 # platform chart's dependencies are fetched first, at the versions in its Chart.lock.
@@ -118,14 +129,11 @@ fi
 # against, and cert-manager's chart validates them upstream.
 if command -v helm >/dev/null 2>&1 && command -v kubeconform >/dev/null 2>&1; then
 	k8s=$(sed -n 's/^  k3sImage: rancher\/k3s:v\([0-9.]*\)-.*/\1/p' chart/ok3d/values.yaml)
-	if { [ -d chart/ok3d-platform/charts ] || {
-		helm repo add jetstack https://charts.jetstack.io --force-update >/dev/null &&
-			helm dependency build chart/ok3d-platform >/dev/null
-	}; } &&
+	if fetch_chart_dependencies &&
 		helm lint --strict chart/ok3d --values settings.example.yaml >/dev/null &&
 		helm lint chart/ok3d-platform >/dev/null &&
 		{
-			helm template ok3d chart/ok3d --namespace ok3d-system --values settings.example.yaml
+			helm template ok3d chart/ok3d --namespace monitoring --values settings.example.yaml --values devices.demo.yaml
 			helm template ok3d-platform chart/ok3d-platform --namespace cert-manager
 		} | kubeconform -strict -summary -kubernetes-version "$k8s" -skip CustomResourceDefinition \
 			-schema-location default \

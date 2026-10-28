@@ -46,4 +46,5 @@ devices:
     address: 198.51.100.50
     role: controller
     behind: office-switch
-    checks: [ping, tcp:9130]
+    checks: [ping]
+    metrics: ["9130"]

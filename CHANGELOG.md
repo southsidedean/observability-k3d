@@ -9,6 +9,15 @@
   and a fake UniFi controller that reports on them under unpoller's metric names, on addresses
   set aside for documentation. `./ok3d demo fail <device>` takes one down and
   `./ok3d demo fix <device>` brings it back. [docs/demo.md](docs/demo.md) has the details.
+- Prometheus, with its history in the data root (30 days, 40 GB at most, both settings), so a
+  rebuilt cluster keeps it. It runs as you, so the files are yours.
+- `devices.yaml` lists the devices ok3d watches. Each device's checks (ping, http, https,
+  tcp:<port>) run every 30 seconds, and its metrics ports are scraped. Ping works without
+  root or extra privileges. [docs/devices.md](docs/devices.md) explains every field.
+- With `modules.unifi` on, unpoller reads your UniFi controller with an API key from a
+  view-only admin, kept in `.env` and given only to unpoller.
+- ok3d leaves out Kubernetes' own internal metrics, which k3s serves in bulk: an empty
+  cluster now keeps about 5,000 series instead of about 100,000.
 
 ## 0.3.0 (2026-10-27)
 

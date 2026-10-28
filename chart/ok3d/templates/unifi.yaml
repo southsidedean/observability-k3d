@@ -1,0 +1,103 @@
+{{- /*
+unpoller, with modules.unifi on: it reads your UniFi controller (unifi.url) through its API,
+with a key from a view-only admin, and serves what it finds as metrics for Prometheus. The key
+comes from .env (UNIFI_API_KEY): `ok3d apply` puts it in the ok3d-unifi Secret, and only this
+pod reads it.
+
+Its per-client app traffic (DPI) is off: it multiplies the number of series many times over
+for detail few homes need.
+*/ -}}
+{{- if .Values.modules.unifi }}
+{{- $url := required "modules.unifi is on: set unifi.url to your UniFi controller's address" .Values.unifi.url }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: unpoller
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ok3d.labels" . | nindent 4 }}
+    app.kubernetes.io/name: unpoller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: unpoller
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: unpoller
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: unpoller
+          # v5.5.1, pinned by digest. Renovate proposes newer versions.
+          image: ghcr.io/unpoller/unpoller:v5.5.1@sha256:6d941ea1e46edebf12225b4ee9ca9abb88019a55f1add634e6f9300a201847b4
+          env:
+            - name: UP_UNIFI_DEFAULT_URL
+              value: {{ $url | quote }}
+            - name: UP_UNIFI_DEFAULT_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ok3d-unifi
+                  key: api-key
+            - name: UP_UNIFI_DEFAULT_VERIFY_SSL
+              value: {{ .Values.unifi.verifyTls | quote }}
+            - name: UP_UNIFI_DEFAULT_SAVE_DPI
+              value: "false"
+            - name: UP_INFLUXDB_DISABLE
+              value: "true"
+            - name: UP_PROMETHEUS_HTTP_LISTEN
+              value: "0.0.0.0:9130"
+          ports:
+            - name: metrics
+              containerPort: 9130
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { memory: 128Mi }
+          readinessProbe:
+            tcpSocket:
+              port: metrics
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: unpoller
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ok3d.labels" . | nindent 4 }}
+    app.kubernetes.io/name: unpoller
+spec:
+  selector:
+    app.kubernetes.io/name: unpoller
+  ports:
+    - name: metrics
+      port: 9130
+      targetPort: metrics
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: unpoller
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ok3d.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: unpoller
+  endpoints:
+    - port: metrics
+      interval: 30s
+{{- end }}

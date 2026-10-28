@@ -151,7 +151,8 @@ FAKE_HELM = r"""case "$*" in
 *cluster-settings.yaml*)
 	printf '%s\n' '  CLUSTER_NAME: "ok3d"' '  K3S_IMAGE: "rancher/k3s:v1.37.1-k3s1"' '  NETWORK: "ok3d"' \
 		'  API_PORT: "6445"' '  PUBLISH_ADDRESS: "0.0.0.0"' '  HTTPS_PORT: "8443"' \
-		"  DATA_ROOT: \"$FAKE_DATA_ROOT\"" '  TLS_MODE: "self-issued"' '  DOMAIN: "noc.home.arpa"' ;;
+		"  DATA_ROOT: \"$FAKE_DATA_ROOT\"" '  TLS_MODE: "self-issued"' '  DOMAIN: "noc.home.arpa"' \
+		'  METRICS_RETENTION: "30d"' '  METRICS_RETENTION_SIZE: "40GB"' '  MODULE_UNIFI: "false"' ;;
 esac"""
 
 

@@ -1,0 +1,25 @@
+{{- /*
+The volumes that keep ok3d's data in the data root, so a new cluster picks up where the old
+one left off. Each is a folder of host.dataRoot (mounted into the cluster's node at
+/var/lib/ok3d), which `ok3d apply` makes, owned by you, before deploying. Each carries an
+ok3d/volume label, and the claim that should get it asks for that label, so nothing else can
+take it. Retain: deleting a claim, or the whole cluster, never deletes the files.
+*/ -}}
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: ok3d-prometheus
+  labels:
+    {{- include "ok3d.labels" . | nindent 4 }}
+    ok3d/volume: prometheus
+spec:
+  capacity:
+    storage: 50Gi
+  accessModes: ["ReadWriteOnce"]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  hostPath:
+    path: /var/lib/ok3d/prometheus
+    # It must exist already, made by ok3d apply with the right owner. Kubernetes making it
+    # would leave it owned by root, where Prometheus couldn't write.
+    type: Directory
