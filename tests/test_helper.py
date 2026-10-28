@@ -586,3 +586,16 @@ def test_a_settings_file_that_is_a_link_is_left_alone(h: helper.Opened, tmp_path
 def test_the_log_never_holds_a_value(h: helper.Opened) -> None:
     message = ask(h, f"id={ID}\naction=set-env\nname=NTFY_TOKEN\n", "tk_s3cr3tvalue")
     assert message == f"ran set-env for {ID}: exit 0"
+
+
+
+@pytest.mark.parametrize("name", ["OK3D_ADMIN_PASSWORD", "ANTHROPIC_API_KEY", "DEADMAN_URL"])
+def test_the_lines_only_you_may_set_are_refused(h: helper.Opened, name: str) -> None:
+    # Choosing the admin password would sign someone in to Grafana; a key of theirs would get
+    # the agents' conversations; the dead man's switch could point anywhere.
+    env = h.folders.ok3d_dir / ".env"
+    env.write_text(f"{name}=mine\n")
+    assert ask(h, f"id={ID}\naction=set-env\nname={name}\n", "theirs") == (
+        "refused a request: the request names a .env line the helper doesn't set"
+    )
+    assert env.read_text() == f"{name}=mine\n"

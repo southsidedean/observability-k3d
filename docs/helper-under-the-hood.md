@@ -13,10 +13,10 @@ running on the server as you, carries it out.
 
 The helper assumes someone may have taken over the Dashboard's container. The most they can
 do through it is run `./ok3d check` or `./ok3d apply`, change the settings the Dashboard is
-allowed to change, change your devices, or set one of the lines in `.env.example`. They can't
-change where ok3d keeps its data or where it sends your keys, tokens, and passwords, can't
-reach the chart's own sections (which choose images and how pods run), and can't read a
-secret back.
+allowed to change, change your devices, or set four lines of `.env`. They can't change where
+ok3d keeps its data, where it sends your keys, tokens, and passwords, or how far it's open to
+the outside; can't reach the chart's own sections (which choose images and how pods run);
+can't choose the admin password; and can't read a secret back.
 
 ## The pieces
 
@@ -134,11 +134,14 @@ the schema with your devices; and these settings must stay exactly as they are i
 | `unifi` | Where the UniFi API key is sent, and whether its certificate is checked |
 | `alerts.ntfy.server` | Where the ntfy token is sent |
 | `alerts.email.smarthost`, `username`, `requireTls` | Where the mail password is sent, and how |
+| `modules.remoteAccess`, `mesh`, `agents` | How far ok3d is open to the outside, and what may act on your network |
 
-To change one of those, edit `settings.yaml` on the server. Everything else (the modules,
-how much history to keep, which alerts are on, who email alerts go to, how often they
-repeat) the Dashboard may change. Before there's a `settings.yaml` at all, at first setup,
-there's nothing to keep, so the Dashboard may set them all once.
+A setting that's missing counts as different from one set to its default, so adding one
+counts as a change too. To change any of these, edit `settings.yaml` on the server.
+Everything else (the other modules, how much history to keep, which alerts are on, who email
+alerts go to, how often they repeat) the Dashboard may change. Until there's a
+`settings.yaml`, the Dashboard can't save settings at all: the first ones are made on the
+server.
 
 The last 10 copies of each file are kept.
 
@@ -155,9 +158,12 @@ name=NTFY_TOPIC
 ok3d-7f3k9q2m8x
 ```
 
-- The name must be one of the lines in `.env.example`: `OK3D_ADMIN_PASSWORD`,
-  `UNIFI_API_KEY`, `NTFY_TOPIC`, `NTFY_TOKEN`, `SMTP_PASSWORD`, `DEADMAN_URL`, or
-  `ANTHROPIC_API_KEY`.
+- The name must be `UNIFI_API_KEY`, `NTFY_TOPIC`, `NTFY_TOKEN`, or `SMTP_PASSWORD`. A wrong
+  value in one of these only stops something working, since where each is sent is a setting
+  only you may change. The other three lines of `.env` are yours alone, on the server:
+  `OK3D_ADMIN_PASSWORD` (choosing it would let someone sign in to Grafana),
+  `ANTHROPIC_API_KEY` (a key of theirs would send the agents' conversations to their
+  account), and `DEADMAN_URL` (it could be pointed anywhere).
 - The value is one line of at most 1,024 printable characters, without spaces, quotes,
   backslashes, dollar signs, or backticks, so `.env` holds it as plain text. Empty clears it.
   API keys, tokens, URLs, and generated passwords all fit; a password with those characters

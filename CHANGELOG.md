@@ -9,6 +9,9 @@
   (`kube-prometheus-stack`, `prometheus-blackbox-exporter`, `gateway`, `global`), which
   choose images and how pods run. Nothing in the docs ever asked for them;
   [chart/ok3d-files/README.md](chart/ok3d-files/README.md) has the list.
+- A device's address can't be a name inside the cluster (`.svc`, `.cluster.local`),
+  `localhost`, or a loopback, link-local, or `0.x` address: ok3d watches your network, not
+  itself.
 
 ### Changes
 
@@ -23,8 +26,9 @@
   it's built.
 - The helper can now save `settings.yaml` and `devices.yaml` for the Dashboard, after
   `./ok3d validate` checks them, and set one line of `.env` at a time, never sending a value
-  back. Settings from the Dashboard can't change where ok3d keeps its data or where it sends
-  your keys, tokens, and passwords; you change those on the server. It keeps the last 10
+  back. Settings from the Dashboard can't change where ok3d keeps its data, where it sends
+  your keys, tokens, and passwords, or how far it's open to the outside, and the Dashboard
+  can't set the admin password; you change those on the server. It keeps the last 10
   copies of each file in `local/backups/`.
 - `./ok3d validate settings FILE` and `./ok3d validate devices FILE` check a file before it
   replaces yours, the way `./ok3d check` checks the ones in place.

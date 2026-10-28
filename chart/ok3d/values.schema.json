@@ -246,9 +246,12 @@
             "pattern": "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$"
           },
           "address": {
-            "description": "Its IPv4 address or host name.",
+            "description": "Its IPv4 address or host name. Not a name inside the cluster (.svc, .cluster.local), localhost, or a loopback, link-local, or 0.x address: ok3d watches your network, not itself.",
             "type": "string",
-            "pattern": "^([0-9]{1,3}(\\.[0-9]{1,3}){3}|[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?)$"
+            "pattern": "^([0-9]{1,3}(\\.[0-9]{1,3}){3}|[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?)$",
+            "not": {
+              "pattern": "(?i)(^localhost\\.?$|\\.svc\\.?$|\\.svc\\.cluster\\.local\\.?$|\\.cluster\\.local\\.?$|^127\\.|^169\\.254\\.|^0\\.)"
+            }
           },
           "role": {
             "description": "What kind of device it is.",

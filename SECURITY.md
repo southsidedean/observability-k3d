@@ -66,10 +66,13 @@ Dashboard's container has been taken over:
   copy of the old one. A file from the Dashboard may hold only your own settings or devices,
   never the chart's own sections, and may not change where ok3d keeps its data or where it
   sends your keys, tokens, and passwords (the UniFi controller, the ntfy server, the mail
-  server); those you change on the server.
-- It sets only the lines listed in `.env.example`, one plain-text line at a time, and never
-  sends a value back: copies of `.env` go to `local/backups/` in the ok3d checkout, which the
-  Dashboard can't see.
+  server), or turn on remote access, the mesh, or agents; those you change on the server.
+  Until you've made `settings.yaml` on the server, the Dashboard can't save settings at all.
+- It sets only four lines of `.env` (the UniFi key, the ntfy topic and token, and the mail
+  password), one plain-text line at a time, and never sends a value back: copies of `.env`
+  go to `local/backups/` in the ok3d checkout, which the Dashboard can't see. The admin
+  password, the AI model's key, and the dead man's switch's address are yours alone to set,
+  on the server.
 - `./ok3d` itself refuses a `settings.yaml` or `devices.yaml` that holds the chart's own
   sections, which choose images and how pods run, whoever wrote it.
 - The Dashboard may still change who receives alerts (an email address, the ntfy topic).

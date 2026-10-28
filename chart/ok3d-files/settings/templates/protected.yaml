@@ -1,7 +1,8 @@
 {{- /*
 The settings only you may change, by editing settings.yaml on the server: the Dashboard may
-not. They decide where ok3d keeps its data and where it sends your keys, tokens, and
-passwords, so a Dashboard someone had taken over can't move them. One line each, the
+not. They decide where ok3d keeps its data, where it sends your keys, tokens, and passwords,
+and how far it's open to the outside (remote access, the mesh, agents), so a Dashboard
+someone had taken over can't change them. One line each, the
 setting's name, then = and its value as JSON, as written in the file (missing is null). Each
 line is a YAML comment, starting "# protected ", since Helm reads what a template makes as YAML.
 */ -}}
@@ -9,15 +10,21 @@ line is a YAML comment, starting "# protected ", since Helm reads what a templat
 {{- $alerts := $v.alerts | default dict -}}
 {{- $ntfy := $alerts.ntfy | default dict -}}
 {{- $email := $alerts.email | default dict -}}
+{{- $modules := $v.modules | default dict -}}
+{{- /* Each field as it's written: a whole section, or one setting inside one, with a setting
+that's missing kept apart from one that's set to "" or false. */ -}}
 {{- $fields := dict
   "host" $v.host
   "cluster" $v.cluster
   "tls" $v.tls
   "unifi" $v.unifi
-  "alerts.ntfy.server" (get $ntfy "server")
-  "alerts.email.smarthost" (get $email "smarthost")
-  "alerts.email.username" (get $email "username")
-  "alerts.email.requireTls" (get $email "requireTls")
+  "alerts.ntfy.server" (list (hasKey $ntfy "server") (get $ntfy "server"))
+  "alerts.email.smarthost" (list (hasKey $email "smarthost") (get $email "smarthost"))
+  "alerts.email.username" (list (hasKey $email "username") (get $email "username"))
+  "alerts.email.requireTls" (list (hasKey $email "requireTls") (get $email "requireTls"))
+  "modules.remoteAccess" (list (hasKey $modules "remoteAccess") (get $modules "remoteAccess"))
+  "modules.mesh" (list (hasKey $modules "mesh") (get $modules "mesh"))
+  "modules.agents" (list (hasKey $modules "agents") (get $modules "agents"))
 -}}
 {{- range $name := keys $fields | sortAlpha }}
 # protected {{ $name }}={{ get $fields $name | toJson }}

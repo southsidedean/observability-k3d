@@ -677,10 +677,16 @@ cmd_validate() {
 			fail "the settings in $file, with your devices in $devices (above)"
 			exit 1
 		fi
-		# From the Dashboard, the settings only you may change must stay as they are. (Before
-		# there are any settings, at first setup, there's nothing to keep.)
-		if [ "$option" = --from-dashboard ] && [ -f "$current" ]; then
+		# From the Dashboard, the settings only you may change must stay as they are. With no
+		# settings of yours to compare with, nothing from the Dashboard is saved: the first
+		# settings are made on the server.
+		if [ "$option" = --from-dashboard ]; then
+			if [ ! -f "$current" ]; then
+				fail "the Dashboard can save settings only once $current exists; make it on the server first"
+				exit 1
+			fi
 			was=$(mktemp)
+			trap 'rm -f "$was"' EXIT
 			protected_settings "$current" | sort >"$was"
 			changed=$(protected_settings "$file" | sort | comm -3 "$was" - | sed 's/^[[:space:]]*//; s/=.*//' | sort -u)
 			rm -f "$was"

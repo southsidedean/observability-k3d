@@ -17,7 +17,7 @@ It assumes the Dashboard's container may have been taken over, so it trusts noth
 outbox: not the file's contents, not its type (it may be a link, a folder, or a pipe), and not
 its size. The most a request can ever do is what you could do yourself: run `./ok3d check`
 or `./ok3d apply`, save a settings or devices file that `./ok3d validate` passes, or set one
-of the lines in .env.example. docs/helper-under-the-hood.md has the whole story.
+of four lines of .env (ENV_NAMES). docs/helper-under-the-hood.md has the whole story.
 
 It uses only the standard library and runs on the host's own Python (`python3 -I`), so the
 host needs nothing installed.
@@ -56,16 +56,13 @@ MAX_SKEW = 60
 ACTIONS = ("check", "apply", "save-settings", "save-devices", "set-env")
 # The files the two save actions write, in the ok3d checkout, and what ./ok3d validate calls them.
 SAVES = {"save-settings": ("settings.yaml", "settings"), "save-devices": ("devices.yaml", "devices")}
-# The .env lines set-env may set: the ones in .env.example, and nothing else.
-ENV_NAMES = (
-    "OK3D_ADMIN_PASSWORD",
-    "UNIFI_API_KEY",
-    "NTFY_TOPIC",
-    "NTFY_TOKEN",
-    "SMTP_PASSWORD",
-    "DEADMAN_URL",
-    "ANTHROPIC_API_KEY",
-)
+# The .env lines set-env may set. Not OK3D_ADMIN_PASSWORD, ANTHROPIC_API_KEY, or DEADMAN_URL:
+# choosing the admin password would let a Dashboard someone had taken over sign in to Grafana,
+# a key of their own would send the agents' conversations to their account, and the dead
+# man's switch could be pointed anywhere. You set those three in .env on the server. A wrong
+# value in any line here only stops something working: where each is sent is a setting only
+# you may change.
+ENV_NAMES = ("UNIFI_API_KEY", "NTFY_TOPIC", "NTFY_TOKEN", "SMTP_PASSWORD")
 # A .env value: printable characters with no spaces, quotes, backslashes, dollar signs, or
 # backticks, so .env holds it as plain text that nothing reading .env can misread. Empty
 # clears it. API keys, tokens, URLs, and generated passwords all fit.

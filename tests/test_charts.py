@@ -456,6 +456,10 @@ PROTECTED = {
     "alerts.email.smarthost": "alerts:\n  email:\n    smarthost: evil.example:25\n",
     "alerts.email.username": "alerts:\n  email:\n    username: someone\n",
     "alerts.email.requireTls": "alerts:\n  email:\n    requireTls: false\n",
+    "alerts.ntfy.server (as written)": "alerts:\n  ntfy:\n    server: https://ntfy.sh\n",
+    "modules.remoteAccess": "modules:\n  remoteAccess: false\n",
+    "modules.mesh": "modules:\n  mesh: false\n",
+    "modules.agents": "modules:\n  agents: false\n",
 }
 
 
@@ -489,3 +493,27 @@ def test_settings_are_checked_with_your_devices(tmp_path: Path) -> None:
     devices = tmp_path / "devices.yaml"
     devices.write_text("devices:\n  - name: router\n    address: 192.0.2.1\n    role: gateway\n    checks: [ping]\n")
     assert ok3d_validate("settings", str(EXAMPLE), devices=devices).returncode == 0
+
+
+
+def test_the_dashboard_cant_save_settings_before_there_are_any(tmp_path: Path) -> None:
+    # Otherwise the first save could set every protected setting; the first settings are
+    # made on the server.
+    result = ok3d_validate("settings", str(EXAMPLE), "--from-dashboard", settings=tmp_path / "none.yaml")
+    assert result.returncode == 1
+    assert "the Dashboard can save settings only once" in result.stdout
+
+
+@pytest.mark.parametrize("address", ["kubernetes.default.svc", "x.monitoring.svc.cluster.local", "LOCALHOST",
+                                     "169.254.169.254", "127.0.0.1", "0.1.2.3"])  # fmt: skip
+def test_a_device_cant_be_inside_the_cluster_or_the_server(tmp_path: Path, address: str) -> None:
+    devices = tmp_path / "devices.yaml"
+    devices.write_text(f"devices:\n  - name: d\n    address: {address}\n    role: other\n    checks: [ping]\n")
+    assert ok3d_validate("devices", str(devices)).returncode == 1
+
+
+@pytest.mark.parametrize("address", ["my-server.lan", "192.0.2.5", "noc.home.arpa"])
+def test_ordinary_device_addresses_are_fine(tmp_path: Path, address: str) -> None:
+    devices = tmp_path / "devices.yaml"
+    devices.write_text(f"devices:\n  - name: d\n    address: {address}\n    role: other\n    checks: [ping]\n")
+    assert ok3d_validate("devices", str(devices)).returncode == 0
