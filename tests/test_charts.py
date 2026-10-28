@@ -373,7 +373,7 @@ def test_validate_refuses_settings_the_schema_refuses(tmp_path: Path) -> None:
     good = tmp_path / "good.yaml"
     good.write_text(EXAMPLE.read_text())
     bad = tmp_path / "bad.yaml"
-    bad.write_text(EXAMPLE.read_text() + "\ncluster:\n  ports:\n    https: lots\n")
+    bad.write_text("settingsVersion: 1\nhost:\n  dataRoot: /srv/ok3d\ncluster:\n  ports:\n    https: lots\n")
     def run(*args: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run([str(ROOT / "ok3d"), *args], cwd=ROOT, capture_output=True, text=True, check=False)
 
@@ -391,3 +391,101 @@ def test_validate_refuses_devices_the_schema_refuses(tmp_path: Path) -> None:
                             capture_output=True, text=True, check=False, env=env)  # fmt: skip
     assert result.returncode == 1
     assert "FAIL  the devices in" in result.stdout
+
+
+
+def ok3d_validate(*args: str, settings: Path | None = None, devices: Path | None = None) -> subprocess.CompletedProcess[str]:
+    env = {k: v for k, v in os.environ.items() if not k.startswith("OK3D_")}
+    env["OK3D_SETTINGS"] = str(settings or EXAMPLE)
+    env["OK3D_DEVICES"] = str(devices or "/nonexistent/devices.yaml")
+    return subprocess.run([str(ROOT / "ok3d"), "validate", *args], cwd=ROOT, capture_output=True, text=True,
+                          check=False, env=env)  # fmt: skip
+
+
+# What a Dashboard someone had taken over might try: each passes the main chart's schema,
+# because the chart's own sections are open to its defaults, so ./ok3d refuses the section.
+CHART_SECTIONS = {
+    "an image": "gateway:\n  images:\n    htpasswd: evil.example/steal:1\n",
+    "a privileged container": (
+        "kube-prometheus-stack:\n  grafana:\n    namespaceOverride: kube-system\n"
+        "    extraContainers:\n      - name: x\n        image: evil.example/x\n"
+        "        securityContext:\n          privileged: true\n"
+    ),
+    "the blackbox exporter": "prometheus-blackbox-exporter:\n  image:\n    registry: evil.example\n",
+    "global": "global:\n  imageRegistry: evil.example\n",
+    "flow style": "{gateway: {images: {htpasswd: evil.example/x}}}\n",
+    "a merge key": "x: &x\n  images:\n    htpasswd: evil.example/x\ngateway:\n  <<: *x\n",
+}
+
+
+@pytest.mark.parametrize("extra", CHART_SECTIONS.values(), ids=CHART_SECTIONS.keys())
+def test_settings_may_not_hold_the_charts_own_sections(tmp_path: Path, extra: str) -> None:
+    bad = tmp_path / "settings.yaml"
+    bad.write_text(EXAMPLE.read_text() + "\n" + extra) if not extra.startswith("{") else bad.write_text(extra)
+    result = ok3d_validate("settings", str(bad))
+    assert result.returncode != 0
+    assert "may hold only your own settings" in result.stderr
+
+
+@pytest.mark.parametrize("extra", ["alerts:\n  ntfy:\n    server: https://evil.example\n",
+                                   "gateway:\n  images:\n    htpasswd: evil.example/x\n"])  # fmt: skip
+def test_devices_may_hold_only_devices(tmp_path: Path, extra: str) -> None:
+    bad = tmp_path / "devices.yaml"
+    bad.write_text("devices: []\n" + extra)
+    result = ok3d_validate("devices", str(bad))
+    assert result.returncode == 1
+    assert "may hold only your own devices" in result.stderr
+
+
+def test_check_refuses_a_devices_file_with_settings_in_it(tmp_path: Path) -> None:
+    bad = tmp_path / "devices.yaml"
+    bad.write_text("devices: []\nalerts:\n  ntfy:\n    server: https://evil.example\n")
+    env = {k: v for k, v in os.environ.items() if not k.startswith("OK3D_")}
+    env |= {"OK3D_SETTINGS": str(EXAMPLE), "OK3D_DEVICES": str(bad)}
+    result = subprocess.run([str(ROOT / "ok3d"), "check"], cwd=ROOT, capture_output=True, text=True, check=False, env=env)
+    assert "FAIL  the devices in" in result.stdout
+
+
+PROTECTED = {
+    "host.dataRoot": "host:\n  dataRoot: /home\n",
+    "cluster": "cluster:\n  publishAddress: 192.0.2.5\n",
+    "tls.domain": "tls:\n  domain: evil.example\n",
+    "unifi.url": "unifi:\n  url: https://evil.example\n",
+    "unifi.verifyTls": "unifi:\n  verifyTls: false\n",
+    "alerts.ntfy.server": "alerts:\n  ntfy:\n    server: https://evil.example\n",
+    "alerts.email.smarthost": "alerts:\n  email:\n    smarthost: evil.example:25\n",
+    "alerts.email.username": "alerts:\n  email:\n    username: someone\n",
+    "alerts.email.requireTls": "alerts:\n  email:\n    requireTls: false\n",
+}
+
+
+@pytest.mark.parametrize("change", PROTECTED.values(), ids=PROTECTED.keys())
+def test_the_dashboard_cant_change_the_settings_only_you_may(tmp_path: Path, change: str) -> None:
+    current = tmp_path / "current.yaml"
+    current.write_text("settingsVersion: 1\nhost:\n  dataRoot: /srv/ok3d\n")
+    new = tmp_path / "new.yaml"
+    new.write_text(current.read_text().replace("host:\n  dataRoot: /srv/ok3d\n", "") +
+                   (change if change.startswith("host") else "host:\n  dataRoot: /srv/ok3d\n" + change))  # fmt: skip
+    from_dashboard = ok3d_validate("settings", str(new), "--from-dashboard", settings=current)
+    assert from_dashboard.returncode == 1, from_dashboard.stdout
+    assert "the Dashboard can't change these settings" in from_dashboard.stdout
+    # You can, on the server.
+    assert ok3d_validate("settings", str(new), settings=current).returncode == 0
+
+
+def test_the_dashboard_can_change_the_rest(tmp_path: Path) -> None:
+    current = tmp_path / "current.yaml"
+    current.write_text("settingsVersion: 1\nhost:\n  dataRoot: /srv/ok3d\n")
+    new = tmp_path / "new.yaml"
+    new.write_text(current.read_text() + "modules:\n  unifi: false\nmetrics:\n  retention: 60d\n"
+                   "alerts:\n  ntfy:\n    enabled: true\n    useToken: true\n  email:\n"
+                   "    to: me@example.com\n    from: ok3d@example.com\n  deadman:\n    enabled: true\n"
+                   "  repeatCritical: 30m\n")  # fmt: skip
+    result = ok3d_validate("settings", str(new), "--from-dashboard", settings=current)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_settings_are_checked_with_your_devices(tmp_path: Path) -> None:
+    devices = tmp_path / "devices.yaml"
+    devices.write_text("devices:\n  - name: router\n    address: 192.0.2.1\n    role: gateway\n    checks: [ping]\n")
+    assert ok3d_validate("settings", str(EXAMPLE), devices=devices).returncode == 0

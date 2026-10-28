@@ -2,6 +2,14 @@
 
 ## 0.5.0 (unreleased)
 
+### Upgrading
+
+- `settings.yaml` may hold only your own settings, and `devices.yaml` only `devices`.
+  `./ok3d check` now refuses either one if it sets the chart's own sections
+  (`kube-prometheus-stack`, `prometheus-blackbox-exporter`, `gateway`, `global`), which
+  choose images and how pods run. Nothing in the docs ever asked for them;
+  [chart/ok3d-files/README.md](chart/ok3d-files/README.md) has the list.
+
 ### Changes
 
 - The helper, which runs `./ok3d check` and `./ok3d apply` when the Dashboard asks. It's a
@@ -14,8 +22,10 @@
   come next. [docs/dashboard-under-the-hood.md](docs/dashboard-under-the-hood.md) says how
   it's built.
 - The helper can now save `settings.yaml` and `devices.yaml` for the Dashboard, after
-  `./ok3d validate` checks them, and set one secret at a time in `.env`, never sending a
-  secret back. It keeps the last 10 copies of each file in `local/backups/`.
+  `./ok3d validate` checks them, and set one line of `.env` at a time, never sending a value
+  back. Settings from the Dashboard can't change where ok3d keeps its data or where it sends
+  your keys, tokens, and passwords; you change those on the server. It keeps the last 10
+  copies of each file in `local/backups/`.
 - `./ok3d validate settings FILE` and `./ok3d validate devices FILE` check a file before it
   replaces yours, the way `./ok3d check` checks the ones in place.
 

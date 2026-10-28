@@ -63,9 +63,17 @@ Dashboard's container has been taken over:
   `./ok3d check`, `./ok3d apply`, and `./ok3d validate` on a file in its own folder, with
   no arguments from the request.
 - It saves a settings or devices file only after `./ok3d validate` passes it, keeping a
-  copy of the old one. It sets only the secrets listed in `.env.example`, one plain-text
-  line at a time, and never sends a secret back: copies of `.env` go to `local/backups/` in
-  the ok3d checkout, which the Dashboard can't see.
+  copy of the old one. A file from the Dashboard may hold only your own settings or devices,
+  never the chart's own sections, and may not change where ok3d keeps its data or where it
+  sends your keys, tokens, and passwords (the UniFi controller, the ntfy server, the mail
+  server); those you change on the server.
+- It sets only the lines listed in `.env.example`, one plain-text line at a time, and never
+  sends a value back: copies of `.env` go to `local/backups/` in the ok3d checkout, which the
+  Dashboard can't see.
+- `./ok3d` itself refuses a `settings.yaml` or `devices.yaml` that holds the chart's own
+  sections, which choose images and how pods run, whoever wrote it.
+- The Dashboard may still change who receives alerts (an email address, the ntfy topic).
+  Alerts name your devices and what's wrong with them, but carry no keys or passwords.
 - It refuses requests older than 5 minutes, and any of the last 100 ids it carried out.
 - Every request it takes gets an answer, from a fixed list, that repeats nothing from the
   request but a valid id.

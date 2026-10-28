@@ -425,3 +425,12 @@ def test_validate_checks_devices_against_your_settings(env: dict[str, str], tmp_
                                   ["validate", "settings", "/no/such/file"]])  # fmt: skip
 def test_validate_needs_a_kind_and_a_file(env: dict[str, str], args: list[str]) -> None:
     assert ok3d(env, *args).returncode == 2
+
+
+def test_check_reads_settings_and_devices_through_the_section_check(env: dict[str, str], tmp_path: Path) -> None:
+    devices = tmp_path / "devices.yaml"
+    devices.write_text("devices: []\n")
+    ok3d({**env, "OK3D_DEVICES": str(devices)}, "check")
+    log = calls(env)
+    assert any(line.startswith(f"helm template ok3d-files chart/ok3d-files/settings --values {env['OK3D_SETTINGS']}") for line in log)
+    assert any(line.startswith(f"helm template ok3d-files chart/ok3d-files/devices --values {devices}") for line in log)

@@ -1,0 +1,6 @@
+# Checks which sections a settings file may have (README.md one folder up). Never installed.
+apiVersion: v2
+name: ok3d-settings-file
+description: Checks the sections of an ok3d settings file
+type: application
+version: 0.0.0

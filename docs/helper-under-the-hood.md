@@ -12,8 +12,11 @@ run anything itself. It leaves a request in a file instead, and the helper, a sm
 running on the server as you, carries it out.
 
 The helper assumes someone may have taken over the Dashboard's container. The most they can
-do through it is what you could do yourself: run `./ok3d check` or `./ok3d apply`, save a
-settings or devices file that `./ok3d validate` passes, or set one of ok3d's own secrets.
+do through it is run `./ok3d check` or `./ok3d apply`, change the settings the Dashboard is
+allowed to change, change your devices, or set one of the lines in `.env.example`. They can't
+change where ok3d keeps its data or where it sends your keys, tokens, and passwords, can't
+reach the chart's own sections (which choose images and how pods run), and can't read a
+secret back.
 
 ## The pieces
 
@@ -60,9 +63,9 @@ The helper's checks hold only with the right mounts, which the installer sets up
    - It was written in the last 5 minutes (or up to a minute ahead, for a clock that's off).
    - Its head is plain ASCII text, with each line ending in a newline.
    - Its head has exactly the lines its action needs, each once, and nothing else: `id` and
-     `action`, and `name` with `set-secret`.
+     `action`, and `name` with `set-env`.
    - The id is 16 to 64 lowercase hex digits.
-   - The action is one of `check`, `apply`, `save-settings`, `save-devices`, or `set-secret`,
+   - The action is one of `check`, `apply`, `save-settings`, `save-devices`, or `set-env`,
      exactly. `check` and `apply` have nothing after their head; the others have a blank line
      and then a body (below).
    - The id isn't one of the last 100 the helper carried out, so a request can't be replayed.
@@ -110,37 +113,57 @@ devices:
 1. The helper checks the file is UTF-8 text, at most 64 KB, with no control characters but
    tabs and newlines.
 2. It writes it to its own folder, as `helper/staged-devices.yaml`, and runs
-   `./ok3d validate devices` on it: the same Helm and schema check `./ok3d check` runs on
-   yours (devices against your settings).
+   `./ok3d validate devices` on it: the same checks `./ok3d check` runs on yours. The file
+   may hold only `devices`, and the devices must pass the chart's schema with your
+   settings.
 3. Only if that passes does it copy your current file to `local/backups/` in the ok3d
    checkout and put the new one in its place, readable only by you, through a temporary file
    renamed into place. If it fails, your file is unchanged, and the answer says what was
    wrong.
 
-`save-settings` does the same for `settings.yaml`. The last 10 copies of each file are kept.
+`save-settings` does the same for `settings.yaml`, with `./ok3d validate settings
+--from-dashboard`. The file may hold only your own sections, never the chart's own
+(`kube-prometheus-stack`, `prometheus-blackbox-exporter`, `gateway`, `global`); it must pass
+the schema with your devices; and these settings must stay exactly as they are in yours:
 
-## Setting a secret
+| Setting | Why only you may change it |
+|---|---|
+| `host` | Where ok3d keeps its data, which the helper and the cluster both depend on |
+| `cluster` | The cluster's name, image, ports, and the address the pages are published on |
+| `tls` | The domain the certificate authority vouches for |
+| `unifi` | Where the UniFi API key is sent, and whether its certificate is checked |
+| `alerts.ntfy.server` | Where the ntfy token is sent |
+| `alerts.email.smarthost`, `username`, `requireTls` | Where the mail password is sent, and how |
 
-The Dashboard never reads `.env`, and the helper never sends a secret back. To set one, the
+To change one of those, edit `settings.yaml` on the server. Everything else (the modules,
+how much history to keep, which alerts are on, who email alerts go to, how often they
+repeat) the Dashboard may change. Before there's a `settings.yaml` at all, at first setup,
+there's nothing to keep, so the Dashboard may set them all once.
+
+The last 10 copies of each file are kept.
+
+## Setting a line of .env
+
+The Dashboard never reads `.env`, and the helper never sends a value back. To set one, the
 Dashboard sends its name and value:
 
 ```ini
 id=5b8d2f1c0e7a9346
-action=set-secret
+action=set-env
 name=NTFY_TOPIC
 
 ok3d-7f3k9q2m8x
 ```
 
-- The name must be one of the secrets in `.env.example`: `OK3D_ADMIN_PASSWORD`,
+- The name must be one of the lines in `.env.example`: `OK3D_ADMIN_PASSWORD`,
   `UNIFI_API_KEY`, `NTFY_TOPIC`, `NTFY_TOKEN`, `SMTP_PASSWORD`, `DEADMAN_URL`, or
   `ANTHROPIC_API_KEY`.
 - The value is one line of at most 1,024 printable characters, without spaces, quotes,
   backslashes, dollar signs, or backticks, so `.env` holds it as plain text. Empty clears it.
   API keys, tokens, URLs, and generated passwords all fit; a password with those characters
   has to go into `.env` by hand.
-- The helper keeps every other line of `.env` as it was. It puts the new value on the
-  secret's first line and removes any later ones, since `./ok3d` reads the last. It copies
+- The helper keeps every other byte of `.env` as it was. It puts the new value on that
+  name's first line and removes any later ones, since `./ok3d` reads the last. It copies
   the old `.env` to `local/backups/` first, and writes the new one readable only by you. It
   won't write through a `.env` that's a link.
 - The answer says `Saved NTFY_TOPIC in .env.` and nothing more. The value never reaches the

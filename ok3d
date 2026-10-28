@@ -12,11 +12,13 @@
 #                     home network's devices, and a fake UniFi controller. docs/demo.md says
 #                     more. Also: demo down, demo status, demo fail <device>, demo fix <device>.
 #   ./ok3d test-alert Send a test alert through Alertmanager, to check that alerts reach you.
-#   ./ok3d validate settings FILE
+#   ./ok3d validate settings FILE [--from-dashboard]
 #   ./ok3d validate devices FILE
 #                     Check a settings or devices file that isn't in place yet, the way check
-#                     does (devices against your settings). Changes nothing. The helper runs
-#                     this before it saves a file the Dashboard sent.
+#                     does: settings with your devices, devices with your settings. Changes
+#                     nothing. The helper runs this before it saves a file the Dashboard sent;
+#                     --from-dashboard also refuses a change to the settings only you may
+#                     change on the server (chart/ok3d-files/README.md).
 #   ./ok3d version    Print ok3d's version.
 #
 # Settings come from settings.yaml next to this script (start from settings.example.yaml),
@@ -95,6 +97,23 @@ values_args() {
 	[ ! -f "$devices" ] || printf '%s\n' --values "$devices"
 }
 
+# check_sections KIND FILE: whether a settings or devices file holds only the sections it may
+# (chart/ok3d-files/README.md): your own settings, never the chart's, which choose images and
+# how pods run. Helm reads the file, so YAML's every way of writing a key is covered.
+check_sections() {
+	if ! helm template ok3d-files "chart/ok3d-files/$1" --values "$2" >/dev/null; then
+		echo "$2 may hold only your own $1 (above): see chart/ok3d-files/README.md." >&2
+		return 1
+	fi
+}
+
+# protected_settings FILE: the settings in FILE that only you may change, one per line, as
+# name=JSON (chart/ok3d-files/settings/templates/protected.yaml).
+protected_settings() {
+	helm template ok3d-files chart/ok3d-files/settings --values "$1" \
+		--show-only templates/protected.yaml | sed -n 's/^# protected //p'
+}
+
 # Reads the settings ok3d needs as shell variables (CLUSTER_NAME, DATA_ROOT, and the rest),
 # from the chart's cluster-settings.yaml, rendered by Helm after the schema has checked them.
 load_settings() {
@@ -103,6 +122,7 @@ load_settings() {
 		exit 1
 	fi
 	fetch_dependencies
+	check_sections settings "$settings" || exit 1
 	rendered=$(helm template ok3d chart/ok3d --values "$settings" \
 		--show-only templates/cluster-settings.yaml) || {
 		echo "The settings in $settings aren't valid (above)." >&2
@@ -235,7 +255,7 @@ cmd_check() {
 	pass "the settings in $settings"
 	if [ -f "$devices" ]; then
 		# shellcheck disable=SC2046 # one argument per line, on purpose
-		if helm template ok3d chart/ok3d $(values_args) >/dev/null; then
+		if check_sections devices "$devices" && helm template ok3d chart/ok3d $(values_args) >/dev/null; then
 			pass "the devices in $devices"
 		else
 			fail "the devices in $devices (above)"
@@ -643,19 +663,37 @@ cmd_test_alert() {
 cmd_validate() {
 	kind=${1:-}
 	file=${2:-}
-	if [ -z "$file" ] || [ ! -f "$file" ]; then
-		echo "Usage: ./ok3d validate settings|devices FILE" >&2
+	option=${3:-}
+	if [ -z "$file" ] || [ ! -f "$file" ] || { [ -n "$option" ] && [ "$kind $option" != "settings --from-dashboard" ]; }; then
+		echo "Usage: ./ok3d validate settings FILE [--from-dashboard], or ./ok3d validate devices FILE" >&2
 		exit 2
 	fi
 	case "$kind" in
 	settings)
+		current=$settings
 		settings=$file
 		load_settings
+		if [ -f "$devices" ] && ! helm template ok3d chart/ok3d --values "$file" --values "$devices" >/dev/null; then
+			fail "the settings in $file, with your devices in $devices (above)"
+			exit 1
+		fi
+		# From the Dashboard, the settings only you may change must stay as they are. (Before
+		# there are any settings, at first setup, there's nothing to keep.)
+		if [ "$option" = --from-dashboard ] && [ -f "$current" ]; then
+			was=$(mktemp)
+			protected_settings "$current" | sort >"$was"
+			changed=$(protected_settings "$file" | sort | comm -3 "$was" - | sed 's/^[[:space:]]*//; s/=.*//' | sort -u)
+			rm -f "$was"
+			if [ -n "$changed" ]; then
+				fail "the Dashboard can't change these settings; edit $current on the server instead: $(printf '%s' "$changed" | tr '\n' ' ')"
+				exit 1
+			fi
+		fi
 		pass "the settings in $file"
 		;;
 	devices)
 		load_settings
-		if helm template ok3d chart/ok3d --values "$settings" --values "$file" >/dev/null; then
+		if check_sections devices "$file" && helm template ok3d chart/ok3d --values "$settings" --values "$file" >/dev/null; then
 			pass "the devices in $file"
 		else
 			fail "the devices in $file (above)"
@@ -679,7 +717,7 @@ apply) cmd_apply ;;
 delete) cmd_delete "${2:-}" ;;
 demo) cmd_demo "${2:-}" "${3:-}" ;;
 test-alert) cmd_test_alert ;;
-validate) cmd_validate "${2:-}" "${3:-}" ;;
+validate) cmd_validate "${2:-}" "${3:-}" "${4:-}" ;;
 version | --version) cmd_version ;;
 help | --help | -h) usage ;;
 *)

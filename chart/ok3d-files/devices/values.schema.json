@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "The sections a devices file may have",
+  "description": "Only the list of devices, checked by chart/ok3d/values.schema.json.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "devices": {"description": "The devices ok3d watches."},
+    "global": {"description": "Helm adds this on its own; it must stay empty.", "type": "object", "maxProperties": 0}
+  }
+}

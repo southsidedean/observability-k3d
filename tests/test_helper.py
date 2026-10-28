@@ -34,6 +34,7 @@ def make_ok3d(tmp_path: Path) -> Path:
     command = ok3d_dir / "ok3d"
     command.write_text(
         '#!/bin/sh\necho "$@" >> "$(dirname "$0")/ran"\n'
+        'env | grep "^OK3D_" >> "$(dirname "$0")/env" || true\n'
         'if [ "$1" = validate ]; then\n'
         '  if grep -q bad "$3"; then echo "FAIL  the $2 in $3"; exit 1; fi\n'
         '  echo "PASS  the $2 in $3"; exit 0\n'
@@ -97,7 +98,7 @@ def test_a_failing_command_reports_its_exit_status(h: helper.Opened) -> None:
 def test_a_command_that_cant_start_still_gets_an_answer(h: helper.Opened) -> None:
     (h.folders.ok3d_dir / "ok3d").chmod(0o644)
     send(h)
-    assert helper.handle_once(h) == f"couldn't carry out check for {ID}"
+    assert helper.handle_once(h) == f"couldn't carry out ./ok3d check for {ID}"
     assert {"id": ID, "state": "failed", "reason": "the ok3d command couldn't run"}.items() <= result(h).items()
 
 
@@ -350,9 +351,9 @@ def test_any_bytes_are_either_a_valid_request_or_refused(data: bytes, age: float
         assert data in (f"id={request.id}\naction={request.action}\n".encode(),
                         f"action={request.action}\nid={request.id}\n".encode())  # fmt: skip
         assert request.body == b""
-    if request.action == "set-secret":
-        assert request.name in helper.SECRETS
-        assert helper.SECRET_VALUE.fullmatch(request.body.decode())
+    if request.action == "set-env":
+        assert request.name in helper.ENV_NAMES
+        assert helper.ENV_VALUE.fullmatch(request.body.decode())
 
 
 @settings(max_examples=300, deadline=None)
@@ -464,11 +465,11 @@ def test_a_save_needs_its_file(h: helper.Opened) -> None:
     assert helper.handle_once(h) == "refused a request: the request isn't finished"
 
 
-def test_a_secret_is_set_in_dotenv_and_never_answered_back(h: helper.Opened) -> None:
+def test_a_value_is_set_in_dotenv_and_never_answered_back(h: helper.Opened) -> None:
     env = h.folders.ok3d_dir / ".env"
     env.write_text("# my notes\nNTFY_TOPIC=old\nSMTP_PASSWORD=keep\nNTFY_TOPIC=older\n")
     value = "ok3d-7f3k9q2m8x"
-    assert ask(h, f"id={ID}\naction=set-secret\nname=NTFY_TOPIC\n", value) == f"ran set-secret for {ID}: exit 0"
+    assert ask(h, f"id={ID}\naction=set-env\nname=NTFY_TOPIC\n", value) == f"ran set-env for {ID}: exit 0"
     assert env.read_text() == f"# my notes\nNTFY_TOPIC={value}\nSMTP_PASSWORD=keep\n"
     assert stat.S_IMODE(env.stat().st_mode) == 0o600
     for name in ("result", "output", "seen"):
@@ -481,33 +482,33 @@ def test_a_secret_is_set_in_dotenv_and_never_answered_back(h: helper.Opened) -> 
     assert stat.S_IMODE((h.folders.ok3d_dir / "local" / "backups").stat().st_mode) == 0o700
 
 
-def test_a_secret_is_added_when_dotenv_has_none(h: helper.Opened) -> None:
-    ask(h, f"id={ID}\naction=set-secret\nname=UNIFI_API_KEY\n", "abc123\n")
+def test_a_value_is_added_when_dotenv_has_none(h: helper.Opened) -> None:
+    ask(h, f"id={ID}\naction=set-env\nname=UNIFI_API_KEY\n", "abc123\n")
     assert (h.folders.ok3d_dir / ".env").read_text() == "UNIFI_API_KEY=abc123\n"
 
 
-def test_an_empty_value_clears_a_secret(h: helper.Opened) -> None:
+def test_an_empty_value_clears_a_line(h: helper.Opened) -> None:
     (h.folders.ok3d_dir / ".env").write_text("NTFY_TOKEN=abc\n")
-    ask(h, f"id={ID}\naction=set-secret\nname=NTFY_TOKEN\n", "")
+    ask(h, f"id={ID}\naction=set-env\nname=NTFY_TOKEN\n", "")
     assert (h.folders.ok3d_dir / ".env").read_text() == "NTFY_TOKEN=\n"
 
 
 @pytest.mark.parametrize(
     ("head", "value", "reason"),
     [
-        (f"id={ID}\naction=set-secret\nname=PATH\n", "x", "the request names a secret the helper doesn't set"),
-        (f"id={ID}\naction=set-secret\nname=ntfy_topic\n", "x", "the request names a secret the helper doesn't set"),
-        (f"id={ID}\naction=set-secret\n", "x", "the request is missing a line"),
-        (f"id={ID}\naction=set-secret\nname=NTFY_TOPIC\n", "two\nlines", "the secret has characters .env can't hold safely"),
-        (f"id={ID}\naction=set-secret\nname=NTFY_TOPIC\n", "a b", "the secret has characters .env can't hold safely"),
-        (f"id={ID}\naction=set-secret\nname=NTFY_TOPIC\n", "$(reboot)", "the secret has characters .env can't hold safely"),
-        (f"id={ID}\naction=set-secret\nname=NTFY_TOPIC\n", "'quoted'", "the secret has characters .env can't hold safely"),
-        (f"id={ID}\naction=set-secret\nname=NTFY_TOPIC\n", "back\\slash", "the secret has characters .env can't hold safely"),
-        (f"id={ID}\naction=set-secret\nname=NTFY_TOPIC\n", "caf\u00e9", "the secret has characters .env can't hold safely"),
-        (f"id={ID}\naction=set-secret\nname=NTFY_TOPIC\n", "x" * 1025, "the secret has characters .env can't hold safely"),
+        (f"id={ID}\naction=set-env\nname=PATH\n", "x", "the request names a .env line the helper doesn't set"),
+        (f"id={ID}\naction=set-env\nname=ntfy_topic\n", "x", "the request names a .env line the helper doesn't set"),
+        (f"id={ID}\naction=set-env\n", "x", "the request is missing a line"),
+        (f"id={ID}\naction=set-env\nname=NTFY_TOPIC\n", "two\nlines", "the value has characters .env can't hold safely"),
+        (f"id={ID}\naction=set-env\nname=NTFY_TOPIC\n", "a b", "the value has characters .env can't hold safely"),
+        (f"id={ID}\naction=set-env\nname=NTFY_TOPIC\n", "$(reboot)", "the value has characters .env can't hold safely"),
+        (f"id={ID}\naction=set-env\nname=NTFY_TOPIC\n", "'quoted'", "the value has characters .env can't hold safely"),
+        (f"id={ID}\naction=set-env\nname=NTFY_TOPIC\n", "back\\slash", "the value has characters .env can't hold safely"),
+        (f"id={ID}\naction=set-env\nname=NTFY_TOPIC\n", "caf\u00e9", "the value has characters .env can't hold safely"),
+        (f"id={ID}\naction=set-env\nname=NTFY_TOPIC\n", "x" * 1025, "the value has characters .env can't hold safely"),
     ],
 )
-def test_a_bad_secret_is_refused_and_dotenv_is_untouched(h: helper.Opened, head: str, value: str, reason: str) -> None:
+def test_a_bad_value_is_refused_and_dotenv_is_untouched(h: helper.Opened, head: str, value: str, reason: str) -> None:
     env = h.folders.ok3d_dir / ".env"
     env.write_text("NTFY_TOPIC=keep\n")
     assert ask(h, head, value) == f"refused a request: {reason}"
@@ -519,7 +520,7 @@ def test_a_dotenv_that_is_a_link_is_left_alone(h: helper.Opened, tmp_path: Path)
     elsewhere = tmp_path / "elsewhere"
     elsewhere.write_text("NTFY_TOPIC=keep\n")
     (h.folders.ok3d_dir / ".env").symlink_to(elsewhere)
-    ask(h, f"id={ID}\naction=set-secret\nname=NTFY_TOPIC\n", "new")
+    ask(h, f"id={ID}\naction=set-env\nname=NTFY_TOPIC\n", "new")
     assert result(h)["state"] == "failed"
     assert elsewhere.read_text() == "NTFY_TOPIC=keep\n"
 
@@ -528,3 +529,60 @@ def test_an_id_in_the_body_is_never_taken_for_the_requests(h: helper.Opened) -> 
     send(h, b"action=save-devices\n\nid=" + ID.encode() + b"\n")
     helper.handle_once(h)
     assert "id" not in result(h)
+
+
+
+def test_settings_from_the_dashboard_keep_the_settings_only_you_may_change(h: helper.Opened) -> None:
+    ask(h, f"id={ID}\naction=save-settings\n", SETTINGS)
+    assert ran(h)[0].endswith(" --from-dashboard")
+
+
+def test_devices_dont_get_the_settings_option(h: helper.Opened) -> None:
+    ask(h, f"id={ID}\naction=save-devices\n", "devices: []\n")
+    assert not ran(h)[0].endswith(" --from-dashboard")
+
+
+def test_ok3d_runs_without_the_helpers_own_ok3d_settings(h: helper.Opened, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Otherwise ./ok3d validate could check one file while the helper writes another.
+    monkeypatch.setenv("OK3D_SETTINGS", "/elsewhere/settings.yaml")
+    monkeypatch.setenv("OK3D_DEVICES", "/elsewhere/devices.yaml")
+    ask(h, f"id={ID}\naction=save-devices\n", "devices: []\n")
+    send(h, f"id={'1' * 16}\naction=check\n")
+    helper.handle_once(h)
+    assert len(ran(h)) == 2
+    env = h.folders.ok3d_dir / "env"
+    assert not env.exists() or env.read_text() == ""
+
+
+@pytest.mark.parametrize(
+    ("before", "after"),
+    [
+        (b"SMTP_PASSWORD=p\xe4ss\nNTFY_TOPIC=old\n", b"SMTP_PASSWORD=p\xe4ss\nNTFY_TOPIC=new\n"),
+        (b"UNIFI_API_KEY=a\x0cb\nNTFY_TOPIC=old\n", b"UNIFI_API_KEY=a\x0cb\nNTFY_TOPIC=new\n"),
+        (b"NTFY_TOKEN=keep\r\nNTFY_TOPIC=old\r\n", b"NTFY_TOKEN=keep\r\nNTFY_TOPIC=new\n"),
+        (b"NTFY_TOKEN=keep", b"NTFY_TOKEN=keep\nNTFY_TOPIC=new\n"),
+        (b"NTFY_TOPICS=other\nNTFY_TOPIC=old\n", b"NTFY_TOPICS=other\nNTFY_TOPIC=new\n"),
+        (b"# NTFY_TOPIC=commented\n", b"# NTFY_TOPIC=commented\nNTFY_TOPIC=new\n"),
+        (b"", b"NTFY_TOPIC=new\n"),
+    ],
+    ids=["latin-1", "form-feed", "crlf", "no-final-newline", "longer-name", "comment", "empty"],
+)
+def test_setting_a_value_leaves_every_other_byte_of_dotenv_alone(h: helper.Opened, before: bytes, after: bytes) -> None:
+    env = h.folders.ok3d_dir / ".env"
+    env.write_bytes(before)
+    ask(h, f"id={ID}\naction=set-env\nname=NTFY_TOPIC\n", "new")
+    assert env.read_bytes() == after
+
+
+def test_a_settings_file_that_is_a_link_is_left_alone(h: helper.Opened, tmp_path: Path) -> None:
+    elsewhere = tmp_path / "elsewhere.yaml"
+    elsewhere.write_text("settingsVersion: 1\n")
+    (h.folders.ok3d_dir / "settings.yaml").symlink_to(elsewhere)
+    ask(h, f"id={ID}\naction=save-settings\n", SETTINGS)
+    assert result(h)["state"] == "failed"
+    assert elsewhere.read_text() == "settingsVersion: 1\n"
+
+
+def test_the_log_never_holds_a_value(h: helper.Opened) -> None:
+    message = ask(h, f"id={ID}\naction=set-env\nname=NTFY_TOKEN\n", "tk_s3cr3tvalue")
+    assert message == f"ran set-env for {ID}: exit 0"

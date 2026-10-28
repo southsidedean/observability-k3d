@@ -17,7 +17,7 @@ It assumes the Dashboard's container may have been taken over, so it trusts noth
 outbox: not the file's contents, not its type (it may be a link, a folder, or a pipe), and not
 its size. The most a request can ever do is what you could do yourself: run `./ok3d check`
 or `./ok3d apply`, save a settings or devices file that `./ok3d validate` passes, or set one
-of the secrets in .env.example. docs/helper-under-the-hood.md has the whole story.
+of the lines in .env.example. docs/helper-under-the-hood.md has the whole story.
 
 It uses only the standard library and runs on the host's own Python (`python3 -I`), so the
 host needs nothing installed.
@@ -52,12 +52,12 @@ MAX_SKEW = 60
 #   check, apply      run ./ok3d check or ./ok3d apply
 #   save-settings     check the file that follows with ./ok3d validate, then save it as settings.yaml
 #   save-devices      the same for devices.yaml
-#   set-secret        set one secret (name=) in .env to the value that follows
-ACTIONS = ("check", "apply", "save-settings", "save-devices", "set-secret")
+#   set-env           set one line of .env (name=, one of ENV_NAMES) to the value that follows
+ACTIONS = ("check", "apply", "save-settings", "save-devices", "set-env")
 # The files the two save actions write, in the ok3d checkout, and what ./ok3d validate calls them.
 SAVES = {"save-settings": ("settings.yaml", "settings"), "save-devices": ("devices.yaml", "devices")}
-# The secrets set-secret may set: the ones in .env.example, and nothing else.
-SECRETS = (
+# The .env lines set-env may set: the ones in .env.example, and nothing else.
+ENV_NAMES = (
     "OK3D_ADMIN_PASSWORD",
     "UNIFI_API_KEY",
     "NTFY_TOPIC",
@@ -66,14 +66,14 @@ SECRETS = (
     "DEADMAN_URL",
     "ANTHROPIC_API_KEY",
 )
-# A secret's value: printable characters with no spaces, quotes, backslashes, dollar signs, or
+# A .env value: printable characters with no spaces, quotes, backslashes, dollar signs, or
 # backticks, so .env holds it as plain text that nothing reading .env can misread. Empty
 # clears it. API keys, tokens, URLs, and generated passwords all fit.
-SECRET_VALUE = re.compile(r"[!#%&()*+,\-./0-9:;<=>?@A-Z\[\]^_a-z{|}~]{0,1024}")
+ENV_VALUE = re.compile(r"[!#%&()*+,\-./0-9:;<=>?@A-Z\[\]^_a-z{|}~]{0,1024}")
 # The id is the page's own random number, so it knows which answer is to its request.
 ID = re.compile(r"[0-9a-f]{16,64}")
 # The lines a request's head may have, each at most once: id and action always, name only
-# with set-secret.
+# with set-env.
 FIELDS = ("id", "action", "name")
 # How long each action may run before it's stopped. A first apply downloads images.
 TIMEOUTS = {"check": 300, "apply": 3600, "save-settings": 120, "save-devices": 120}
@@ -95,8 +95,8 @@ class Refused(Exception):
 class Request:
     id: str
     action: str
-    name: str | None = None  # the secret, for set-secret
-    body: bytes = b""  # the file, or the secret's value
+    name: str | None = None  # the .env line, for set-env
+    body: bytes = b""  # the file, or the .env value
 
 
 @dataclass(frozen=True)
@@ -170,7 +170,7 @@ def open_folders(folders: Folders) -> Opened:
 def parse_request(data: bytes, mtime: float, now: float) -> Request:
     """Checks a request's bytes and age, and returns it, or raises Refused.
 
-    A request is a few lines (its head), each ending in a newline. A save or set-secret adds a
+    A request is a few lines (its head), each ending in a newline. A save or set-env adds a
     blank line and then the file or the value (its body). check and apply have no body.
     """
     if len(data) > MAX_REQUEST:
@@ -202,20 +202,20 @@ def parse_request(data: bytes, mtime: float, now: float) -> Request:
     action = fields["action"]
     if action not in ACTIONS:
         raise Refused("the request asks for something the helper doesn't do")
-    if ("name" in fields) != (action == "set-secret"):
+    if ("name" in fields) != (action == "set-env"):
         raise Refused("the request has a line the helper doesn't know" if "name" in fields
                       else "the request is missing a line")  # fmt: skip
-    has_body = action in SAVES or action == "set-secret"
+    has_body = action in SAVES or action == "set-env"
     if bool(blank) != has_body:
         raise Refused("the request has something after it" if blank else "the request isn't finished")
     if action in SAVES:
         check_file(body)
-    if action == "set-secret":
-        if fields["name"] not in SECRETS:
-            raise Refused("the request names a secret the helper doesn't set")
+    if action == "set-env":
+        if fields["name"] not in ENV_NAMES:
+            raise Refused("the request names a .env line the helper doesn't set")
         body = body.removesuffix(b"\n")
-        if not SECRET_VALUE.fullmatch(body.decode("ascii", errors="replace")):
-            raise Refused("the secret has characters .env can't hold safely")
+        if not ENV_VALUE.fullmatch(body.decode("ascii", errors="replace")):
+            raise Refused("the value has characters .env can't hold safely")
     return Request(fields["id"], action, fields.get("name"), body)
 
 
@@ -329,6 +329,8 @@ def run_ok3d(opened: Opened, args: list[str], timeout: int) -> tuple[int, str]:
         process = subprocess.Popen(
             [str(ok3d_dir / "ok3d"), *args],
             cwd=ok3d_dir,
+            # Without OK3D_SETTINGS and the like, so ./ok3d reads the same files the helper writes.
+            env={k: v for k, v in os.environ.items() if not k.startswith("OK3D_")},
             stdin=subprocess.DEVNULL,
             stdout=out,
             stderr=subprocess.STDOUT,
@@ -387,8 +389,10 @@ def save(opened: Opened, request: Request) -> tuple[int, str]:
     name, kind = SAVES[request.action]
     write_file(opened, f"staged-{name}", request.body.decode("utf-8"))
     try:
-        status, output = run_ok3d(opened, ["validate", kind, str(opened.folders.own / f"staged-{name}")],
-                                  TIMEOUTS[request.action])  # fmt: skip
+        args = ["validate", kind, str(opened.folders.own / f"staged-{name}")]
+        if kind == "settings":
+            args.append("--from-dashboard")  # the settings only you may change stay as they are
+        status, output = run_ok3d(opened, args, TIMEOUTS[request.action])
     finally:
         with contextlib.suppress(FileNotFoundError):
             os.unlink(f"staged-{name}", dir_fd=opened.own)
@@ -400,39 +404,45 @@ def save(opened: Opened, request: Request) -> tuple[int, str]:
     return 0, output + f"Saved {name}.\n"
 
 
-def set_secret(opened: Opened, request: Request) -> tuple[int, str]:
-    """set-secret: sets one line of .env, keeping every other line as it was. The value never
-    goes into the answer or the log."""
-    name = request.name or ""
+def set_env_value(opened: Opened, request: Request) -> tuple[int, str]:
+    """set-env: sets one line of .env, keeping every other byte of it as it was. The value
+    never goes into the answer or the log."""
+    name = (request.name or "").encode()
     path = opened.folders.ok3d_dir / ".env"
     try:
         fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
         with os.fdopen(fd, "rb") as f:
-            lines = f.read().decode("utf-8", errors="replace").splitlines()
+            data = f.read()
     except FileNotFoundError:
-        lines = []
-    line = f"{name}={request.body.decode('ascii')}"
+        data = b""
+    # Split on newlines only, as bytes, so nothing else in the file is touched: not a character
+    # in another encoding, not a carriage return, not an unusual separator.
+    lines = data.split(b"\n") if data else []
+    if data.endswith(b"\n"):
+        lines.pop()
+    new = name + b"=" + request.body
     # Its first line takes the new value and any later ones go, since ./ok3d reads the last.
-    out: list[str] = []
-    for existing in lines:
-        if existing.startswith(f"{name}="):
-            if line:
-                out.append(line)
-                line = ""
+    out: list[bytes] = []
+    placed = False
+    for line in lines:
+        if line.startswith(name + b"="):
+            if not placed:
+                out.append(new)
+                placed = True
         else:
-            out.append(existing)
-    if line:
-        out.append(line)
+            out.append(line)
+    if not placed:
+        out.append(new)
     back_up(opened, path)
-    replace_file(path, ("\n".join(out) + "\n").encode())
-    return 0, f"Saved {name} in .env.\n"
+    replace_file(path, b"\n".join(out) + b"\n")
+    return 0, f"Saved {request.name} in .env.\n"
 
 
 def carry_out(opened: Opened, request: Request) -> tuple[int, str]:
     if request.action in SAVES:
         return save(opened, request)
-    if request.action == "set-secret":
-        return set_secret(opened, request)
+    if request.action == "set-env":
+        return set_env_value(opened, request)
     return run_ok3d(opened, [request.action], TIMEOUTS[request.action])
 
 
@@ -460,10 +470,15 @@ def handle_once(opened: Opened, now: float | None = None) -> str | None:
     except OSError:
         reason = "the ok3d command couldn't run" if request.action in ("check", "apply") else "the file couldn't be saved"
         write_result(opened, answer | {"state": "failed", "reason": reason, "finished": now_utc()})
-        return f"couldn't carry out {request.action} for {request.id}"
+        return f"couldn't carry out {describe(request)}"
     write_result(opened, answer | {"state": "finished", "exit": str(status), "finished": now_utc()}, output)
-    what = f"./ok3d {request.action}" if request.action in ("check", "apply") else request.action
-    return f"ran {what} for {request.id}: exit {status}"
+    return f"ran {describe(request)}: exit {status}"
+
+
+def describe(request: Request) -> str:
+    """What a request was, for the log: its action and id, both checked already, never its body."""
+    what = {"check": "./ok3d check", "apply": "./ok3d apply"}.get(request.action, request.action)
+    return f"{what} for {request.id}"
 
 
 def watch(folders: Folders) -> None:

@@ -1,0 +1,24 @@
+{{- /*
+The settings only you may change, by editing settings.yaml on the server: the Dashboard may
+not. They decide where ok3d keeps its data and where it sends your keys, tokens, and
+passwords, so a Dashboard someone had taken over can't move them. One line each, the
+setting's name, then = and its value as JSON, as written in the file (missing is null). Each
+line is a YAML comment, starting "# protected ", since Helm reads what a template makes as YAML.
+*/ -}}
+{{- $v := .Values -}}
+{{- $alerts := $v.alerts | default dict -}}
+{{- $ntfy := $alerts.ntfy | default dict -}}
+{{- $email := $alerts.email | default dict -}}
+{{- $fields := dict
+  "host" $v.host
+  "cluster" $v.cluster
+  "tls" $v.tls
+  "unifi" $v.unifi
+  "alerts.ntfy.server" (get $ntfy "server")
+  "alerts.email.smarthost" (get $email "smarthost")
+  "alerts.email.username" (get $email "username")
+  "alerts.email.requireTls" (get $email "requireTls")
+-}}
+{{- range $name := keys $fields | sortAlpha }}
+# protected {{ $name }}={{ get $fields $name | toJson }}
+{{- end }}
