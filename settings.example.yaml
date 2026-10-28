@@ -36,3 +36,5 @@ cluster:
   ports:
     # The port for every web page: https://grafana.noc.home.arpa:8443, and so on.
     https: 8443
+    # The Dashboard's port: https://dashboard.noc.home.arpa:8444.
+    dashboard: 8444

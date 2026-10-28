@@ -6,6 +6,10 @@
 #                     certificate authority, and the cluster. Then deploy both releases
 #                     (ok3d-platform, then ok3d). Safe to run again: it changes only what's
 #                     different.
+#   ./ok3d install    Set up the Dashboard: the helper as a service of yours, the Dashboard's
+#                     certificate, and its container, which keeps running when the cluster
+#                     doesn't. Prints its address and password. Safe to run again: it brings
+#                     each part up to date. (Linux, with systemd.)
 #   ./ok3d delete     Delete the cluster. The data root stays, so `./ok3d apply` brings
 #                     everything back. Asks first; --yes skips the question.
 #   ./ok3d demo up    Start the simulated network: a few small containers that stand in for a
@@ -135,7 +139,7 @@ load_settings() {
 		sed -n "s/^  \([A-Z][A-Z0-9_]*\): \"\([^\"\\\\\$\`$q]*\)\"\$/\1=$q\2$q/p")
 	eval "$assignments"
 	: "${CLUSTER_NAME:?} ${K3S_IMAGE:?} ${NETWORK:?} ${API_PORT:?} ${PUBLISH_ADDRESS:?}"
-	: "${HTTPS_PORT:?} ${DATA_ROOT:?} ${TLS_MODE:?} ${DOMAIN:?}"
+	: "${HTTPS_PORT:?} ${DASHBOARD_PORT:?} ${DATA_ROOT:?} ${TLS_MODE:?} ${DOMAIN:?}"
 	: "${METRICS_RETENTION:?} ${METRICS_RETENTION_SIZE:?} ${MODULE_UNIFI:?}"
 	: "${ALERTS_NTFY:?} ${ALERTS_NTFY_SERVER:?} ${ALERTS_NTFY_TOKEN:?} ${ALERTS_EMAIL:?} ${ALERTS_DEADMAN:?}"
 	context="k3d-$CLUSTER_NAME"
@@ -520,6 +524,123 @@ cmd_apply() {
 	echo "Point *.$DOMAIN at this computer in your router or local DNS server (docs/certificate.md)."
 }
 
+# The Dashboard's certificate, issued by ok3d's certificate authority for dashboard.<domain>,
+# and kept until it's within 30 days of running out (browsers accept at most 398 days).
+make_dashboard_certificate() {
+	tls="$DATA_ROOT/dashboard/tls"
+	install -d -m 0700 "$tls"
+	name="dashboard.$DOMAIN"
+	if [ -f "$tls/dashboard.crt" ] && [ -f "$tls/dashboard.key" ] &&
+		openssl x509 -in "$tls/dashboard.crt" -noout -checkend 2592000 >/dev/null 2>&1 &&
+		openssl x509 -in "$tls/dashboard.crt" -noout -ext subjectAltName 2>/dev/null | grep -qF "DNS:$name"; then
+		echo "The Dashboard's certificate is kept."
+		return
+	fi
+	echo "Issuing the Dashboard's certificate, for $name."
+	(
+		umask 077
+		openssl req -new -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes \
+			-keyout "$tls/dashboard.key" -out "$tls/dashboard.csr" -subj "/CN=$name" 2>/dev/null
+		printf 'subjectAltName=DNS:%s\nextendedKeyUsage=serverAuth\nbasicConstraints=critical,CA:FALSE\n' "$name" \
+			>"$tls/dashboard.ext"
+		openssl x509 -req -in "$tls/dashboard.csr" -CA "$DATA_ROOT/certs/ca.crt" -CAkey "$DATA_ROOT/certs/ca.key" \
+			-CAcreateserial -CAserial "$tls/ca.srl" -days 397 -extfile "$tls/dashboard.ext" \
+			-out "$tls/dashboard.crt" 2>/dev/null
+		rm -f "$tls/dashboard.csr" "$tls/dashboard.ext"
+	)
+}
+
+# The helper, as a systemd user service running as you (deploy/ok3d-helper.service, with this
+# checkout's paths filled in), started again so it runs this checkout's code.
+install_helper() {
+	units="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+	install -d -m 0755 "$units"
+	# Each path with what sed would read as special (\, &, and the # it's split on) escaped.
+	esc() { printf '%s' "$1" | sed 's/[\\&#]/\\&/g'; }
+	sed -e "s#@DIR@#$(esc "$root")#g" -e "s#@DATA_ROOT@#$(esc "$DATA_ROOT")#g" -e "s#@PATH@#$(esc "$PATH")#g" \
+		deploy/ok3d-helper.service >"$units/ok3d-helper.service"
+	systemctl --user daemon-reload
+	systemctl --user enable ok3d-helper >/dev/null 2>&1
+	systemctl --user restart ok3d-helper
+	echo "The helper is running as a service of yours (systemctl --user status ok3d-helper)."
+	# Without lingering, a user's services stop when they log out, and don't start at boot.
+	if [ "$(loginctl show-user "$(id -un)" --property=Linger --value 2>/dev/null)" != yes ]; then
+		warn "the helper stops when you log out, and won't start at boot, until you run:
+      sudo loginctl enable-linger $(id -un)"
+	fi
+}
+
+# The Dashboard's image: this release's, or main's for a checkout of main. OK3D_DASHBOARD_IMAGE
+# names another, such as one built on this machine to try a change.
+dashboard_image() {
+	if [ -n "${OK3D_DASHBOARD_IMAGE:-}" ]; then
+		echo "$OK3D_DASHBOARD_IMAGE"
+		return
+	fi
+	version=$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' src/ok3d/__init__.py)
+	case "$version" in
+	*dev*) echo "ghcr.io/southsidedean/ok3d-dashboard:main" ;;
+	*) echo "ghcr.io/southsidedean/ok3d-dashboard:$version" ;;
+	esac
+}
+
+# The Dashboard's container, made again from the image: as you, read-only, with no
+# capabilities, its own folder at /state, and the helper's read-only at /helper
+# (docs/dashboard-under-the-hood.md).
+start_dashboard() {
+	image=$(dashboard_image)
+	address="https://dashboard.$DOMAIN"
+	[ "$DASHBOARD_PORT" = 443 ] || address="$address:$DASHBOARD_PORT"
+	docker rm --force ok3d-dashboard >/dev/null 2>&1 || true
+	docker run --detach --name ok3d-dashboard --restart unless-stopped \
+		--user "$(id -u):$(id -g)" --read-only --cap-drop ALL --security-opt no-new-privileges \
+		--publish "$PUBLISH_ADDRESS:$DASHBOARD_PORT:8444" \
+		--volume "$DATA_ROOT/dashboard:/state" --volume "$DATA_ROOT/helper:/helper:ro" \
+		"$image" --origin "$address" >/dev/null
+	echo "The Dashboard is running from $image."
+}
+
+cmd_install() {
+	load_settings
+	if [ "$(uname -s)" != Linux ] || ! command -v systemctl >/dev/null 2>&1; then
+		echo "./ok3d install needs Linux with systemd, for the helper's service." >&2
+		exit 1
+	fi
+	if [ "$(id -u)" = 0 ]; then
+		echo "Run ok3d as yourself, not as root: the helper runs as you, and what it keeps should be yours." >&2
+		exit 1
+	fi
+	# The service file holds these paths; it can't hold one with a space or a #.
+	case "$root$DATA_ROOT" in
+	*[[:space:]#]*)
+		echo "The ok3d folder ($root) and the data root ($DATA_ROOT) can't have spaces or # in them." >&2
+		exit 1
+		;;
+	esac
+	check_data_root
+	if [ "$failures" -gt 0 ]; then exit 1; fi
+	install -d -m 0700 "$DATA_ROOT/dashboard" "$DATA_ROOT/dashboard/outbox" "$DATA_ROOT/helper"
+	make_certificate_authority
+	make_dashboard_certificate
+	install_helper
+	start_dashboard
+	# The Dashboard makes its password on first start.
+	tries=0
+	while [ ! -s "$DATA_ROOT/dashboard/password" ] && [ "$tries" -lt 30 ]; do
+		sleep 1
+		tries=$((tries + 1))
+	done
+	echo
+	echo "Done. Open the Dashboard at https://dashboard.$DOMAIN:$DASHBOARD_PORT/"
+	if [ -s "$DATA_ROOT/dashboard/password" ]; then
+		echo "Its password is in $DATA_ROOT/dashboard/password (readable only by you):"
+		echo "  $(cat "$DATA_ROOT/dashboard/password")"
+	else
+		echo "It hasn't made its password yet: docker logs ok3d-dashboard says why."
+	fi
+	echo "Point *.$DOMAIN at this computer and trust ok3d's certificate authority (docs/certificate.md)."
+}
+
 cmd_delete() {
 	yes=${1:-}
 	load_settings
@@ -720,6 +841,7 @@ cmd_version() {
 case "${1:-}" in
 check) cmd_check ;;
 apply) cmd_apply ;;
+install) cmd_install ;;
 delete) cmd_delete "${2:-}" ;;
 demo) cmd_demo "${2:-}" "${3:-}" ;;
 test-alert) cmd_test_alert ;;

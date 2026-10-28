@@ -15,7 +15,7 @@ Description=ok3d-helper: runs ok3d check and apply when you ask on the Dashboard
 [Service]
 Type=simple
 WorkingDirectory=@DIR@
-Environment=PATH=@PATH@
+Environment="PATH=@PATH@"
 # -I: the host's own Python, isolated from any Python settings and from the folder it runs in.
 ExecStart=/usr/bin/python3 -I @DIR@/src/ok3d/helper.py watch --ok3d-dir @DIR@ --data-root @DATA_ROOT@
 Restart=on-failure

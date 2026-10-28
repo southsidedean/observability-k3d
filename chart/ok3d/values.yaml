@@ -22,6 +22,8 @@ cluster:
   ports:
     # HTTPS for every web page, through the gateway (from 0.4).
     https: 8443
+    # The Dashboard, which runs outside the cluster: https://dashboard.<domain>:8444 (from 0.5).
+    dashboard: 8444
 
 host:
   # The folder on this machine that holds everything ok3d keeps: Prometheus's history,

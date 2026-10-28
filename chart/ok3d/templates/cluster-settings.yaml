@@ -20,6 +20,7 @@ data:
   API_PORT: {{ .Values.cluster.apiPort | quote }}
   PUBLISH_ADDRESS: {{ .Values.cluster.publishAddress | quote }}
   HTTPS_PORT: {{ .Values.cluster.ports.https | quote }}
+  DASHBOARD_PORT: {{ .Values.cluster.ports.dashboard | quote }}
   DATA_ROOT: {{ .Values.host.dataRoot | quote }}
   TLS_MODE: {{ .Values.tls.mode | quote }}
   DOMAIN: {{ .Values.tls.domain | quote }}

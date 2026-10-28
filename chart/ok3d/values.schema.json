@@ -77,6 +77,12 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 65535
+            },
+            "dashboard": {
+              "description": "The Dashboard's port: https://dashboard.<domain>:<port>. It runs outside the cluster, so it's published by ./ok3d install, not by the gateway.",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535
             }
           }
         }
