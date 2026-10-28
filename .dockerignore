@@ -1,0 +1,5 @@
+# Only src/ok3d goes into the image (Dockerfile.dashboard); keep the rest out of the build
+# context, and never send your own settings or secrets to a build.
+*
+!src/ok3d/**
+**/__pycache__

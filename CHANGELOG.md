@@ -8,6 +8,11 @@
   small service on the server, running as you, and it refuses any request that isn't
   exactly one of those two. The Dashboard that uses it comes later in 0.5.
   [docs/helper-under-the-hood.md](docs/helper-under-the-hood.md) says how it works.
+- The Dashboard's first part: its image, `ghcr.io/southsidedean/ok3d-dashboard`, for amd64 and
+  arm64, and a first page behind a sign-in of its own, over HTTPS only. It shows ok3d's
+  version and the helper's last answer; the pages for settings, devices, and Check and Apply
+  come next. [docs/dashboard-under-the-hood.md](docs/dashboard-under-the-hood.md) says how
+  it's built.
 
 ### Fixes
 

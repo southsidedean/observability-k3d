@@ -148,3 +148,49 @@ jobs:
           python-version: "3.x"
       - run: python -m pip install -e ".[dev]"
       - run: python -m pytest -q
+
+  # The Dashboard's image, built and tried the way the installer runs it: read-only, with no
+  # capabilities. images.yml builds and publishes both architectures after a merge; this
+  # catches a broken image before one.
+  dashboard-image:
+    name: dashboard image
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build it
+        run: docker build -f Dockerfile.dashboard -t ok3d-dashboard:ci .
+      - name: Run as the installer runs it, as you, read-only; it serves HTTPS and lets you sign in
+        run: |
+          mkdir -p "$RUNNER_TEMP/state/tls" "$RUNNER_TEMP/helper"
+          openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 1 -subj /CN=localhost \
+            -keyout "$RUNNER_TEMP/state/tls/dashboard.key" -out "$RUNNER_TEMP/state/tls/dashboard.crt" 2>/dev/null
+          docker run -d --name dash --user "$(id -u):$(id -g)" --read-only --cap-drop ALL \
+            --security-opt no-new-privileges -p 127.0.0.1:8444:8444 \
+            -v "$RUNNER_TEMP/state:/state" -v "$RUNNER_TEMP/helper:/helper:ro" ok3d-dashboard:ci
+          url=https://localhost:8444
+          for _ in $(seq 1 30); do curl -sk -o /dev/null "$url/sign-in" && break; sleep 1; done
+          test "$(curl -sk -o /dev/null -w '%{http_code}' "$url/sign-in")" = 200
+          test "$(curl -sk -o /dev/null -w '%{http_code}' "$url/")" = 303
+          test "$(stat -c %a "$RUNNER_TEMP/state/password")" = 600
+          # Sign in with the password it made, and open the first page.
+          password=$(cat "$RUNNER_TEMP/state/password")
+          curl -sk -c "$RUNNER_TEMP/jar" -o /dev/null -H "Origin: $url" \
+            --data-urlencode "password=$password" "$url/sign-in"
+          curl -sk -b "$RUNNER_TEMP/jar" "$url/" | grep -q "No answer from the helper yet"
+          # The image's own user, when started without --user, isn't root either.
+          test "$(docker run --rm --entrypoint id ok3d-dashboard:ci -u)" != 0
+      - name: The Dashboard's log
+        if: always()
+        run: docker logs dash || true
+      - name: No fixable high or critical CVEs (known exceptions in .trivyignore)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ok3d-dashboard:ci
+          scanners: vuln,secret
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          trivyignores: .trivyignore
+          exit-code: "1"

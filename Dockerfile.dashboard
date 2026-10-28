@@ -1,0 +1,27 @@
+# ok3d-dashboard: the Dashboard, which runs on the server outside the cluster (src/ok3d/dashboard,
+# docs/dashboard-under-the-hood.md). Built for amd64 and arm64 by .github/workflows/images.yml.
+#
+# Built on Wolfi (Chainguard's free, rolling base), whose packages get security fixes quickly.
+# The Dashboard uses only Python's standard library, so Python is all the image adds. The
+# workflow pins the base by digest for each build (BASE_IMAGE).
+ARG BASE_IMAGE=cgr.dev/chainguard/wolfi-base:latest
+FROM ${BASE_IMAGE}
+
+# apk upgrade picks up security fixes released since the base image was built (the scan in CI
+# fails on fixable high or critical CVEs).
+RUN apk upgrade --no-cache \
+    && apk add --no-cache python-3.14 \
+    && rm -rf /tmp/*
+
+# Only the package: no tests, docs, or charts.
+COPY src/ok3d /app/ok3d
+ENV PYTHONPATH=/app \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+# Not root, even when started by hand. The installer runs it as you (--user), with a read-only
+# filesystem, the Dashboard's folder at /state, and the helper's folder read-only at /helper.
+USER 65532:65532
+EXPOSE 8444
+# -P: nothing from the working folder is imported (-I would also ignore PYTHONPATH above).
+ENTRYPOINT ["python3", "-P", "-m", "ok3d.dashboard"]
