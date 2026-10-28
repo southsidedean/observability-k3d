@@ -155,8 +155,13 @@ def test_apply_makes_everything_in_order(env: dict[str, str]) -> None:
     # monitoring namespace (with its labels, before anything is installed into it), and ok3d.
     assert first("openssl req") < first("k3d cluster create") < first("helm upgrade --install ok3d-platform")
     assert first("helm upgrade --install ok3d-platform") < first("kubectl --context k3d-ok3d --namespace cert-manager create secret tls ok3d-ca")
-    assert first("kubectl --context k3d-ok3d --namespace cert-manager create secret") < first("kubectl --context k3d-ok3d apply --filename -")
-    assert first("kubectl --context k3d-ok3d apply --filename -") < first("helm upgrade --install ok3d chart/ok3d")
+    # Two applies come before ok3d's release: the authority's Secret and the monitoring
+    # namespace. (The Secret's create and apply run as a pipe, whose two halves start
+    # together, so their order in the log isn't fixed.)
+    release_at = first("helm upgrade --install ok3d chart/ok3d")
+    applies = [i for i, line in enumerate(log) if line.startswith("kubectl --context k3d-ok3d apply --filename -")]
+    assert len(applies) == 2 and max(applies) < release_at
+    assert first("kubectl --context k3d-ok3d --namespace cert-manager create secret") < release_at
     stdin = Path(env["FAKE_LOG"] + ".stdin").read_text()
     assert "name: monitoring" in stdin and "pod-security.kubernetes.io/enforce: restricted" in stdin
 
