@@ -20,5 +20,5 @@ jobs:
       - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
           fail-on-severity: high
-          # Licenses that can't be shipped in an AGPL-3.0 project.
-          deny-licenses: SSPL-1.0, BUSL-1.1, Commons-Clause
+          # Licenses that can't be shipped in an AGPL-3.0 project, by their SPDX identifiers.
+          deny-licenses: SSPL-1.0, BUSL-1.1
