@@ -54,6 +54,8 @@
 
 ### Fixes
 
+- When the Dashboard refuses a file that's too big, the browser shows the refusal, not a
+  reset connection.
 - `.env.example` no longer says ok3d reads none of its secrets: 0.4 reads all but the agents'
   key.
 

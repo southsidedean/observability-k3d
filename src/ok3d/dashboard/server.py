@@ -43,6 +43,9 @@ MAX_CONNECTIONS = 32
 # %0D%0A).
 MAX_FORM = 4096
 MAX_FILE_FORM = 6 * 64 * 1024 + 1024
+# The most of a body too big to use that's read and thrown away before it's refused (see
+# discard_body). Anything bigger is refused, and the connection closed, straight away.
+MAX_DISCARD = 1024 * 1024
 
 HEADERS = {
     "Content-Security-Policy": "default-src 'none'; style-src 'self'; img-src 'self'; form-action 'self'; "
@@ -494,12 +497,24 @@ class Handler(BaseHTTPRequestHandler):
             return origin in (o.lower() for o in self.config.origins)
         return bool(host) and origin == f"https://{host}"
 
+    def discard_body(self) -> None:
+        """Reads a body that won't be used, up to MAX_DISCARD, and throws it away. Refused and
+        closed before the browser has sent it all, the connection would be reset, and the browser
+        would show that instead of the refusal. Each read waits at most TIMEOUT."""
+        try:
+            left = min(int(self.headers.get("Content-Length", "0")), MAX_DISCARD)
+        except ValueError:
+            return
+        while left > 0 and (chunk := self.rfile.read(min(left, 65536))):
+            left -= len(chunk)
+
     def read_form(self, limit: int = 0) -> dict[str, str] | None:
         try:
             length = int(self.headers.get("Content-Length", ""))
         except ValueError:
             return None
         if not 0 <= length <= (limit or MAX_FORM):
+            self.discard_body()
             return None
         if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/x-www-form-urlencoded":
             return None
@@ -603,6 +618,7 @@ class Handler(BaseHTTPRequestHandler):
 
         try:
             if int(self.headers.get("Content-Length", "0")) > MAX_FILE_FORM:
+                self.discard_body()
                 self.send(413, page(title, render(self.config, "That's bigger than 64 KB."), True))
                 return
         except ValueError:

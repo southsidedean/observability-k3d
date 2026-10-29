@@ -512,6 +512,30 @@ def test_a_file_too_big_isnt_sent(ready: Dashboard) -> None:
     assert not (ready.state / "outbox" / "request").exists()
 
 
+def test_a_file_too_big_is_read_before_its_refused(ready: Dashboard) -> None:
+    # Refused straight away and closed, the browser would still be sending, and would show a
+    # reset connection instead of the refusal. So the server reads the body first.
+    context = ssl.create_default_context()
+    context.check_hostname = False
+    context.verify_mode = ssl.CERT_NONE
+    size = 420_000
+    head = (f"POST /devices HTTP/1.1\r\nHost: 127.0.0.1:{ready.port}\r\nOrigin: https://127.0.0.1:{ready.port}\r\n"
+            f"Cookie: {COOKIE}={ready.sign_in()}\r\nContent-Type: application/x-www-form-urlencoded\r\n"
+            f"Content-Length: {size}\r\n\r\n")  # fmt: skip
+    with socket.create_connection(("127.0.0.1", ready.port)) as raw, context.wrap_socket(raw) as conn:
+        conn.sendall(head.encode())
+        conn.settimeout(1)
+        with pytest.raises(TimeoutError):
+            conn.recv(1)  # nothing yet: it's waiting for the body
+        conn.settimeout(10)
+        conn.sendall(b"x" * size)
+        answer = b""
+        while chunk := conn.recv(65536):
+            answer += chunk
+    assert answer.startswith(b"HTTP/1.0 413 ")
+    assert b"bigger than 64 KB" in answer
+
+
 def test_keys_show_only_whether_each_is_set(ready: Dashboard) -> None:
     (ready.helper / "env-set").write_text("UNIFI_API_KEY\nOK3D_ADMIN_PASSWORD\n")
     shown = body(ready.get("/keys", ready.sign_in()))
