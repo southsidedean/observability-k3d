@@ -16,15 +16,27 @@ from dataclasses import dataclass, field
 from ok3d import __version__
 
 # A key line: the key, then a colon, then whatever follows (a value, a comment, or nothing).
-KEY_LINE = re.compile(r"(?P<indent> *)(?P<key>[A-Za-z][A-Za-z0-9_]*):(?P<rest>( .*)?)")
+KEY_LINE = re.compile(r"(?P<indent> *)(?P<key>[A-Za-z][A-Za-z0-9_]*):(?P<rest>( .*)?)", re.ASCII)
+# YAML's only spaces are spaces and tabs (not Unicode ones), so these say [ \t], not \s.
 # What may follow a key that has more keys under it: nothing, or a comment.
-NOTHING = re.compile(r"\s*(#.*)?")
+NOTHING = re.compile(r"[ \t]*(#.*)?")
 # A true or false value, and an optional comment after it.
-FLAG = re.compile(r" +(?P<value>true|false|True|False|TRUE|FALSE)(?P<comment>\s+#.*)?\s*")
-# A plain or quoted value on one line, and an optional comment after it.
-SCALAR = re.compile(
-    r""" +(?:"(?P<double>[^"\\]*)"|'(?P<single>[^']*)'|(?P<plain>[^\s#'"][^#]*?))(?:\s+#.*)?\s*"""
-)
+FLAG = re.compile(r" +(?P<value>true|false|True|False|TRUE|FALSE)(?P<comment>[ \t]+#.*)?[ \t]*")
+# Quoted values on one line, and an optional comment after. A double-quoted one with a
+# backslash escape in it isn't read.
+DOUBLE = re.compile(r'"(?P<value>[^"\\]*)"(?:[ \t]+#.*)?[ \t]*')
+SINGLE = re.compile(r"'(?P<value>(?:[^']|'')*)'(?:[ \t]+#.*)?[ \t]*")
+# What YAML reads as no value at all.
+NULLS = {"", "~", "null", "Null", "NULL"}
+# A plain value can't start with these: YAML would read a list, a mapping, an anchor, an
+# alias, a tag, a block scalar, or something reserved.
+NOT_PLAIN = tuple("[]{}&*!|>%@`")
+# A key or list item whose value is a block scalar: the lines under it are text, and blank
+# lines and comment-like lines among them are part of it.
+BLOCK = re.compile(r"[:-][ \t]+[|>][0-9+-]*[ \t]*(#.*)?")
+# Line breaks YAML knows that Python's split("\n") doesn't, a carriage return, and a byte
+# order mark: with any of these, the lines here wouldn't be the lines Helm sees.
+NOT_LINES = re.compile("[\r\x85\u2028\u2029\ufeff]")
 
 
 class CantEdit(Exception):
@@ -69,6 +81,27 @@ def _children(
             raise CantEdit(f"{key} is in it twice")
         keys[key] = i
     return indent, keys
+
+
+def _lines(text: str) -> list[str]:
+    """The text's lines, as Helm would see them, or CantEdit when they might not be."""
+    if NOT_LINES.search(text):
+        raise CantEdit("it has line breaks or marks the Setup page can't follow")
+    return text.split("\n")
+
+
+def _scalar(rest: str) -> str | None:
+    """A value written on its key's line, without quotes; None when it's null, or not a
+    value on one line this can read."""
+    value = rest.strip(" \t")
+    if value.startswith('"'):
+        match = DOUBLE.fullmatch(value)
+        return None if match is None else match["value"]
+    if value.startswith("'"):
+        match = SINGLE.fullmatch(value)
+        return None if match is None else match["value"].replace("''", "'")
+    plain = re.split(r"[ \t]#", value, maxsplit=1)[0].rstrip(" \t")
+    return None if plain in NULLS or plain.startswith(NOT_PLAIN) else plain
 
 
 def _key(line: str) -> re.Match[str]:
@@ -131,18 +164,12 @@ def read(text: str | None, path: tuple[str, ...]) -> str | None:
     read this way."""
     if text is None:
         return None
-    lines = text.split("\n")
     try:
+        lines = _lines(text)
         i = _walk(lines, path).line
+        return None if i is None else _scalar(_key(lines[i])["rest"])
     except CantEdit:
         return None
-    if i is None:
-        return None
-    match = KEY_LINE.fullmatch(lines[i])
-    value = SCALAR.fullmatch(match["rest"]) if match else None
-    if value is None:
-        return None
-    return next(v for v in (value["double"], value["single"], value["plain"]) if v is not None)
 
 
 def flag(text: str | None, path: tuple[str, ...]) -> bool | None:
@@ -150,8 +177,8 @@ def flag(text: str | None, path: tuple[str, ...]) -> bool | None:
     written in a way this can't read."""
     if text is None:
         return False
-    lines = text.split("\n")
     try:
+        lines = _lines(text)
         i = _walk(lines, path).line
     except CantEdit:
         return None
@@ -165,7 +192,7 @@ def flag(text: str | None, path: tuple[str, ...]) -> bool | None:
 def set_flag(text: str, path: tuple[str, ...], on: bool) -> str:
     """The settings with this switch set, and everything else as it was, comments too. A
     switch that isn't written yet is added at the end of the mapping it belongs in."""
-    lines = text.split("\n")
+    lines = _lines(text)
     if lines and lines[-1] == "":
         lines.pop()
     value = "true" if on else "false"
@@ -174,12 +201,14 @@ def set_flag(text: str, path: tuple[str, ...], on: bool) -> str:
         i = found.line
         match = _key(lines[i])
         old = FLAG.fullmatch(match["rest"])
-        if old is None and not SCALAR.fullmatch(match["rest"]):
+        if old is None and not match["rest"].strip(" \t"):
             raise CantEdit(f"{path[-1]} isn't written as one value")
         comment = (old["comment"] or "") if old else ""
         lines[i] = f"{match['indent']}{match['key']}: {value}{comment}"
     else:
         # After the mapping's last setting, not after comments that may introduce what follows.
+        if any(BLOCK.search(lines[j]) for j in range(found.start, found.end)):
+            raise CantEdit("there's a block of text (| or >) where it would go")
         at = found.end
         while at > found.start and _skip(lines[at - 1]):
             at -= 1

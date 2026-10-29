@@ -198,14 +198,20 @@ def todo(config: Config) -> list[str]:
     have = helper_link.env_set(config.helper)
     left = []
     for switch in switches.MODULES + switches.ALERTS:
-        if not switch.available or not switches.flag(settings, switch.path):
+        on = switches.flag(settings, switch.path)
+        if not switch.available or on is False:
             continue
+        if on is None:
+            left.append(f"Setup can't tell whether {html.escape(switch.name)} is on: look at "
+                        f"<code>{switch.setting}</code> on the Settings page.")  # fmt: skip
+            continue
+        left += [f"{html.escape(switch.name)} is on, and needs {html.escape(say)}." for say in switch.missing(settings)]
         keys = list(switch.keys)
         if switch.setting == "alerts.ntfy.enabled" and switches.flag(settings, ("alerts", "ntfy", "useToken")):
             keys.append("NTFY_TOKEN")
         left += [f"{html.escape(switch.name)} is on, and needs <code>{k}</code>: set it {key_place(k)}."
                  for k in keys if k not in have]  # fmt: skip
-    if not any(switches.flag(settings, ("alerts", way, "enabled")) for way in ("ntfy", "email")):
+    if all(switches.flag(settings, ("alerts", way, "enabled")) is False for way in ("ntfy", "email")):
         left.append('Alerts go nowhere yet: turn on ntfy or email on <a href="/setup">Setup</a>.')
     if not DEVICE_NAME.search(helper_link.current(config.helper, "devices.yaml") or ""):
         left.append('There are no devices to watch yet: add them on <a href="/devices">Devices</a>.')
@@ -276,7 +282,7 @@ def switch_form(switch: switches.Switch, settings: str, base: str, have: set[str
     if switch.keys and switch.available:
         keys = "<p class=muted>Needs " + ", ".join(
             f"<code>{k}</code> ({'set' if k in have else 'not set'}, {key_place(k)})" for k in switch.keys) + ".</p>"  # fmt: skip
-    written = "true" if on else "false"
+    written = {True: "true", False: "false", None: switches.read(settings, switch.path)}[on]
     button = (f"<p class=muted>{html.escape(why)}</p>" if why else
               f'<input type="hidden" name="base" value="{base}"><input type="hidden" name="switch" value="{switch.setting}">'
               f'<input type="hidden" name="on" value="{"false" if on else "true"}">'
@@ -284,7 +290,8 @@ def switch_form(switch: switches.Switch, settings: str, base: str, have: set[str
     return (
         f'<form method="post" action="/setup"><h3>{html.escape(switch.name)} {state}</h3>'
         f"<p class=muted>{html.escape(switch.about)}"
-        + (f" In settings.yaml: <code>{switch.setting}: {written}</code>." if switch.available else "")
+        + (f" In settings.yaml: <code>{switch.setting}: {html.escape(written)}</code>."
+           if switch.available and written is not None else "")
         + "</p>"
         f"{keys}{button}</form>"
     )

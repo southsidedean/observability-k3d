@@ -196,7 +196,7 @@ temporary file first and renamed into place, so the page never reads half of one
 | `staged-settings.yaml`, `staged-devices.yaml` | A file the Dashboard sent, only while `./ok3d validate` checks it |
 | `current-settings.yaml`, `current-devices.yaml` | Copies of yours, for the Dashboard to show; missing when you have none, and never copied through a link. Everything in them, comments too, is visible to the Dashboard, which is one more reason secrets belong in `.env` |
 | `env-set` | The names of the lines in `.env` that have a value, one per line. Never a value |
-| `applied` | When the last `./ok3d apply` that worked finished, kept until the next one, for the Dashboard's What's next |
+| `applied` | When the last `./ok3d apply` that worked finished, for the Dashboard's What's next. `./ok3d apply` writes it, not the helper, so an Apply on the server counts too, and `./ok3d delete` removes it |
 | `alive` | When it last wrote these: every 30 seconds, after every request, and every 30 seconds while a command runs |
 | `lock` | Held while the helper runs, so a second one on the same data root won't start |
 

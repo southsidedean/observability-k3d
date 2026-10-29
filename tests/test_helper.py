@@ -88,23 +88,6 @@ def test_an_apply_runs_ok3d_apply(h: helper.Opened) -> None:
     assert ran(h) == ["apply"]
 
 
-def test_an_apply_that_works_is_remembered_for_whats_next(h: helper.Opened) -> None:
-    send(h, f"action=apply\nid={ID}\n")
-    helper.handle_once(h)
-    assert (h.folders.own / "applied").read_text() == result(h)["finished"] + "\n"
-    # A Check after it leaves it as it was.
-    send(h, f"id={ID}0\naction=check\n")
-    helper.handle_once(h)
-    assert (h.folders.own / "applied").read_text().strip() != ""
-
-
-def test_an_apply_that_fails_isnt_remembered(h: helper.Opened) -> None:
-    (h.folders.ok3d_dir / "ok3d").write_text("#!/bin/sh\nexit 1\n")
-    send(h, f"action=apply\nid={ID}\n")
-    helper.handle_once(h)
-    assert not (h.folders.own / "applied").exists()
-
-
 def test_a_failing_command_reports_its_exit_status(h: helper.Opened) -> None:
     (h.folders.ok3d_dir / "ok3d").write_text("#!/bin/sh\necho broken\nexit 3\n")
     send(h)

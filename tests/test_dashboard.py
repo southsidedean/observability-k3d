@@ -740,6 +740,17 @@ def test_home_lists_whats_left(ready: Dashboard) -> None:
     assert "Nothing's missing." in body(ready.get("/", session))
 
 
+def test_home_says_when_it_cant_tell_and_what_an_on_switch_still_needs(ready: Dashboard) -> None:
+    # yes is true to Helm, so ./ok3d check wants NTFY_TOPIC: Home mustn't say alerts go nowhere.
+    settings_are(ready, SETTINGS + "alerts:\n  ntfy:\n    enabled: yes\nmodules:\n  unifi: true\n")
+    session = ready.sign_in()
+    shown = body(ready.get("/", session))
+    assert "Setup can't tell whether ntfy is on" in shown
+    assert "Alerts go nowhere yet" not in shown
+    assert "UniFi is on, and needs your UniFi controller&#x27;s address, unifi.url" in shown
+    assert "<code>alerts.ntfy.enabled: yes</code>" in body(ready.get("/setup", session))
+
+
 def test_whats_next_comes_once_an_apply_has_worked(ready: Dashboard) -> None:
     settings_are(ready, SETTINGS + "tls:\n  domain: noc.example.org\ncluster:\n  ports:\n    https: 443\n")
     session = ready.sign_in()
@@ -752,7 +763,7 @@ def test_whats_next_comes_once_an_apply_has_worked(ready: Dashboard) -> None:
 
 
 def test_whats_next_never_links_to_a_domain_it_cant_trust(ready: Dashboard) -> None:
-    settings_are(ready, SETTINGS + 'tls:\n  domain: "evil.example/\\"><script>"\n')
+    settings_are(ready, SETTINGS + "tls:\n  domain: 'evil.example/\"><script>'\n")
     (ready.helper / "applied").write_text("2026-10-28T23:38:18Z\n")
     shown = body(ready.get("/", ready.sign_in()))
     assert "<script>" not in shown

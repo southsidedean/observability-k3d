@@ -1,7 +1,8 @@
 # The Dashboard under the hood
 
 How the Dashboard is built, as the code stands. It's arriving in parts during 0.5: so far it
-has its sign-in and four pages (Home, with Check and Apply; Settings; Devices; and Keys). The
+has its sign-in and five pages (Home, with Check and Apply; Setup; Settings; Devices; and
+Keys). The
 installer (`./ok3d install`, and `install.sh` for `curl | sh`) sets it all up. To see how a request reaches the server, read
 [the helper under the hood](helper-under-the-hood.md).
 
@@ -121,7 +122,9 @@ Each page reads only the helper's folder, mounted read-only at `/helper`:
   30 seconds while a Check or Apply runs. While it's more than 90 seconds old, the pages say
   the helper isn't running and send nothing.
 - `result`: the answer to the last request.
-- `applied`: when the last Apply that worked finished. Home shows What's next once it's there.
+- `applied`: when the last `./ok3d apply` that worked finished, from the Dashboard or on the
+  server. `./ok3d apply` writes it, and `./ok3d delete` removes it. Home shows What's next
+  while it's there.
 
 Every button leaves one request in `/state/outbox/request`, written to a temporary file and
 renamed into place, then sends you to Home, where the answer appears. The Dashboard keeps the
@@ -154,7 +157,8 @@ switches and the setups.
 
 - **The switches** are `modules.*` and `alerts.ntfy.enabled`, `alerts.email.enabled`, and
   `alerts.deadman.enabled`. Each shows its setting as it's written in `settings.yaml`, and
-  which `.env` lines it needs. A module that comes in a later release says which, with no
+  which `.env` lines it needs. A value Setup can't read as true or false (`yes`, say, which
+  Helm reads as true) shows as "can't tell", and the switch can set it. A module that comes in a later release says which, with no
   button. The mesh, remote access, and agents are changed only on the server, like the other
   settings a save from the Dashboard can't change. A switch that needs a setting the
   Dashboard can't set (UniFi needs `unifi.url`, email needs `alerts.email.smarthost`) says so
@@ -169,14 +173,20 @@ switches and the setups.
   at the end of the mapping it belongs in (adding the mapping too if it's missing). On the
   way to a switch, anything else (flow style like `{unifi: true}`, an anchor or merge key,
   a key written twice, tabs, a quoted key, a value that runs onto the next line) means it
-  stops and asks you to use the Settings page. Tests check, with a real YAML parser and
-  generated files, that every change it makes means exactly the switch and nothing else.
+  stops and asks you to use the Settings page. So do a carriage return, a byte order mark,
+  or a Unicode line break anywhere in the file (Helm splits lines there, and Python's
+  `split("\n")` doesn't), and a block of text (`|` or `>`) in the mapping where a new
+  switch would go. Only spaces and tabs count as spaces, as in YAML. Tests check, with a
+  real YAML parser, on the example settings and on generated files, that each change means
+  the switch it set and nothing else, and that each shape above is refused. Whatever it
+  writes still goes through `./ok3d validate`.
 - **Nothing is sent** when the settings changed on the server since the page was shown, when
   a switch is one the page doesn't offer, when something it needs is missing, or when the
   settings already say it.
 
 Home's list of what's left comes from the same reading: each switched-on part's `.env` lines
-that aren't set, alerts with nowhere to go, and a `devices.yaml` with no devices. What's
+that aren't set and settings it needs, a switch Setup can't read, alerts with nowhere to go
+(only when both ntfy and email read as off), and a `devices.yaml` with no devices. What's
 next links to Grafana and the certificate authority's page at the domain and port in your
 settings, if they look like a domain and a port, and the defaults if not.
 

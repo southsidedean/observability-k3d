@@ -86,6 +86,11 @@ REFUSED = {
     "uneven indenting": "modules:\n    plex: false\n  unifi: false\n",
     "the switch as a mapping": "modules:\n  unifi:\n    on: true\n",
     "a value that runs onto the next line": "modules:\n  unifi: false\n    true\n",
+    # Line breaks Helm sees and Python's split("\n") doesn't: here unifi is on, to Helm.
+    "a Unicode line separator": "modules:\n  mesh: false #\u2028  unifi: true\n",
+    "a next-line character": "modules:\n  mesh: false #\x85  unifi: true\n",
+    "a carriage return": "modules:\r\n  unifi: false\r\n",
+    "a byte order mark": "\ufeffmodules:\n  unifi: false\n",
 }
 
 
@@ -93,7 +98,44 @@ REFUSED = {
 def test_shapes_it_cant_follow_are_refused(text: str) -> None:
     with pytest.raises(switches.CantEdit):
         switches.set_flag(text, ("modules", "unifi"), True)
-    assert switches.flag(text, ("modules", "unifi")) in (None, False)
+    assert switches.flag(text, ("modules", "unifi")) is None
+
+
+# A switch that isn't written yet goes at the end of its mapping, stepping back over blank
+# lines and comments; inside a block of text those are part of the text, so it refuses.
+BLOCKS = {
+    "a block scalar": "modules:\n  mesh: false\n  note: |\n    hello\n\n    # inside\nx: 1\n",
+    "one that keeps its blank lines": "modules:\n  note: |+\n    hello\n\n\nx: 1\n",
+    "a folded one, deeper": "modules:\n  more:\n    note: >-\n      hello\n\n      # inside\nx: 1\n",
+}
+
+
+@pytest.mark.parametrize("text", BLOCKS.values(), ids=BLOCKS.keys())
+def test_a_block_of_text_where_a_switch_would_go_is_refused(text: str) -> None:
+    with pytest.raises(switches.CantEdit):
+        switches.set_flag(text, ("modules", "unifi"), True)
+
+
+def test_unicode_spaces_arent_yamls() -> None:
+    # To YAML this is the string "true\xa0# x", not true.
+    assert switches.flag("modules:\n  unifi: true\xa0# x\n", ("modules", "unifi")) is None
+
+
+def test_values_read_as_yaml_reads_them() -> None:
+    for written, value in [("~", None), ("null", None), ("Null", None), ("", None), ("''", ""),
+                           ("https://h/#x", "https://h/#x"), ("https://h # a note", "https://h"),
+                           ("'it''s'", "it's"), ('"a\\"b"', None), ("{a: 1}", None), ("&a x", None)]:  # fmt: skip
+        assert switches.read(f"unifi:\n  url: {written}\n", ("unifi", "url")) == value, written
+        assert yaml.safe_load(f"unifi:\n  url: {written}\n")["unifi"]["url"] == value or value is None
+
+
+def test_a_long_line_is_read_quickly() -> None:
+    import time
+
+    text = "tls:\n  domain: a" + " " * 16000 + "b\n"
+    started = time.monotonic()
+    assert switches.read(text, ("tls", "domain")) == "a" + " " * 16000 + "b"
+    assert time.monotonic() - started < 0.1
 
 
 def test_reading_values() -> None:
@@ -114,7 +156,8 @@ def test_a_switch_thats_not_written_is_off() -> None:
 # Settings files as a person might write them: nested mappings, comments, blank lines, and
 # indents of two or four spaces.
 NAMES = st.sampled_from(["modules", "alerts", "ntfy", "email", "unifi", "plex", "enabled", "metrics", "to", "x"])
-VALUES = st.one_of(st.booleans(), st.integers(0, 99), st.sampled_from(["30d", "a b", "https://192.168.1.1"]))
+VALUES = st.one_of(st.booleans(), st.integers(0, 99),
+                   st.sampled_from(["30d", "a b", "https://192.168.1.1", "two\n\n# lines\n", "a: b", " x", ""]))  # fmt: skip
 TREES = st.recursive(VALUES, lambda inner: st.dictionaries(NAMES, inner, min_size=1, max_size=4), max_leaves=12)
 
 
