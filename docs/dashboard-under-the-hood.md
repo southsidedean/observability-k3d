@@ -87,8 +87,17 @@ when the cluster is down.
   one, it sends you to sign in.
 - Every form must come with an `Origin` header naming the Dashboard itself, and, from
   browsers that send it, `Sec-Fetch-Site: same-origin`, or it's refused. A form is read only
-  when it's `application/x-www-form-urlencoded`, at most 4 KB (about 200 KB for a settings
-  or devices file), with at most 10 fields. No `GET` changes anything. Started with
+  when it's `application/x-www-form-urlencoded`, at most 4 KB (385 KB for a settings or
+  devices file, since a browser sends each line break as six characters), with at most 10
+  fields. Any form that's refused (too big, from elsewhere, with no session, or to a page
+  that isn't there) is read and thrown away first: refused while the browser was still
+  sending, the browser would show a reset connection instead of the refusal. A refused form
+  over 1 MB isn't read, and is refused straight away. Every form must arrive within 30
+  seconds, so a client that sends one a byte at a time keeps a connection for about 40
+  seconds at most. (That's about 13 KB a second for the biggest settings or devices file.)
+  The request's first line and headers have only the 10-second limit on each read, so a
+  client sending those very slowly still keeps its connection. No `GET`
+  changes anything. Started with
   `--origin https://my-server.lan:8444` (once for each address you open it at), it accepts
   forms only from those exact addresses, which the installer will pass; without, the Origin
   must match the address the browser asked for.
