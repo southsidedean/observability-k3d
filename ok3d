@@ -473,6 +473,7 @@ deploy() {
 		--set "$a.securityContext.runAsUser=$uid,$a.securityContext.runAsGroup=$gid,$a.securityContext.fsGroup=$gid" \
 		--set "$g.securityContext.runAsUser=$uid,$g.securityContext.runAsGroup=$gid,$g.securityContext.fsGroup=$gid" \
 		--set "$g.grafana\.ini.server.root_url=https://grafana.$DOMAIN:$HTTPS_PORT/" \
+		--set "$g.grafana\.ini.security.csrf_trusted_origins=grafana.$DOMAIN" \
 		--set-file "tls.caCertificate=$DATA_ROOT/certs/ca.crt" \
 		--set "gateway.adminChecksum=$checksum" \
 		--set "$p.retention=$METRICS_RETENTION,$p.retentionSize=$METRICS_RETENTION_SIZE" \
@@ -772,8 +773,10 @@ demo_up() {
 		# Locked down like everything ok3d runs: read-only, no capabilities, not root, no way
 		# to gain privileges, and small limits. Serving port 80 as a normal user takes only a
 		# setting inside the container's own network namespace. --init stops a device at once
-		# when it's failed, instead of after Docker's 10-second wait.
-		docker run --detach --init --name "$container" --hostname "$name" \
+		# when it's failed, instead of after Docker's 10-second wait. --restart unless-stopped
+		# brings the devices back after the server restarts, except one failed on purpose
+		# (./ok3d demo fail stops it), which stays failed.
+		docker run --detach --init --restart unless-stopped --name "$container" --hostname "$name" \
 			--network "$demo_network" --ip "$address" --label ok3d.demo=true \
 			--read-only --cap-drop ALL --security-opt no-new-privileges --user 65534:65534 \
 			--sysctl net.ipv4.ip_unprivileged_port_start=0 --memory 64m --pids-limit 64 \

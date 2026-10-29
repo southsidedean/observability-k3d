@@ -47,6 +47,15 @@
       datasourceTemplate: 'docker',
     },
     {
+      // The Playwright image scripts/screenshots.sh takes the screenshots with, pinned by
+      // version and digest.
+      customType: 'regex',
+      managerFilePatterns: ['/^scripts/screenshots\\.sh$/'],
+      matchStrings: ['image=(?<depName>mcr\\.microsoft\\.com/playwright/python):(?<currentValue>v[0-9.]+-noble)@(?<currentDigest>sha256:[a-f0-9]+)'],
+      datasourceTemplate: 'docker',
+      versioningTemplate: 'docker',
+    },
+    {
       // The Python image the simulated network's devices run, pinned in the ok3d command by
       // version and digest. Kept on Python 3.12 (the oldest ok3d supports) and Alpine.
       customType: 'regex',

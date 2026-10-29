@@ -61,7 +61,8 @@ Any device can fail, the router and the controller included.
 ```
 
 This removes the devices, their network, and what the demo kept in the data root
-(`demo/`). Nothing else changes.
+(`demo/`). Nothing else changes. Until you do, the devices come back by themselves when the
+server restarts, except one you failed, which stays failed until `./ok3d demo fix`.
 
 ## Under the hood
 

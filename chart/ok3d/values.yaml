@@ -176,9 +176,11 @@ kube-prometheus-stack:
         drop: ["ALL"]
       seccompProfile:
         type: RuntimeDefault
+    # Grafana 13 uses about 400 MiB once started, and more while it loads a dashboard: with
+    # 512 MiB it was killed for memory opening the Devices dashboard on the test VM.
     resources:
-      requests: { cpu: 20m, memory: 128Mi }
-      limits: { memory: 512Mi }
+      requests: { cpu: 20m, memory: 384Mi }
+      limits: { memory: 1Gi }
     grafana.ini:
       # root_url is https://grafana.<domain>:<port>/, which ok3d apply passes.
       server:
@@ -196,6 +198,11 @@ kube-prometheus-stack:
         cookie_secure: true
         cookie_samesite: strict
         disable_gravatar: true
+        # Grafana's own name, grafana.<domain>, which ok3d apply passes. The gateway hands
+        # Grafana its in-cluster name as the Host, so without this Grafana takes the browser's
+        # Origin for another site's and refuses every query it sends. A name with no port
+        # (Grafana compares names without one) and no scheme: the test VM showed only this works.
+        csrf_trusted_origins: grafana.noc.home.arpa
   alertmanager:
     enabled: true
     alertmanagerSpec:

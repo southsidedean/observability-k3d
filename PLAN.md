@@ -346,9 +346,10 @@ and how the pieces fit.
 - Screenshots are made by `scripts/screenshots.sh`, never by hand. It runs on the test VM,
   restored from its clean snapshot first (in CI, on a container running k3d), starts ok3d on
   the simulated network, and drives a headless browser from a pinned container image through the list in
-  `docs/screenshots.yaml`: each page, what to wait for, what to crop to, and light or dark.
-  It strips the metadata, shrinks the files, and records the ok3d version each was taken
-  with. Docs and releases can then refresh every screenshot in one run.
+  `docs/screenshots.json` (JSON, since Playwright's image has no YAML library): each page,
+  what to wait for, what to crop to, and light or dark.
+  It strips the metadata and records the ok3d version each was taken with (making the
+  files smaller is still to do: 14 pictures are about 4.7 MB). Docs and releases can then refresh every screenshot in one run.
 - The docs show both versions with a `<picture>` tag, so GitHub picks the one for the
   reader's theme. Every image has alt text that says what it shows, and the docs job fails
   on an image without it.

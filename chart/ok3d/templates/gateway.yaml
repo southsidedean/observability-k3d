@@ -14,14 +14,16 @@ Service in the cluster is reachable only from inside it.
 - Any other name: a plain 404.
 
 Every response carries headers that stop it being framed by another site, sniffed as another
-type, or leaking its address in a Referer.
+type, or leaking its address in a Referer to another site. The referrer policy is same-origin,
+not no-referrer: with no-referrer, browsers send "Origin: null" on Grafana's own requests, and
+Grafana refuses them all ("origin not allowed"), so no panel loads.
 */ -}}
 {{- $domain := .Values.tls.domain }}
 {{- $monitoring := .Release.Namespace }}
 {{- $headers := dict
   "x-frame-options" "DENY"
   "x-content-type-options" "nosniff"
-  "referrer-policy" "no-referrer"
+  "referrer-policy" "same-origin"
 }}
 {{- $login := dict
   "basicAuth" (dict "htpasswd" (dict "file" "/auth/htpasswd") "realm" "ok3d" "mode" "strict")

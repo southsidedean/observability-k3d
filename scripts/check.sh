@@ -52,7 +52,7 @@ fi
 
 # 2. ruff: bugs and risky code, with the rules in pyproject.toml.
 if has_module ruff; then
-	if "$python" -m ruff check src tests; then pass "2. ruff"; else fail "2. ruff (above)"; fi
+	if "$python" -m ruff check src tests scripts; then pass "2. ruff"; else fail "2. ruff (above)"; fi
 else
 	missing "2. ruff"
 fi

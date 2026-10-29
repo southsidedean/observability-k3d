@@ -51,9 +51,28 @@
   lists what's left before ok3d can do its job (a key a part needs, somewhere for alerts to
   go, devices to watch) and, once an Apply has worked, What's next: DNS, trusting the
   certificate authority, Grafana, and a test alert.
+- [docs/dashboard.md](docs/dashboard.md) walks through installing and each of the
+  Dashboard's pages, with screenshots in light and dark. `scripts/screenshots.sh` takes them
+  all on the simulated network, so they can be refreshed in one run.
 
 ### Fixes
 
+- The Dashboard's forms work in a browser. It sent `Referrer-Policy: no-referrer`, which makes
+  browsers send `Origin: null` on a form, and its own Origin check then refused them all,
+  sign-in included. It now sends `same-origin`. (No release had the Dashboard yet.)
+- Grafana's panels load in a browser. The gateway sent `Referrer-Policy: no-referrer`, which
+  makes browsers send `Origin: null` on Grafana's own requests, and Grafana refused every
+  one ("origin not allowed"), so each panel showed an error. It now sends `same-origin`,
+  which still keeps your pages' addresses from other sites. Grafana also trusts its own
+  name (`grafana.<domain>`) as an origin: the gateway passes Grafana its
+  in-cluster name, so Grafana took the browser's real Origin for another site's and refused
+  its queries too. In 0.4.0, Grafana's dashboards show no data in a browser until you
+  upgrade.
+- The simulated network's devices come back after the server restarts, instead of all
+  showing as down. One you failed with `./ok3d demo fail` stays failed.
+- Grafana's Devices dashboard no longer shows a `namespace` column in its table of checks.
+- Grafana can have 1 GiB of memory, up from 512 MiB. It uses about 400 MiB once started,
+  and opening a dashboard took it over 512 MiB, so it was killed and restarted.
 - When the Dashboard refuses a form, such as a file that's too big or a save after your
   session ran out, the browser shows the refusal or the sign-in page, not a reset connection.
 - `.env.example` no longer says ok3d reads none of its secrets: 0.4 reads all but the agents'

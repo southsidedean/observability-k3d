@@ -233,7 +233,8 @@
               "Time": true,
               "__name__": true,
               "instance": true,
-              "job": true
+              "job": true,
+              "namespace": true
             },
             "indexByName": {
               "device": 0,
