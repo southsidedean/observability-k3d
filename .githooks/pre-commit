@@ -5,8 +5,10 @@
 #   1. is on main (changes reach main only through pull requests),
 #   2. adds anyone's own setup or a key (settings.yaml, devices.yaml, .env, local/, ...),
 #   3. adds a line that looks like a secret,
-#   4. adds a private name: your own host names, domains, and addresses, listed one pattern
-#      per line in .git/hooks/private-names, a file that stays on your machine,
+#   4. would hold a private name anywhere (any file as staged, or a file's name): your own host
+#      names, domains, and addresses, listed one pattern per line in .git/hooks/private-names,
+#      a file that stays on your machine (scripts/private-names.sh does the matching; the
+#      commit-msg hook checks the message, and pre-merge-commit runs this on a merge),
 #   5. adds or changes an image without IMAGES_CHECKED=1, which says every image was looked
 #      at and its metadata stripped.
 # A real emergency can skip it with git commit --no-verify.
@@ -19,7 +21,8 @@ if [ "$branch" = main ]; then
 fi
 
 # The files being added or changed, one per line.
-staged=$(git diff --cached --name-only --diff-filter=ACMR)
+# core.quotePath=false, so a name with an accent or a space comes out as it is, not quoted.
+staged=$(git -c core.quotePath=false diff --cached --name-only --diff-filter=ACMR)
 
 # 2. Your own setup, at the repository's root where it lives (a chart file may share a name),
 # and keys anywhere. The examples (*.example.yaml, .env.example) are fine.
@@ -33,41 +36,67 @@ if [ -n "$own" ]; then
 fi
 
 # The lines being added, without the "+++ file" headers.
-added=$(git diff --cached -U0 --no-color | grep -E '^\+' | grep -v -E '^\+\+\+ ' || true)
+# -a: a byte that isn't valid UTF-8 mustn't turn the diff into "binary file matches".
+added=$(git diff --cached -U0 --no-color | grep -a -E '^\+' | grep -a -v -E '^\+\+\+ ' || true)
 
 # 3. Secrets: a private key, or a setting named like a password, key, or token given a value.
 # The example files leave every one of them empty.
 secrets=$(printf '%s\n' "$added" |
-	grep -E 'BEGIN [A-Z ]*PRIVATE KEY|^\+[A-Z_]*(PASSWORD|PASS|API_KEY|TOKEN|SECRET)=[^[:space:]]' || true)
+	grep -a -E 'BEGIN [A-Z ]*PRIVATE KEY|^\+[A-Z_]*(PASSWORD|PASS|API_KEY|TOKEN|SECRET)=[^[:space:]]' || true)
 if [ -n "$secrets" ]; then
 	echo "These lines look like secrets, which belong in .env and never in the repository:" >&2
 	printf '%s\n' "$secrets" | sed 's/=.*/=.../; s/^/  /' >&2
 	exit 1
 fi
 
-# 4. Private names. Lines starting with # in the list are comments. grep exits 1 when
-# nothing matches, which is the good case.
-# The main repository's list, from a worktree too (where .git is a file, and --git-dir is the
-# worktree's own folder, which has no hooks).
-names="$(git rev-parse --path-format=absolute --git-common-dir)/hooks/private-names"
-if [ -s "$names" ]; then
-	patterns=$(grep -v -e '^#' -e '^[[:space:]]*$' "$names" || true)
-	if [ -n "$patterns" ]; then
-		# One pattern at a time, so a bad pattern in the list can't hide the others.
-		found=""
-		while IFS= read -r pattern; do
-			hit=$(printf '%s\n' "$added" | grep -i -E -e "$pattern" || true)
-			[ -n "$hit" ] && found="$found$hit
-"
-		done <<EOF
-$patterns
-EOF
-		if [ -n "$found" ]; then
-			echo "These lines name something from your private-names list. Use a stand-in" >&2
-			echo "(192.168.1.20, my-server.lan, noc.home.arpa) instead:" >&2
-			printf '%s' "$found" | sed 's/^/  /' >&2
+# 4. Private names, from the list (scripts/private-names.sh, which also matches a name written
+# with other separators), in everything the commit would hold, as staged, and in the names of
+# the files it adds or changes. git grep reads the staged content itself, whatever a file is
+# called, and takes a file for binary only when it holds a NUL byte (or .gitattributes marks it
+# binary; tests/test_privacy.py reads those as text, and pre-push runs it). It says which files, not
+# the text, so the name isn't shown wherever this output goes. No list, no check: a fresh
+# clone or CI has none, and the tests' own checks still run. Anything else that goes wrong
+# stops the commit, so the check can't be skipped by mistake.
+names=$(dirname "$0")/../scripts/private-names.sh
+list="$(git rev-parse --path-format=absolute --git-common-dir)/hooks/private-names"
+if [ ! -f "$names" ] && [ -s "$list" ]; then
+	echo "There's a private-names list, but not $names to check it with." >&2
+	exit 1
+fi
+status=3
+[ ! -f "$names" ] || { status=0; patterns=$(sh "$names" patterns) || status=$?; }
+if [ "$status" -ne 0 ] && [ "$status" -ne 3 ]; then
+	echo "The private-names check couldn't run (above), so nothing was committed." >&2
+	exit 1
+fi
+if [ "$status" -eq 0 ]; then
+	files=""
+	in_names=false
+	while IFS= read -r pattern; do
+		hit=0
+		these=$(git -c core.quotePath=false grep --cached -I -l -i -E -e "$pattern") || hit=$?
+		if [ "$hit" -gt 1 ]; then
+			echo "git grep couldn't check for private names, so nothing was committed." >&2
 			exit 1
 		fi
+		[ "$hit" -eq 1 ] || files="$files$these
+"
+		if printf '%s\n' "$staged" | grep -q -i -E -e "$pattern"; then
+			in_names=true
+		fi
+	done <<EOF
+$patterns
+EOF
+	if [ -n "$files" ] || [ "$in_names" = true ]; then
+		echo "Something from your private-names list is in what this commit would hold. Use a" >&2
+		echo "stand-in (192.168.1.20, my-server.lan, noc.home.arpa) instead." >&2
+		if [ -n "$files" ]; then
+			echo "In these files as staged, which may include ones this commit doesn't change" >&2
+			echo "(git show :FILE >staged.txt, then scripts/private-names.sh check staged.txt, says which lines):" >&2
+			printf '%s' "$files" | sort -u | sed 's/^/  /' >&2
+		fi
+		[ "$in_names" = false ] || echo "In the name of a file being added or changed." >&2
+		exit 1
 	fi
 fi
 

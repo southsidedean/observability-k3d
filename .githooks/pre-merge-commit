@@ -1,0 +1,4 @@
+#!/bin/sh
+# Runs before git makes a merge commit, which skips pre-commit: the same checks, so a merge
+# can't bring in what pre-commit would refuse (a private name, a secret, your own files).
+exec "$(dirname "$0")/pre-commit"
