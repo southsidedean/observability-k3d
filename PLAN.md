@@ -227,7 +227,7 @@ The other workflows:
 | `scorecard` | weekly | OpenSSF Scorecard: how well the repository itself is protected (pinned actions, branch protection, token permissions, signed releases), in the Security tab. |
 | `mutation` | weekly | Mutation testing (mutmut) on the code that guards something: the helper, the action runner's guardrails, and the MCP tools' handling of untrusted text. If a change to that code gets past every test, a test is missing. |
 | `upstream` | weekly | Whether the vendored dashboards have newer revisions. Opens an issue, never a change. |
-| `images` and `image scan` | from 0.5.0 | Build both images, scan with Trivy before pushing, push, attach an SBOM and a provenance attestation, and scan the published images weekly. |
+| `images` and `image scan` | from 0.5.0 | Build the Dashboard's image (and the in-cluster one, once the first tool that runs in the cluster arrives), scan with Trivy before pushing, push, attach an SBOM and a provenance attestation, and scan the published images weekly. |
 | `release` | a merge to `main` that changes the version | Tags the release and publishes its notes from `CHANGELOG.md`. |
 
 **Updates:** Renovate keeps the pinned versions current: the actions, the Helm chart
@@ -260,9 +260,9 @@ like `192.168.1.20`, `192.0.2.x`, and `fd00::5`, and names like `my-server.lan` 
 
 **Releasing:** user-facing changes collect in `CHANGELOG.md` under the next version, marked
 unreleased. A release pull request sets the version and the date. Then the signed tag,
-`gh release create` with that version's changelog section as the notes, a check that both
-images were published for both architectures and scanned, and a "Start X.Y.Z.dev0" pull
-request for the next one.
+`gh release create` with that version's changelog section as the notes, a check that the
+images (the Dashboard's, and the in-cluster one once it exists) were published for both
+architectures and scanned, and a "Start X.Y.Z.dev0" pull request for the next one.
 
 **Testing before a release:** CI covers what a runner can. Each release is also installed on
 a test VM from scratch through the Dashboard, with the certificate authority trusted in a

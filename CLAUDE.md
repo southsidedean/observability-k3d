@@ -27,8 +27,10 @@ in this repository.
 ## How it fits together
 
 - `ok3d` (POSIX `sh`) is the command everything goes through: it reads `settings.yaml`,
-  `devices.yaml`, and `.env`, checks them, makes the data root's folders and the certificate
-  authority, creates the k3d cluster, and deploys. Every setting comes from those files.
+  `devices.yaml`, and `.env` (or the files `OK3D_SETTINGS`, `OK3D_DEVICES`, and `OK3D_ENV`
+  name), checks them, makes the data root's folders and the certificate authority, creates
+  the k3d cluster, and deploys. The data root itself must already be there, and the user's:
+  `ok3d` says which `sudo install -d` command makes it. Every setting comes from those files.
 - `chart/`: `ok3d-platform` (cert-manager and the Prometheus operator's custom resource
   definitions, installed first) and `ok3d` (everything else, one umbrella chart with pinned
   dependencies and a values schema). `chart/ok3d-files` holds two charts that are never
@@ -36,13 +38,18 @@ in this repository.
 - The Dashboard (`src/ok3d/dashboard/`, a container outside the cluster) and the helper
   (`src/ok3d/helper.py`, a systemd user service running as the user) are Python with only the
   standard library. The Dashboard never runs anything itself: it leaves one request at a time
-  in its outbox, and the helper checks it and runs `./ok3d` (`check`, `apply`, saves through
-  `./ok3d validate --from-dashboard`). `docs/dashboard-under-the-hood.md` and
-  `docs/helper-under-the-hood.md` describe both.
+  in its outbox, and the helper checks it and runs `./ok3d check` or `apply`, or saves
+  settings, devices, or a `.env` line after `./ok3d validate` checks them
+  (`--from-dashboard` for settings, which refuses the settings only the user may change on the
+  server). `docs/dashboard-under-the-hood.md` and `docs/helper-under-the-hood.md` describe
+  both.
 - `install.sh` (for `curl ... | sh`) checks out the latest release into `~/ok3d` and runs
   `./ok3d install`, which sets up the helper and the Dashboard.
-- `demo/` and `./ok3d demo` are the simulated network that CI, the screenshots, and the docs'
-  examples watch, so none of them show a real one.
+- `./ok3d demo` is the simulated network (`demo/network.tsv`, `src/ok3d/demo_*.py`, and
+  `devices.demo.yaml`) that the screenshots, the docs' examples, and CI's chart checks use, so
+  none of them show a real one.
+- `settings.yaml` and `devices.yaml` may not set the chart's own sections; `chart/ok3d-files`
+  lists what they may set.
 
 ## Commands
 
@@ -51,9 +58,11 @@ in this repository.
 ./ok3d apply          # make what's missing (data root folders, CA, cluster), then deploy
 ./ok3d install        # the helper and the Dashboard (Linux with systemd)
 ./ok3d delete --yes   # delete the cluster; the data root stays
-./ok3d demo up        # the simulated network (also down, status, fail, fix)
+./ok3d demo up        # the simulated network (also down, status, fail <device>, fix <device>)
 ./ok3d test-alert     # check that alerts reach you
 ./ok3d validate settings FILE [--from-dashboard]   # what the helper runs before a save
+./ok3d validate devices FILE
+./ok3d version
 
 python3 -m venv .venv && .venv/bin/python -m pip install -e '.[dev]'   # once
 git config core.hooksPath .githooks                                    # once: the git hooks
@@ -61,13 +70,17 @@ scripts/check.sh                                   # every check that doesn't ne
 .venv/bin/python -m pytest tests/test_privacy.py   # one test file
 .venv/bin/python -m pytest -k hooks                # tests by name
 scripts/diagrams.sh                                # after changing docs/diagrams/*.mmd
-scripts/screenshots.sh [--setup]                   # on a fresh test VM only (see Docs)
+scripts/screenshots.sh [--setup]                   # on a test VM; --setup on a fresh one (see Docs)
 ```
 
 - ruff checks `src`, `tests`, and `scripts`, at 110 characters a line. Don't run
-  `ruff format`: the project doesn't use it, and it rewrites files you didn't touch.
+  `ruff format`: the project doesn't use it, and it rewrites files you didn't touch. mypy is
+  strict, and bandit covers `src`.
+- `scripts/check.sh` skips a tool that isn't installed; with `CI=true`, a missing tool fails.
+  The alert-rule and Alertmanager tests need `promtool` and `amtool` in `.venv/bin/`
+  (CONTRIBUTING.md has the versions), or they're skipped.
 - The tests can't reach the network (`tests/conftest.py` fences them), and each has 60
-  seconds (pytest-timeout).
+  seconds (pytest-timeout); one that needs longer says `@pytest.mark.timeout(seconds)`.
 - When piping test output (`pytest ... | tail`), use `set -o pipefail`, or put no commit or
   push after the pipe: otherwise a failing test doesn't stop the chain.
 - The test VM is made from `tests/vm/cloud-init.yaml`, and restored to its clean snapshot
@@ -99,10 +112,12 @@ scripts/screenshots.sh [--setup]                   # on a fresh test VM only (se
   `*secret*` (even a description of one) counts as a secret, and so does anything it flows
   into, such as a log line. Choose names accordingly.
 - Releases: user-facing changes go under the next version in `CHANGELOG.md`, marked
-  unreleased. The release pull request sets the version (`src/ok3d/__init__.py`) and the
-  date; then the signed tag, `gh release create` with that changelog section as the notes, a
-  check that both images were published for amd64 and arm64 and scanned, and a "Start
-  X.Y.Z.dev0" pull request.
+  unreleased. The release pull request sets the version (`src/ok3d/__init__.py`, and
+  `version` and `appVersion` in both `chart/*/Chart.yaml`, as `X.Y.Z`, or `X.Y.Z-dev0` and
+  `X.Y.Z.dev0` between releases), the date, and the roadmap's status; then the signed tag,
+  `gh release create` with that changelog section as the notes, a check that the Dashboard's
+  image (and, once it exists, the in-cluster one) was published for amd64 and arm64 and
+  scanned, and a "Start X.Y.Z.dev0" pull request.
 
 ## Privacy (public repository)
 
@@ -112,19 +127,22 @@ notes. Examples use stand-ins: `192.168.1.20`, `192.0.2.x`, `fd00::5`, `my-serve
 `noc.home.arpa`. The user's own names live in `.git/hooks/private-names`, which is never
 committed.
 
-Check pull request bodies and release notes against it before posting, and post only when
-grep finds nothing (status 1); status 0 is a match, and 2 means the check itself failed:
+Check pull request bodies and release notes against it before posting, with this, run in
+`sh`. It exits 0 only when it's safe to post: a match, a missing body, or a missing list (in a
+fresh clone, say) all refuse. It finds the list from a worktree too, where `.git` is a file.
 
 ```sh
-grep -v -e '^#' -e '^[[:space:]]*$' .git/hooks/private-names | grep -i -E -f - body.md; [ $? -eq 1 ]
+names="$(git rev-parse --path-format=absolute --git-common-dir)/hooks/private-names"
+[ -s "$names" ] && { grep -v -e '^#' -e '^[[:space:]]*$' "$names" | grep -i -E -f - body.md; [ $? -eq 1 ]; }
 ```
 
 Never show raw logs or command output from a machine watching a real network: they can hold
 the UniFi key, the ntfy topic, the mail password, or addresses. Redact first, or say what
 they show. The test VM's simulated network is fine to show as it is.
 
-The user's own settings (`settings.yaml`, `devices.yaml`, `.env`, `local/`) are gitignored,
-and the repository carries a commented example of each.
+The user's own files (`settings.yaml`, `devices.yaml`, `.env`, and `local/`, where the helper
+keeps backups) are gitignored; the first three have commented examples
+(`settings.example.yaml`, `devices.example.yaml`, `.env.example`).
 
 ## Docs
 
@@ -136,9 +154,10 @@ and the repository carries a commented example of each.
 - Use screenshots and diagrams wherever they help. Diagrams are Mermaid files in
   `docs/diagrams/`, rendered to light and dark PNGs by `scripts/diagrams.sh`. Screenshots are
   listed in `docs/screenshots.json` and taken by `scripts/screenshots.sh` (Playwright's
-  Chromium in a pinned container) on a test VM: `--setup` sets ok3d up there on the example
-  settings and the simulated network first, and it refuses to run on anything else. Every
-  image has alt text, and a change to a page's text means retaking its screenshot.
+  Chromium in a pinned container) on a test VM: `--setup` sets ok3d up on a fresh one with the
+  example settings and the simulated network first. It refuses to run unless `settings.yaml`
+  is exactly the example's and `devices.yaml` the demo's. Every image has alt text, and a
+  change to a page's text means retaking its screenshot.
 - Everything a person reads goes through the `humanizer` skill before it's committed or
   posted: docs, the README, `PLAN.md`, runbooks, the CHANGELOG, comments, commit messages,
   pull request bodies, release notes, the Dashboard's text, and alert and notification text.
@@ -155,8 +174,9 @@ and the repository carries a commented example of each.
 - Tests come with every change. A bug fix starts with a test that fails without the fix, and a
   test that could pass by luck (a race, a clock, a timeout) is made to fail for the right
   reason instead.
-- Shell scripts are POSIX `sh`. The Dashboard, the helper, and the in-cluster tools are
-  Python, with only the standard library.
+- Shell scripts are POSIX `sh`. The Dashboard, the helper, and the simulated network's
+  devices are Python, with only the standard library; the in-cluster tools (from 0.9) will
+  be Python too.
 - Anything a stranger or another program can send (a form, a file the Dashboard saves, the
   helper's requests) is untrusted: check it whole, with `re.fullmatch` (a `$` lets a final
   line break through), and put a limit on its size and on how long it may take.

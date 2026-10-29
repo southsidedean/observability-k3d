@@ -106,7 +106,10 @@ def test_no_home_folders() -> None:
 
 
 def test_nothing_from_the_private_names_list() -> None:
-    names_file = ROOT / ".git" / "hooks" / "private-names"
+    # The main repository's list, from a worktree too (where .git is a file).
+    common = subprocess.run(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"], cwd=ROOT,
+                            capture_output=True, text=True, check=False).stdout.strip()  # fmt: skip
+    names_file = Path(common or ROOT / ".git") / "hooks" / "private-names"
     if not names_file.is_file():
         return  # CI and fresh clones have no list; the generic checks above still ran
     patterns = [
