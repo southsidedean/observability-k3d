@@ -750,7 +750,7 @@ ACTIONS: dict[str, Callable[[Handler], None]] = {
 def cut_off(request: socket.socket | tuple[bytes, socket.socket]) -> None:
     """Shuts a connection that has taken too long, from the timer's thread. socket.socket's
     own shutdown, not the TLS socket's, which would also drop the TLS state under the
-    connection's own thread, mid-read, and raises once the socket is closed."""
+    connection's own thread, mid-read."""
     if isinstance(request, socket.socket):
         with contextlib.suppress(OSError):  # closed already
             socket.socket.shutdown(request, socket.SHUT_RDWR)
