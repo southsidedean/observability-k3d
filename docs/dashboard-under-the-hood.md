@@ -99,9 +99,9 @@ when the cluster is down.
   nosniff`, `Referrer-Policy: same-origin`, `Cache-Control: no-store`, and
   `Cross-Origin-Opener-Policy: same-origin`. The referrer policy is `same-origin`, not
   `no-referrer`, because with `no-referrer` browsers send `Origin: null` on a form, which
-  the Origin check refuses; other sites still get no referrer. It sends no `Strict-Transport-Security`: that
-  would hold for every web page on the server's name, on every port, for a year. It names
-  itself `ok3d-dashboard`, without its Python version.
+  the Origin check refuses; other sites still get no referrer. It sends no
+  `Strict-Transport-Security`: that would hold for every web page on the server's name, on
+  every port, for a year. It names itself `ok3d-dashboard`, without its Python version.
 - It logs one line per request: the address, the method, the path without its query, and
   the status. Control characters are escaped, so nothing in a request can rewrite your
   terminal.

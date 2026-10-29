@@ -60,6 +60,11 @@
 - The Dashboard's forms work in a browser. It sent `Referrer-Policy: no-referrer`, which makes
   browsers send `Origin: null` on a form, and its own Origin check then refused them all,
   sign-in included. It now sends `same-origin`. (No release had the Dashboard yet.)
+- Grafana's panels load in a browser. The gateway sent `Referrer-Policy: no-referrer`, which
+  makes browsers send `Origin: null` on Grafana's own requests, and Grafana refused every
+  one ("origin not allowed"), so each panel showed an error. It now sends `same-origin`,
+  which still keeps your pages' addresses from other sites. In 0.4.0, Grafana's dashboards
+  show no data in a browser until you upgrade.
 - Grafana can have 1 GiB of memory, up from 512 MiB. It uses about 400 MiB once started,
   and opening a dashboard took it over 512 MiB, so it was killed and restarted.
 

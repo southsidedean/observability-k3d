@@ -302,6 +302,9 @@ def test_the_gateway_serves_https_for_every_name_with_the_pages_certificate(tmp_
     for route in by_name.values():
         if "backends" in route:
             assert route["policies"]["responseHeaderModifier"]["set"]["x-frame-options"] == "DENY"
+            # Not no-referrer: then browsers send "Origin: null", and Grafana refuses its own
+            # requests, so no panel loads (the screenshots found this).
+            assert route["policies"]["responseHeaderModifier"]["set"]["referrer-policy"] == "same-origin"
 
 
 def test_the_certificate_authority_is_served_only_once_ok3d_passes_it(tmp_path: Path) -> None:
