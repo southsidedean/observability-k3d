@@ -113,6 +113,19 @@ def test_a_name_from_the_private_names_list_is_refused(repo: Path) -> None:
     assert "private-names" in result.stderr
 
 
+def test_a_private_name_is_refused_in_a_worktree_too(repo: Path) -> None:
+    # In a worktree, .git is a file and the hooks folder is the main repository's.
+    names = Path(git(repo, "rev-parse", "--absolute-git-dir").stdout.strip()) / "hooks" / "private-names"
+    names.parent.mkdir(parents=True, exist_ok=True)
+    names.write_text("myrealhost\n")
+    tree = repo.parent / "tree"
+    assert git(repo, "worktree", "add", "-q", "-b", "other", str(tree)).returncode == 0
+    add(tree, "notes.md", "Grafana runs on MyRealHost.\n")
+    result = commit(tree)
+    assert result.returncode == 1
+    assert "private-names" in result.stderr
+
+
 def test_text_without_private_names_is_allowed(repo: Path) -> None:
     names = Path(git(repo, "rev-parse", "--absolute-git-dir").stdout.strip()) / "hooks" / "private-names"
     names.parent.mkdir(parents=True, exist_ok=True)

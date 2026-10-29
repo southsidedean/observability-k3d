@@ -47,7 +47,9 @@ fi
 
 # 4. Private names. Lines starting with # in the list are comments. grep exits 1 when
 # nothing matches, which is the good case.
-names="$(git rev-parse --git-dir)/hooks/private-names"
+# The main repository's list, from a worktree too (where .git is a file, and --git-dir is the
+# worktree's own folder, which has no hooks).
+names="$(git rev-parse --path-format=absolute --git-common-dir)/hooks/private-names"
 if [ -s "$names" ]; then
 	patterns=$(grep -v -e '^#' -e '^[[:space:]]*$' "$names" || true)
 	if [ -n "$patterns" ]; then

@@ -96,11 +96,13 @@ commands.
 ## Releasing
 
 1. User-facing changes collect in `CHANGELOG.md` under the next version, marked unreleased.
-2. A release pull request sets the version (`src/ok3d/__init__.py`) and the date in the
-   changelog.
+2. A release pull request sets the version (`src/ok3d/__init__.py`, and `version` and
+   `appVersion` in `chart/ok3d/Chart.yaml` and `chart/ok3d-platform/Chart.yaml`), the date
+   in the changelog, and the release's status in `docs/roadmap.md`.
 3. After it merges: a signed tag (`git tag -s vX.Y.Z`), then `gh release create` with that
    version's changelog section as the notes.
-4. Check that the images were published for amd64 and arm64, and scanned.
+4. Check that the Dashboard's image (and, once it exists, the in-cluster one) was published
+   for amd64 and arm64, and scanned.
 5. A "Start X.Y.Z.dev0" pull request moves the version on.
 
 Each release is installed on the test VM from its `base` snapshot, and upgraded from the
