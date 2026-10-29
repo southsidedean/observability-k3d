@@ -54,6 +54,12 @@
 - [docs/dashboard.md](docs/dashboard.md) walks through installing and each of the
   Dashboard's pages, with screenshots in light and dark. `scripts/screenshots.sh` takes them
   all on the simulated network, so they can be refreshed in one run.
+- Installing with an AI assistant: the README has a prompt to paste into one that can run
+  commands on your server, such as Claude Code. It installs what's missing (you run each
+  `sudo` command yourself), runs the installer, and stops once the Dashboard is running.
+  [docs/install-with-ai.md](docs/install-with-ai.md) has the rules and steps it follows.
+- `./ok3d install` prints the Dashboard's password only when its output is a terminal.
+  Otherwise, as when an AI assistant or a log reads it, it says which file holds it.
 
 ### Fixes
 

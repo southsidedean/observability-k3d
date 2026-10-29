@@ -432,14 +432,16 @@ turn up. Production moves to ok3d at 0.4.0.
 - The Dashboard: a time limit on each whole request, its first line and headers too, not
   only on each read, so a client sending them slowly can't keep a connection (found in the
   review of #30).
-- Installing with an AI assistant (decided 2026-10-29): a prompt to paste into one, in
-  `docs/install-with-ai.md`, offered near the top of the README beside the two commands.
-  It points the assistant at this release's docs by tag, not main, and has it follow them
+- Installing with an AI assistant (decided 2026-10-29): a short prompt to paste into one,
+  near the top of the README beside the two commands, and the steps it follows in
+  `docs/install-with-ai.md`. It points the assistant at the newest release's copy of that
+  page by tag, not main, so the steps match the installer it gets, and has it follow them
   without improvising: list what's missing before installing anything, show each `sudo`
   command and ask first, run the installer, then say where the Dashboard is and where its
-  password is kept. It never reads the password or asks for a key, and stops at the
-  Dashboard, where settings, devices, and keys are set. On an error it reports it and
-  stops. Tested with Claude Code on a bare test VM as part of the release test; the docs
+  password is kept. It never reads the password or asks for a key (and `./ok3d install`
+  prints the password only on a terminal, so it isn't in the assistant's output), and
+  stops at the Dashboard, where settings, devices, and keys are set. On an error it
+  reports it and stops. Tested with Claude Code on a bare test VM as part of the release test; the docs
   say which assistants it's been tested with.
 - Test: from a bare test VM, the installer and the Dashboard alone give the 0.4 stack, with
   no terminal after the installer, and the upgrade from 0.4 works from the Dashboard. The

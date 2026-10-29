@@ -1,7 +1,8 @@
 # Setting up ok3d from the Dashboard
 
 From 0.5, you set ok3d up on a web page, the Dashboard, instead of editing files and running
-commands. The installer starts it, and gives you its address and password.
+commands. The installer starts it, and gives you its address and, on a terminal, its password.
+[Installing with an AI assistant](install-with-ai.md) has a prompt that does all this for you.
 [The Dashboard under the hood](dashboard-under-the-hood.md) says how it works and what keeps
 it safe.
 
@@ -16,19 +17,22 @@ curl -fsSL https://raw.githubusercontent.com/southsidedean/observability-k3d/mai
 
 The installer puts ok3d in `~/ok3d`, makes your `settings.yaml`, starts the Dashboard, and
 prints its address, `https://dashboard.noc.home.arpa:8444/` with the example settings, and
-its password. To open it, point `dashboard.noc.home.arpa` (or every name under your domain)
-at the server, and trust ok3d's certificate authority on your computer:
+its password (when you run it yourself, in a terminal). To open it, point
+`dashboard.noc.home.arpa` (or every name under your domain) at the server, and trust ok3d's
+certificate authority on your computer:
 [Opening ok3d's pages](certificate.md) has the steps for both.
 
 ## Sign in
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../images/screenshots/dashboard-sign-in-dark.png">
-  <img src="../images/screenshots/dashboard-sign-in-light.png" alt="The Dashboard's sign-in page: a password box and a Sign in button, with a note that the password was shown when ok3d was installed and is also in dashboard/password in the data root." width="700">
+  <img src="../images/screenshots/dashboard-sign-in-light.png" alt="The Dashboard's sign-in page: a password box and a Sign in button, with a note that the password is in dashboard/password in the data root, and that the installer showed it too if you ran it yourself." width="700">
 </picture>
 
 The password is the one the installer printed. It's also in `dashboard/password` in the data
-root, readable only by you. After five wrong tries from one computer, sign-in pauses for a
+root, readable only by you: `cat /srv/ok3d/dashboard/password` shows it, with the example
+settings. (When an AI assistant ran the installer for you, it usually isn't printed: get it
+from that file yourself.) After five wrong tries from one computer, sign-in pauses for a
 minute.
 
 ## Home
