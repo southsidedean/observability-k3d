@@ -243,6 +243,9 @@ def test_every_page_carries_the_safety_headers(dash: Dashboard) -> None:
         assert "frame-ancestors 'none'" in csp
         assert response.getheader("X-Content-Type-Options") == "nosniff"
         assert response.getheader("Cache-Control") == "no-store"
+        # Not no-referrer: then a browser sends "Origin: null" on a form, and same_origin()
+        # refuses every one (the screenshots found this; curl doesn't do it).
+        assert response.getheader("Referrer-Policy") == "same-origin"
         # No HSTS: it would cover every other web page on the server's name, on every port.
         assert response.getheader("Strict-Transport-Security") is None
         assert response.getheader("Server") == "ok3d-dashboard"

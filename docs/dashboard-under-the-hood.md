@@ -96,8 +96,10 @@ when the cluster is down.
   what `ok3d` printed in the helper's answer.
 - Every answer carries the same headers: a Content Security Policy that allows only the
   Dashboard's own stylesheet, no scripts, and no frames, plus `X-Content-Type-Options:
-  nosniff`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store`, and
-  `Cross-Origin-Opener-Policy: same-origin`. It sends no `Strict-Transport-Security`: that
+  nosniff`, `Referrer-Policy: same-origin`, `Cache-Control: no-store`, and
+  `Cross-Origin-Opener-Policy: same-origin`. The referrer policy is `same-origin`, not
+  `no-referrer`, because with `no-referrer` browsers send `Origin: null` on a form, which
+  the Origin check refuses; other sites still get no referrer. It sends no `Strict-Transport-Security`: that
   would hold for every web page on the server's name, on every port, for a year. It names
   itself `ok3d-dashboard`, without its Python version.
 - It logs one line per request: the address, the method, the path without its query, and
@@ -158,8 +160,8 @@ switches and the setups.
 - **The switches** are `modules.*` and `alerts.ntfy.enabled`, `alerts.email.enabled`, and
   `alerts.deadman.enabled`. Each shows its setting as it's written in `settings.yaml`, and
   which `.env` lines it needs. A value Setup can't read as true or false (`yes`, say, which
-  Helm reads as true) shows as "can't tell", and the switch can set it. A module that comes in a later release says which, with no
-  button. The mesh, remote access, and agents are changed only on the server, like the other
+  Helm reads as true) shows as "can't tell", and the switch can set it. A module that comes
+  in a later release says which, with no button. The mesh, remote access, and agents are changed only on the server, like the other
   settings a save from the Dashboard can't change. A switch that needs a setting the
   Dashboard can't set (UniFi needs `unifi.url`, email needs `alerts.email.smarthost`) says so
   until it's there.

@@ -51,8 +51,15 @@
   lists what's left before ok3d can do its job (a key a part needs, somewhere for alerts to
   go, devices to watch) and, once an Apply has worked, What's next: DNS, trusting the
   certificate authority, Grafana, and a test alert.
+- [docs/dashboard.md](docs/dashboard.md) walks through installing and each of the
+  Dashboard's pages, with screenshots in light and dark. `scripts/screenshots.sh` takes them
+  all on the simulated network, so they can be refreshed in one run.
 
 ### Fixes
+
+- The Dashboard's forms work in a browser. It sent `Referrer-Policy: no-referrer`, which makes
+  browsers send `Origin: null` on a form, and its own Origin check then refused them all,
+  sign-in included. It now sends `same-origin`. (No release had the Dashboard yet.)
 
 - `.env.example` no longer says ok3d reads none of its secrets: 0.4 reads all but the agents'
   key.
