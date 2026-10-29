@@ -54,8 +54,8 @@
 
 ### Fixes
 
-- When the Dashboard refuses a file that's too big, the browser shows the refusal, not a
-  reset connection.
+- When the Dashboard refuses a form, such as a file that's too big or a save after your
+  session ran out, the browser shows the refusal or the sign-in page, not a reset connection.
 - `.env.example` no longer says ok3d reads none of its secrets: 0.4 reads all but the agents'
   key.
 

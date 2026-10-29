@@ -512,28 +512,83 @@ def test_a_file_too_big_isnt_sent(ready: Dashboard) -> None:
     assert not (ready.state / "outbox" / "request").exists()
 
 
-def test_a_file_too_big_is_read_before_its_refused(ready: Dashboard) -> None:
-    # Refused straight away and closed, the browser would still be sending, and would show a
-    # reset connection instead of the refusal. So the server reads the body first.
+def raw_post(dash: Dashboard, path: str, length: int, origin: str | None = None, session: str = ""
+             ) -> ssl.SSLSocket:  # fmt: skip
+    """A TLS connection that has sent a POST's headers, saying the body is length bytes, and none of it."""
     context = ssl.create_default_context()
     context.check_hostname = False
     context.verify_mode = ssl.CERT_NONE
-    size = 420_000
-    head = (f"POST /devices HTTP/1.1\r\nHost: 127.0.0.1:{ready.port}\r\nOrigin: https://127.0.0.1:{ready.port}\r\n"
-            f"Cookie: {COOKIE}={ready.sign_in()}\r\nContent-Type: application/x-www-form-urlencoded\r\n"
-            f"Content-Length: {size}\r\n\r\n")  # fmt: skip
-    with socket.create_connection(("127.0.0.1", ready.port)) as raw, context.wrap_socket(raw) as conn:
-        conn.sendall(head.encode())
-        conn.settimeout(1)
-        with pytest.raises(TimeoutError):
-            conn.recv(1)  # nothing yet: it's waiting for the body
-        conn.settimeout(10)
-        conn.sendall(b"x" * size)
-        answer = b""
-        while chunk := conn.recv(65536):
-            answer += chunk
-    assert answer.startswith(b"HTTP/1.0 413 ")
-    assert b"bigger than 64 KB" in answer
+    lines = [f"POST {path} HTTP/1.1", f"Host: 127.0.0.1:{dash.port}",
+             f"Origin: {origin or f'https://127.0.0.1:{dash.port}'}",
+             "Content-Type: application/x-www-form-urlencoded", f"Content-Length: {length}"]  # fmt: skip
+    if session:
+        lines.append(f"Cookie: {COOKIE}={session}")
+    conn = context.wrap_socket(socket.create_connection(("127.0.0.1", dash.port)))
+    conn.sendall(("\r\n".join(lines) + "\r\n\r\n").encode())
+    return conn
+
+
+def answer_of(conn: ssl.SSLSocket) -> bytes:
+    conn.settimeout(10)
+    answer = b""
+    while chunk := conn.recv(65536):
+        answer += chunk
+    conn.close()
+    return answer
+
+
+# Every refusal that comes before a form is used: a file too big, a form too big, no session,
+# a form from elsewhere, and a page that isn't there.
+REFUSALS = {
+    "a file too big": ("/devices", 420_000, None, True, 413),
+    "a form too big": ("/sign-in", 420_000, None, False, 400),
+    "no session": ("/devices", 300_000, None, False, 303),
+    "from elsewhere": ("/devices", 300_000, "https://example.com", True, 403),
+    "not there": ("/nowhere", 300_000, None, True, 404),
+}
+
+
+@pytest.mark.parametrize(("path", "size", "origin", "signed_in", "status"), REFUSALS.values(), ids=REFUSALS.keys())
+def test_a_refused_form_is_read_before_its_refused(ready: Dashboard, path: str, size: int, origin: str | None,
+                                                   signed_in: bool, status: int) -> None:  # fmt: skip
+    # Refused straight away and closed, the browser would still be sending, and would show a
+    # reset connection instead of the refusal. So the server reads the body first.
+    conn = raw_post(ready, path, size, origin, ready.sign_in() if signed_in else "")
+    conn.settimeout(1)
+    with pytest.raises(TimeoutError):
+        conn.recv(1)  # nothing yet: it's waiting for the body
+    conn.sendall(b"x" * size)
+    assert answer_of(conn).startswith(f"HTTP/1.0 {status} ".encode())
+
+
+def test_a_body_too_big_to_read_is_refused_straight_away(ready: Dashboard) -> None:
+    from ok3d.dashboard.server import MAX_DISCARD
+
+    conn = raw_post(ready, "/devices", MAX_DISCARD + 1, session=ready.sign_in())
+    assert answer_of(conn).startswith(b"HTTP/1.0 413 ")
+
+
+def test_a_slow_body_doesnt_keep_its_thread(ready: Dashboard, monkeypatch: pytest.MonkeyPatch) -> None:
+    from ok3d.dashboard import server as server_module
+
+    monkeypatch.setattr(server_module, "DISCARD_TIME", 1)
+    conn = raw_post(ready, "/sign-in", 100_000)
+    started = time.monotonic()
+    conn.settimeout(10)
+    answer = b""
+    while time.monotonic() - started < 8:
+        conn.sendall(b"x" * 100)  # a little at a time, quicker than the timeout between reads
+        try:
+            conn.settimeout(0.3)
+            answer = conn.recv(65536)
+            break
+        except TimeoutError:
+            continue
+        except OSError:
+            break
+    conn.close()
+    assert time.monotonic() - started < 5
+    assert answer == b"" or answer.startswith(b"HTTP/1.0 400 ")
 
 
 def test_keys_show_only_whether_each_is_set(ready: Dashboard) -> None:

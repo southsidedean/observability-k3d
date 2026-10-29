@@ -89,9 +89,11 @@ when the cluster is down.
   browsers that send it, `Sec-Fetch-Site: same-origin`, or it's refused. A form is read only
   when it's `application/x-www-form-urlencoded`, at most 4 KB (385 KB for a settings or
   devices file, since a browser sends each line break as six characters), with at most 10
-  fields. A form that's too big is still read, up to 1 MB, and thrown away before it's
-  refused: refused while the browser was still sending, the browser would show a reset
-  connection instead of the refusal. No `GET` changes anything. Started with
+  fields. Any form that's refused (too big, from elsewhere, with no session, or to a page
+  that isn't there) is read and thrown away first: refused while the browser was still
+  sending, the browser would show a reset connection instead of the refusal. That's only for
+  a form of at most 1 MB that arrives within 30 seconds; a bigger or slower one is refused
+  straight away. No `GET` changes anything. Started with
   `--origin https://my-server.lan:8444` (once for each address you open it at), it accepts
   forms only from those exact addresses, which the installer will pass; without, the Origin
   must match the address the browser asked for.

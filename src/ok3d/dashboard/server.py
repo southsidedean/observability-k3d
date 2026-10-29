@@ -43,9 +43,10 @@ MAX_CONNECTIONS = 32
 # %0D%0A).
 MAX_FORM = 4096
 MAX_FILE_FORM = 6 * 64 * 1024 + 1024
-# The most of a body too big to use that's read and thrown away before it's refused (see
-# discard_body). Anything bigger is refused, and the connection closed, straight away.
+# A body that's refused is read and thrown away first if it's at most this big, and arrives
+# within DISCARD_TIME seconds (see discard_body). A bigger one is refused straight away.
 MAX_DISCARD = 1024 * 1024
+DISCARD_TIME = 30
 
 HEADERS = {
     "Content-Security-Policy": "default-src 'none'; style-src 'self'; img-src 'self'; form-action 'self'; "
@@ -498,14 +499,18 @@ class Handler(BaseHTTPRequestHandler):
         return bool(host) and origin == f"https://{host}"
 
     def discard_body(self) -> None:
-        """Reads a body that won't be used, up to MAX_DISCARD, and throws it away. Refused and
-        closed before the browser has sent it all, the connection would be reset, and the browser
-        would show that instead of the refusal. Each read waits at most TIMEOUT."""
+        """Reads a body that won't be used, and throws it away. Refused and closed before the
+        browser has sent it all, the connection would be reset, and the browser would show that
+        instead of the refusal. It stops after DISCARD_TIME seconds, however slowly the body
+        comes, so a client sending a byte at a time can't keep a thread for long."""
         try:
-            left = min(int(self.headers.get("Content-Length", "0")), MAX_DISCARD)
+            left = int(self.headers.get("Content-Length", "0"))
         except ValueError:
             return
-        while left > 0 and (chunk := self.rfile.read(min(left, 65536))):
+        if left > MAX_DISCARD:
+            return
+        deadline = time.monotonic() + DISCARD_TIME
+        while left > 0 and time.monotonic() < deadline and (chunk := self.rfile.read1(min(left, 65536))):
             left -= len(chunk)
 
     def read_form(self, limit: int = 0) -> dict[str, str] | None:
@@ -517,6 +522,7 @@ class Handler(BaseHTTPRequestHandler):
             self.discard_body()
             return None
         if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/x-www-form-urlencoded":
+            self.discard_body()
             return None
         body = self.rfile.read(length)
         if len(body) != length:
@@ -550,6 +556,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         path = urllib.parse.urlsplit(self.path).path
         if not self.same_origin():
+            self.discard_body()
             self.send(403, page("Refused", "<section><h2>Refused</h2><p>That form didn't come from "
                                 "this Dashboard.</p></section>"))  # fmt: skip
             return
@@ -560,10 +567,12 @@ class Handler(BaseHTTPRequestHandler):
             self.redirect("/sign-in", {"Set-Cookie": f"{COOKIE}=; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=0"})
         elif path in ACTIONS:
             if not self.signed_in():
+                self.discard_body()
                 self.redirect("/sign-in")
                 return
             ACTIONS[path](self)
         else:
+            self.discard_body()
             self.send(404, page("Not found", "<section><h2>Not found</h2></section>", self.signed_in()))
 
     def sign_in(self) -> None:
