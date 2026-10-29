@@ -207,6 +207,8 @@ def test_apply_makes_everything_in_order(env: dict[str, str]) -> None:
     assert (Path(env["FAKE_DATA_ROOT"]) / "alertmanager").is_dir()
     assert (Path(env["FAKE_DATA_ROOT"]) / "grafana").is_dir()
     assert "grafana\\.ini.server.root_url=https://grafana.noc.home.arpa:8443/" in release
+    # Grafana's queries from a browser carry this Origin, and the gateway rewrites the Host.
+    assert "grafana\\.ini.security.csrf_trusted_origins=grafana.noc.home.arpa:8443" in release
     assert f"--set-file tls.caCertificate={env['FAKE_DATA_ROOT']}/certs/ca.crt" in release
     assert f"alertmanagerSpec.securityContext.runAsUser={uid}" in release
 

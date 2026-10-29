@@ -473,6 +473,7 @@ deploy() {
 		--set "$a.securityContext.runAsUser=$uid,$a.securityContext.runAsGroup=$gid,$a.securityContext.fsGroup=$gid" \
 		--set "$g.securityContext.runAsUser=$uid,$g.securityContext.runAsGroup=$gid,$g.securityContext.fsGroup=$gid" \
 		--set "$g.grafana\.ini.server.root_url=https://grafana.$DOMAIN:$HTTPS_PORT/" \
+		--set "$g.grafana\.ini.security.csrf_trusted_origins=grafana.$DOMAIN:$HTTPS_PORT" \
 		--set-file "tls.caCertificate=$DATA_ROOT/certs/ca.crt" \
 		--set "gateway.adminChecksum=$checksum" \
 		--set "$p.retention=$METRICS_RETENTION,$p.retentionSize=$METRICS_RETENTION_SIZE" \
