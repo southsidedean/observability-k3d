@@ -109,6 +109,8 @@ def take(args: argparse.Namespace) -> None:
             signed_in = False
             for shot in config["shots"]:
                 on = page if shot.get("signed_in", True) else signed_out
+                # A shot may want a wider window than the rest, such as a Grafana dashboard.
+                on.set_viewport_size(shot.get("viewport", config["viewport"]))
                 if shot["site"] == "dashboard" and shot.get("signed_in", True) and not signed_in:
                     page.goto(f"{dashboard}/sign-in")
                     page.fill("input[name='password']", args.dashboard_password.read_text().strip())
