@@ -16,6 +16,12 @@ set -eu
 
 branch=$(git symbolic-ref --short HEAD 2>/dev/null || true)
 if [ "$branch" = main ]; then
+	# Finishing a merge that stopped on a conflict comes here, not to pre-merge-commit.
+	if git rev-parse -q --verify MERGE_HEAD >/dev/null; then
+		echo "main takes changes only through pull requests, so it only ever fast-forwards here:" >&2
+		echo "git merge --abort, then update it with git pull --ff-only." >&2
+		exit 1
+	fi
 	echo "This is main. Make a branch (git switch -c <name>), commit there, and open a pull request." >&2
 	exit 1
 fi
