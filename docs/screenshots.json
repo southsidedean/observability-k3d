@@ -6,7 +6,7 @@
      "wait": "text=Sign in", "crop": "main"},
     {"name": "dashboard-home", "site": "dashboard", "path": "/",
      "before": [{"click": "form[action='/check'] button"},
-                {"wait": "text=finished with exit status 0", "timeout": 300}],
+                {"wait": "form[action='/apply'] button:not([disabled])", "timeout": 300}],
      "wait": "text=What's next", "crop": "main"},
     {"name": "dashboard-setup", "site": "dashboard", "path": "/setup", "wait": "text=Ready-made setups", "crop": "main"},
     {"name": "dashboard-settings", "site": "dashboard", "path": "/settings", "wait": "textarea", "crop": "main"},
