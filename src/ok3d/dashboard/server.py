@@ -1,8 +1,8 @@
 """The Dashboard's web server: HTTPS only, behind its own sign-in.
 
-It has the sign-in and four pages: Home (Check and Apply), Settings, Devices, and Keys. Each
-page reads what the helper publishes, and each button leaves a request for it
-(helper_link.py).
+It has the sign-in and five pages: Home (what's left to do, Check and Apply, and What's next),
+Setup (ready-made setups and switches, switches.py), Settings, Devices, and Keys. Each page
+reads what the helper publishes, and each button leaves a request for it (helper_link.py).
 
 Every page is made here, with every value escaped, and carries headers that keep it out of
 frames, stop other sites' scripts, and keep it out of caches. A form is accepted only from
@@ -28,7 +28,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from ok3d import __version__
-from ok3d.dashboard import helper_link
+from ok3d.dashboard import helper_link, switches
 from ok3d.dashboard.auth import SESSION_TTL, Auth, Paused
 
 # __Host-: browsers accept it only over HTTPS, for this host and every path, so no other site
@@ -83,6 +83,11 @@ textarea { font: 13px/1.4 ui-monospace, monospace; width: 100%; box-sizing: bord
   border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); }
 input[type=password] { max-width: 420px; }
 button[disabled] { opacity: 0.5; cursor: not-allowed; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.card { border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
+.card.chosen { border-color: var(--accent); }
+.card p { margin: 4px 0 8px; }
+ul.todo { padding-left: 20px; }
 """
 
 
@@ -111,8 +116,8 @@ def page(title: str, body: str, signed_in: bool = False) -> bytes:
 
 
 NAV = (
-    '<nav><a href="/">Home</a> <a href="/settings">Settings</a> <a href="/devices">Devices</a> '
-    '<a href="/keys">Keys</a></nav>'
+    '<nav><a href="/">Home</a> <a href="/setup">Setup</a> <a href="/settings">Settings</a> '
+    '<a href="/devices">Devices</a> <a href="/keys">Keys</a></nav>'
 )
 
 # What each page says about saving: the helper checks first, and keeps your old file.
@@ -170,7 +175,161 @@ def home(config: Config, message: str = "") -> str:
         "deploy, or bring it up to date with your settings.</p>"
         '<form class="inline" method="post" action="/check"><button>Check</button></form> '
         f'<form class="inline" method="post" action="/apply"><button{disabled}>Apply</button></form>'
-        f"{apply_note}</section>" + answer_section(config)
+        f"{apply_note}</section>" + todo_section(config) + next_section(config) + answer_section(config)
+    )
+
+
+# Where Keys come from: the ones the Dashboard can set, and the rest, set only on the server.
+def key_place(name: str) -> str:
+    return "on the Keys page" if name in helper_link.ENV_NAMES else "in .env on the server"
+
+
+# A device in devices.yaml: every one has a name.
+DEVICE_NAME = re.compile(r"^\s*(?:-\s+)?name:\s*\S", re.MULTILINE)
+
+
+def todo(config: Config) -> list[str]:
+    """What's left before ok3d can do its job, each already escaped: settings, the keys each
+    switched-on part needs, somewhere for alerts to go, and devices to watch."""
+    settings = helper_link.current(config.helper, "settings.yaml")
+    if settings is None:
+        return ["There's no <code>settings.yaml</code> on the server yet. Make it there from "
+                "<code>settings.example.yaml</code> (the installer does this for you)."]  # fmt: skip
+    have = helper_link.env_set(config.helper)
+    left = []
+    for switch in switches.MODULES + switches.ALERTS:
+        if not switch.available or not switches.flag(settings, switch.path):
+            continue
+        keys = list(switch.keys)
+        if switch.setting == "alerts.ntfy.enabled" and switches.flag(settings, ("alerts", "ntfy", "useToken")):
+            keys.append("NTFY_TOKEN")
+        left += [f"{html.escape(switch.name)} is on, and needs <code>{k}</code>: set it {key_place(k)}."
+                 for k in keys if k not in have]  # fmt: skip
+    if not any(switches.flag(settings, ("alerts", way, "enabled")) for way in ("ntfy", "email")):
+        left.append('Alerts go nowhere yet: turn on ntfy or email on <a href="/setup">Setup</a>.')
+    if not DEVICE_NAME.search(helper_link.current(config.helper, "devices.yaml") or ""):
+        left.append('There are no devices to watch yet: add them on <a href="/devices">Devices</a>.')
+    return left
+
+
+def todo_section(config: Config) -> str:
+    left = todo(config)
+    if not left:
+        return "<section><h2>Before you Apply</h2><p class=good>Nothing's missing.</p></section>"
+    items = "".join(f"<li>{item}</li>" for item in left)
+    return f"<section><h2>Before you Apply</h2><ul class=todo>{items}</ul></section>"
+
+
+# What a domain or a port may look like before it goes into a link.
+DOMAIN = re.compile(r"[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?")
+PORT = re.compile(r"[1-9][0-9]{0,4}")
+
+
+def pages_address(settings: str | None, name: str) -> str:
+    """The address of one of ok3d's pages, such as https://grafana.noc.home.arpa:8443/."""
+    domain = (switches.read(settings, ("tls", "domain")) or "noc.home.arpa").lower()
+    port = switches.read(settings, ("cluster", "ports", "https")) or "8443"
+    if not DOMAIN.fullmatch(domain) or not PORT.fullmatch(port):
+        domain, port = "noc.home.arpa", "8443"
+    return f"https://{name}.{domain}" + ("" if port == "443" else f":{port}") + "/"
+
+
+def next_section(config: Config) -> str:
+    """What's next, once an Apply has worked: the steps that make ok3d useful from your own
+    devices, which the Dashboard can't do for you."""
+    when = helper_link.applied(config.helper)
+    if when is None:
+        return ""
+    settings = helper_link.current(config.helper, "settings.yaml")
+    ca = html.escape(pages_address(settings, "ca"))
+    grafana = html.escape(pages_address(settings, "grafana"))
+    domain = html.escape(pages_address(settings, "x")[len("https://x."):].split(":")[0].rstrip("/"))
+    return (
+        f"<section><h2>What's next</h2><p class=good>The last Apply that worked finished at {html.escape(when)}.</p><ol>"
+        f"<li>Point <code>*.{domain}</code> at this server, in your router or local DNS server "
+        "(docs/certificate.md has the steps).</li>"
+        f"<li>Trust ok3d's certificate authority on each device you'll use: download it from <a href=\"{ca}\">{ca}</a>.</li>"
+        f'<li>Open Grafana at <a href="{grafana}">{grafana}</a>. Its user is <code>admin</code>, and its password '
+        "is in <code>admin-password</code> in the data root.</li>"
+        "<li>Send yourself a test alert: <code>./ok3d test-alert</code> on the server.</li>"
+        '<li>Add the rest of your devices on <a href="/devices">Devices</a>, then Check and Apply again.</li>'
+        "</ol></section>"
+    )
+
+
+def switch_form(switch: switches.Switch, settings: str, base: str, have: set[str]) -> str:
+    """One switch: what it is, its setting, what it needs, and a button, or why there isn't one."""
+    on = switches.flag(settings, switch.path)
+    state = {True: "<span class=good>on</span>", False: "<span class=muted>off</span>",
+             None: "<span class=bad>can't tell</span>"}[on]  # fmt: skip
+    why = ""
+    if not switch.available:
+        why = f"Comes in {switch.since[0]}.{switch.since[1]}."
+        state = ""
+    elif switch.host_only:
+        why = f"Changed only on the server: {switch.host_only}."
+    elif on is None:
+        why = "settings.yaml has this in a shape the Setup page can't change: change it on the Settings page."
+    elif not on and switch.missing(settings):
+        why = "Before it can go on, it needs " + "; and ".join(switch.missing(settings)) + "."
+    keys = ""
+    if switch.keys and switch.available:
+        keys = "<p class=muted>Needs " + ", ".join(
+            f"<code>{k}</code> ({'set' if k in have else 'not set'}, {key_place(k)})" for k in switch.keys) + ".</p>"  # fmt: skip
+    written = "true" if on else "false"
+    button = (f"<p class=muted>{html.escape(why)}</p>" if why else
+              f'<input type="hidden" name="base" value="{base}"><input type="hidden" name="switch" value="{switch.setting}">'
+              f'<input type="hidden" name="on" value="{"false" if on else "true"}">'
+              f"<p><button>{'Turn off' if on else 'Turn on'}</button></p>")  # fmt: skip
+    return (
+        f'<form method="post" action="/setup"><h3>{html.escape(switch.name)} {state}</h3>'
+        f"<p class=muted>{html.escape(switch.about)}"
+        + (f" In settings.yaml: <code>{switch.setting}: {written}</code>." if switch.available else "")
+        + "</p>"
+        f"{keys}{button}</form>"
+    )
+
+
+def card_html(card: switches.Card, settings: str, base: str) -> str:
+    chosen = card.available and all(switches.flag(settings, SWITCH_PATHS[k]) == v for k, v in card.changes().items())
+    missing = [say for k in sorted(card.on) for say in switches.SWITCHES[k].missing(settings)]
+    if not card.available:
+        action = f"<p class=muted>Comes in {card.since[0]}.{card.since[1]}.</p>"
+    elif chosen:
+        action = "<p class=good>Your setup now.</p>"
+    elif missing:
+        action = f"<p class=muted>Before you can choose it, it needs {html.escape('; and '.join(missing))}.</p>"
+    else:
+        action = (f'<form method="post" action="/setup"><input type="hidden" name="base" value="{base}">'
+                  f'<input type="hidden" name="card" value="{card.id}"><button>Choose</button></form>')  # fmt: skip
+    return (
+        f'<div class="card{" chosen" if chosen else ""}"><h3>{html.escape(card.name)}</h3>'
+        f"<p>{html.escape(card.about)}</p><p class=muted>Needs: {html.escape(card.needs)}</p>{action}</div>"
+    )
+
+
+SWITCH_PATHS = {s.setting: s.path for s in switches.MODULES + switches.ALERTS}
+
+
+def setup_page(config: Config, message: str = "") -> str:
+    """Setup: a ready-made setup, or each part switched on or off, and where alerts go. Each
+    choice is saved to settings.yaml through the helper, which checks it first."""
+    settings = helper_link.current(config.helper, "settings.yaml")
+    note = f"<p class=bad>{html.escape(message)}</p>" if message else ""
+    if settings is None:
+        return (f"<section><h2>Setup</h2>{note}<p class=bad>There's no settings.yaml on the server yet. "
+                "Make it there first, from settings.example.yaml.</p></section>")  # fmt: skip
+    base = helper_link.fingerprint(settings)
+    have = helper_link.env_set(config.helper)
+    cards = "".join(card_html(c, settings, base) for c in switches.CARDS)
+    modules = "".join(switch_form(s, settings, base, have) for s in switches.MODULES)
+    alerts = "".join(switch_form(s, settings, base, have) for s in switches.ALERTS)
+    return (
+        f"<section><h2>Ready-made setups</h2>{note}<p>Choose one, or switch the parts on and off "
+        "yourself below. Metrics, alerts, and ok3d's pages are always on.</p>"
+        f'<div class="cards">{cards}</div>{SAVE_NOTE}</section>'
+        f"<section><h2>Parts</h2>{modules}</section>"
+        f"<section><h2>Where alerts go</h2>{alerts}</section>"
     )
 
 
@@ -462,6 +621,49 @@ class Handler(BaseHTTPRequestHandler):
     def post_devices(self) -> None:
         self.post_file("devices.yaml", "save-devices", "Devices")
 
+    def post_setup(self) -> None:
+        form = self.read_form()
+        settings = helper_link.current(self.config.helper, "settings.yaml")
+        if form is None or settings is None:
+            self.send(400, page("Setup", setup_page(self.config, "That didn't arrive in one piece. Try again."), True))
+            return
+        if form.get("base") != helper_link.fingerprint(settings):
+            self.send(409, page("Setup", setup_page(self.config, "Your settings changed since that page was "
+                                                    "shown. Here they are as they are now."), True))  # fmt: skip
+            return
+        card = switches.CARD_IDS.get(form.get("card", ""))
+        switch = switches.SWITCHES.get(form.get("switch", ""))
+        if card is not None and card.available:
+            changes = card.changes()
+            missing = [say for k in sorted(card.on) for say in switches.SWITCHES[k].missing(settings)]
+        elif (switch is not None and switch.available and not switch.host_only
+              and form.get("on") in ("true", "false")):  # fmt: skip
+            changes = {switch.setting: form["on"] == "true"}
+            missing = switch.missing(settings) if changes[switch.setting] else []
+        else:
+            self.send(400, page("Setup", setup_page(self.config, "The Setup page can't change that."), True))
+            return
+        if missing:
+            self.send(400, page("Setup", setup_page(self.config, "First it needs " + "; and ".join(missing) + "."), True))
+            return
+        new = settings
+        try:
+            for setting, on in changes.items():
+                if switches.flag(new, SWITCH_PATHS[setting]) != on:
+                    new = switches.set_flag(new, SWITCH_PATHS[setting], on)
+        except switches.CantEdit as e:
+            self.send(400, page("Setup", setup_page(self.config, f"settings.yaml has {setting} in a shape the Setup "
+                                                    f"page can't change safely: {e}. Change it on the Settings "
+                                                    "page."), True))  # fmt: skip
+            return
+        if new == settings:
+            self.send(200, page("Setup", setup_page(self.config, "Your settings say that already."), True))
+            return
+        if len(new.encode("utf-8")) > helper_link.MAX_FILE:
+            self.send(413, page("Setup", setup_page(self.config, "That would make settings.yaml bigger than 64 KB."), True))
+            return
+        self.ask_helper("/", setup_page, "Setup", "save-settings", body=new.encode("utf-8"), base=form["base"])
+
     def post_keys(self) -> None:
         form = self.read_form()
         name = (form or {}).get("name", "")
@@ -479,6 +681,7 @@ class Handler(BaseHTTPRequestHandler):
 # The pages, by path: their title and what makes them.
 PAGES: dict[str, tuple[str, Callable[[Config, str], str]]] = {
     "/": ("Home", home),
+    "/setup": ("Setup", setup_page),
     "/settings": ("Settings", lambda c, m: file_page(c, "settings.yaml", m)),
     "/devices": ("Devices", lambda c, m: file_page(c, "devices.yaml", m)),
     "/keys": ("Keys", keys_page),
@@ -488,6 +691,7 @@ PAGES: dict[str, tuple[str, Callable[[Config, str], str]]] = {
 ACTIONS: dict[str, Callable[[Handler], None]] = {
     "/check": Handler.post_check,
     "/apply": Handler.post_apply,
+    "/setup": Handler.post_setup,
     "/settings": Handler.post_settings,
     "/devices": Handler.post_devices,
     "/keys": Handler.post_keys,

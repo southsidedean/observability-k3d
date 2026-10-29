@@ -623,9 +623,137 @@ def test_a_form_that_isnt_utf8_is_refused(ready: Dashboard) -> None:
     assert not (ready.state / "outbox" / "request").exists()
 
 
-@pytest.mark.parametrize("path", ["/check", "/apply", "/settings", "/devices", "/keys"])
+@pytest.mark.parametrize("path", ["/check", "/apply", "/setup", "/settings", "/devices", "/keys"])
 def test_every_form_refuses_a_cross_site_fetch(ready: Dashboard, path: str) -> None:
     response = ready.request("POST", path, "name=NTFY_TOPIC&value=x", {
         "Content-Type": "application/x-www-form-urlencoded", "Origin": f"https://127.0.0.1:{ready.port}",
         "Sec-Fetch-Site": "cross-site", "Cookie": f"{COOKIE}={ready.sign_in()}"})  # fmt: skip
     assert response.status == 403
+
+
+# The Setup page: ready-made setups and switches, each saved as a whole settings.yaml through
+# the helper, like a save from the Settings page. Home's list of what's left, and What's next.
+
+SETTINGS = "settingsVersion: 1\nhost:\n  dataRoot: /srv/ok3d\n"
+
+
+def settings_are(dash: Dashboard, text: str) -> str:
+    """Gives the helper's copy of settings.yaml this text, and returns the base a page sends."""
+    (dash.helper / "current-settings.yaml").write_text(text)
+    return hashlib.sha256(text.encode()).hexdigest()
+
+
+def test_the_setup_page_offers_whats_ready_and_says_when_the_rest_comes(ready: Dashboard) -> None:
+    settings_are(ready, SETTINGS)
+    shown = body(ready.get("/setup", ready.sign_in()))
+    for card in ("Basic NOC", "Network NOC", "NOC with logs", "NOC with agents"):
+        assert card in shown
+    assert "Comes in 0.6." in shown and "Comes in 0.9." in shown
+    # Basic is what the settings say now; Network needs UniFi's address first.
+    assert "Your setup now." in shown
+    assert "unifi.url, in settings.yaml on the server" in shown
+    assert "<code>alerts.ntfy.enabled: false</code>" in shown
+
+
+def test_a_switch_is_saved_through_the_helper(ready: Dashboard) -> None:
+    base = settings_are(ready, SETTINGS)
+    response = ready.post("/setup", f"base={base}&switch=alerts.ntfy.enabled&on=true", session=ready.sign_in())
+    assert response.status == 303
+    request = outbox(ready)
+    assert head(request)["action"] == "save-settings"
+    assert head(request)["base"] == base
+    assert request.partition(b"\n\n")[2] == (SETTINGS + "alerts:\n  ntfy:\n    enabled: true\n").encode()
+
+
+def test_a_card_sets_its_modules(ready: Dashboard) -> None:
+    base = settings_are(ready, SETTINGS + "unifi:\n  url: https://192.168.1.1\n")
+    assert ready.post("/setup", f"base={base}&card=network", session=ready.sign_in()).status == 303
+    assert outbox(ready).partition(b"\n\n")[2].endswith(b"modules:\n  unifi: true\n")
+
+
+def test_a_card_or_switch_that_needs_something_first_isnt_sent(ready: Dashboard) -> None:
+    base = settings_are(ready, SETTINGS)
+    session = ready.sign_in()
+    response = ready.post("/setup", f"base={base}&card=network", session=session)
+    assert response.status == 400
+    assert "unifi.url" in body(response)
+    assert ready.post("/setup", f"base={base}&switch=modules.unifi&on=true", session=session).status == 400
+    assert not (ready.state / "outbox" / "request").exists()
+
+
+@pytest.mark.parametrize("form", [
+    "switch=modules.agents&on=true",  # set only on the server
+    "switch=modules.mesh&on=false",
+    "switch=modules.plex&on=true",  # not in this release
+    "switch=alerts.ntfy.server&on=true",  # not a switch
+    "switch=alerts.ntfy.enabled&on=yes",
+    "card=agents",
+    "card=everything",
+    "",
+])  # fmt: skip
+def test_what_the_setup_page_cant_change_isnt_sent(ready: Dashboard, form: str) -> None:
+    base = settings_are(ready, SETTINGS)
+    response = ready.post("/setup", f"base={base}&{form}", session=ready.sign_in())
+    assert response.status == 400
+    assert not (ready.state / "outbox" / "request").exists()
+
+
+def test_settings_changed_since_the_page_was_shown_arent_overwritten(ready: Dashboard) -> None:
+    base = settings_are(ready, SETTINGS)
+    settings_are(ready, SETTINGS + "metrics:\n  retention: 60d\n")
+    response = ready.post("/setup", f"base={base}&switch=alerts.ntfy.enabled&on=true", session=ready.sign_in())
+    assert response.status == 409
+    assert not (ready.state / "outbox" / "request").exists()
+
+
+def test_settings_in_a_shape_it_cant_follow_are_left_to_the_settings_page(ready: Dashboard) -> None:
+    base = settings_are(ready, SETTINGS + "alerts: {ntfy: {enabled: false}}\n")
+    session = ready.sign_in()
+    assert "can&#x27;t change: change it on the Settings page" in body(ready.get("/setup", session))
+    response = ready.post("/setup", f"base={base}&switch=alerts.ntfy.enabled&on=true", session=session)
+    assert response.status == 400
+    assert "Change it on the Settings page" in body(response)
+    assert not (ready.state / "outbox" / "request").exists()
+
+
+def test_a_switch_already_set_sends_nothing(ready: Dashboard) -> None:
+    base = settings_are(ready, SETTINGS + "alerts:\n  ntfy:\n    enabled: true\n")
+    response = ready.post("/setup", f"base={base}&switch=alerts.ntfy.enabled&on=true", session=ready.sign_in())
+    assert "Your settings say that already." in body(response)
+    assert not (ready.state / "outbox" / "request").exists()
+
+
+def test_home_lists_whats_left(ready: Dashboard) -> None:
+    settings_are(ready, SETTINGS + "unifi:\n  url: https://192.168.1.1\nmodules:\n  unifi: true\n")
+    session = ready.sign_in()
+    shown = body(ready.get("/", session))
+    assert "UniFi is on, and needs <code>UNIFI_API_KEY</code>: set it on the Keys page." in shown
+    assert "Alerts go nowhere yet" in shown
+    assert "There are no devices to watch yet" in shown
+    (ready.helper / "env-set").write_text("UNIFI_API_KEY\nNTFY_TOPIC\n")
+    settings_are(ready, SETTINGS + "unifi:\n  url: https://192.168.1.1\nmodules:\n  unifi: true\n"
+                 "alerts:\n  ntfy:\n    enabled: true\n  deadman:\n    enabled: true\n")  # fmt: skip
+    (ready.helper / "current-devices.yaml").write_text("devices:\n  - name: router\n    address: 192.168.1.1\n")
+    shown = body(ready.get("/", session))
+    assert "<code>DEADMAN_URL</code>: set it in .env on the server." in shown
+    (ready.helper / "env-set").write_text("UNIFI_API_KEY\nNTFY_TOPIC\nDEADMAN_URL\n")
+    assert "Nothing's missing." in body(ready.get("/", session))
+
+
+def test_whats_next_comes_once_an_apply_has_worked(ready: Dashboard) -> None:
+    settings_are(ready, SETTINGS + "tls:\n  domain: noc.example.org\ncluster:\n  ports:\n    https: 443\n")
+    session = ready.sign_in()
+    assert "What's next" not in body(ready.get("/", session))
+    (ready.helper / "applied").write_text("2026-10-28T23:38:18Z\n")
+    shown = body(ready.get("/", session))
+    assert "What's next" in shown
+    assert '<a href="https://grafana.noc.example.org/">' in shown
+    assert "<code>*.noc.example.org</code>" in shown
+
+
+def test_whats_next_never_links_to_a_domain_it_cant_trust(ready: Dashboard) -> None:
+    settings_are(ready, SETTINGS + 'tls:\n  domain: "evil.example/\\"><script>"\n')
+    (ready.helper / "applied").write_text("2026-10-28T23:38:18Z\n")
+    shown = body(ready.get("/", ready.sign_in()))
+    assert "<script>" not in shown
+    assert '<a href="https://grafana.noc.home.arpa:8443/">' in shown

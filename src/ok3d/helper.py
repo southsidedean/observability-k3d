@@ -493,7 +493,12 @@ def handle_once(opened: Opened, now: float | None = None) -> str | None:
         reason = "the ok3d command couldn't run" if request.action in ("check", "apply") else "the file couldn't be saved"
         write_result(opened, answer | {"state": "failed", "reason": reason, "finished": now_utc()})
         return f"couldn't carry out {describe(request)}"
-    write_result(opened, answer | {"state": "finished", "exit": str(status), "finished": now_utc()}, output)
+    finished = now_utc()
+    write_result(opened, answer | {"state": "finished", "exit": str(status), "finished": finished}, output)
+    if request.action == "apply" and status == 0:
+        # Kept until the next Apply that works, so the Dashboard's What's next outlasts the
+        # requests that follow.
+        write_file(opened, "applied", finished + "\n")
     return f"ran {describe(request)}: exit {status}"
 
 
@@ -523,6 +528,8 @@ def publish(opened: Opened) -> None:
       so it can show them and you can change them there (missing when you have none).
     - env-set: the names of the lines in .env that have a value, one per line. Never a value.
     - alive: when this was last written, so the Dashboard knows the helper is running.
+    (handle_once writes the rest: result, output, and applied, when the last Apply that
+    worked finished.)
     """
     ok3d_dir = opened.folders.ok3d_dir
     for name in ("settings.yaml", "devices.yaml"):

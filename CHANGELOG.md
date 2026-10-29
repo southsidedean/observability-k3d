@@ -45,6 +45,12 @@
   **Keys**, to set the UniFi key, the ntfy topic and token, and the mail password, showing
   only whether each is set. Each sends one request at a time to the helper, and Home shows
   the answer.
+- **Setup**, a page of ready-made setups (Basic NOC, and Network NOC with UniFi; logs and
+  agents come in later releases) and a switch for each module and each place alerts go. It
+  changes `settings.yaml` for you and saves it through the helper, like Settings. Home now
+  lists what's left before ok3d can do its job (a key a part needs, somewhere for alerts to
+  go, devices to watch) and, once an Apply has worked, What's next: DNS, trusting the
+  certificate authority, Grafana, and a test alert.
 
 ### Fixes
 

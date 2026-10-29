@@ -43,6 +43,6 @@ release and the reasons behind it.
 | The helper saves settings, devices, and secrets for the Dashboard, after `./ok3d validate` checks them | Done ([#23](https://github.com/southsidedean/observability-k3d/pull/23)) |
 | The Dashboard's pages: settings, write-only secrets, devices, Check and Apply | Done ([#24](https://github.com/southsidedean/observability-k3d/pull/24)) |
 | The installer (`curl ... \| sh`): the host check, the helper's service, the Dashboard | Done ([#25](https://github.com/southsidedean/observability-k3d/pull/25)) |
-| The Dashboard's setup cards, module switches, and What's next | Planned |
+| The Dashboard's setup cards, module switches, and What's next | In progress |
 | Screenshots of the pages for the docs (`scripts/screenshots.sh` on the test VM) | Planned |
 | Release 0.5.0, tested from a bare test VM with the installer and the Dashboard alone | Planned |

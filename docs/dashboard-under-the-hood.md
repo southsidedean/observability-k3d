@@ -107,7 +107,8 @@ when the cluster is down.
 
 | Page | What it shows | What it can do |
 |---|---|---|
-| Home | Whether the helper is running, and the helper's last answer with what `ok3d` printed | **Check**, and **Apply** once a Check has found no problems |
+| Home | Whether the helper is running, what's left before ok3d can do its job, What's next once an Apply has worked, and the helper's last answer with what `ok3d` printed | **Check**, and **Apply** once a Check has found no problems |
+| Setup | The ready-made setups, a switch for each module, and where alerts go | Choose a setup, or turn one switch on or off |
 | Settings | Your `settings.yaml`, as the helper last copied it | Save a changed one |
 | Devices | Your `devices.yaml` (or an empty list) | Save a changed one |
 | Keys | Which lines of `.env` are set, never their values | Set or clear `UNIFI_API_KEY`, `NTFY_TOPIC`, `NTFY_TOKEN`, or `SMTP_PASSWORD` |
@@ -120,6 +121,7 @@ Each page reads only the helper's folder, mounted read-only at `/helper`:
   30 seconds while a Check or Apply runs. While it's more than 90 seconds old, the pages say
   the helper isn't running and send nothing.
 - `result`: the answer to the last request.
+- `applied`: when the last Apply that worked finished. Home shows What's next once it's there.
 
 Every button leaves one request in `/state/outbox/request`, written to a temporary file and
 renamed into place, then sends you to Home, where the answer appears. The Dashboard keeps the
@@ -142,6 +144,41 @@ with a note to wait. If the outbox can't be written, the page says so and sends 
 - **Keys** checks a value the way the helper will (one line of letters, digits, and symbols,
   with no spaces, quotes, backslashes, `$`, or backticks), so a value the helper would
   refuse is never sent. A value is never shown back, not even in an error.
+
+## Setup and its switches
+
+Setup changes `settings.yaml` for you, a switch at a time, and saves it the way Settings
+does: the whole file, with the fingerprint of the copy the page showed, through the helper,
+which checks it with `./ok3d validate` first. `src/ok3d/dashboard/switches.py` lists the
+switches and the setups.
+
+- **The switches** are `modules.*` and `alerts.ntfy.enabled`, `alerts.email.enabled`, and
+  `alerts.deadman.enabled`. Each shows its setting as it's written in `settings.yaml`, and
+  which `.env` lines it needs. A module that comes in a later release says which, with no
+  button. The mesh, remote access, and agents are changed only on the server, like the other
+  settings a save from the Dashboard can't change. A switch that needs a setting the
+  Dashboard can't set (UniFi needs `unifi.url`, email needs `alerts.email.smarthost`) says so
+  until it's there.
+- **The setups** are Basic NOC (no modules), Network NOC (UniFi), NOC with logs (0.6), and
+  NOC with agents (0.9). Choosing one sets every module switch the Dashboard may change: on
+  if the setup has it, off if not. The one your settings match now is marked.
+- **Reading and changing the file.** The Dashboard has only Python's own library, which has
+  no YAML parser, so `switches.py` follows the file line by line, in the shape
+  `settings.example.yaml` has: one key per line, indented with spaces, each mapping at one
+  indent. It changes the one line a switch is on, keeping its comment, or adds the switch
+  at the end of the mapping it belongs in (adding the mapping too if it's missing). On the
+  way to a switch, anything else (flow style like `{unifi: true}`, an anchor or merge key,
+  a key written twice, tabs, a quoted key, a value that runs onto the next line) means it
+  stops and asks you to use the Settings page. Tests check, with a real YAML parser and
+  generated files, that every change it makes means exactly the switch and nothing else.
+- **Nothing is sent** when the settings changed on the server since the page was shown, when
+  a switch is one the page doesn't offer, when something it needs is missing, or when the
+  settings already say it.
+
+Home's list of what's left comes from the same reading: each switched-on part's `.env` lines
+that aren't set, alerts with nowhere to go, and a `devices.yaml` with no devices. What's
+next links to Grafana and the certificate authority's page at the domain and port in your
+settings, if they look like a domain and a port, and the defaults if not.
 
 ## What ./ok3d install does
 
