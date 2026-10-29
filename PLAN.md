@@ -349,7 +349,7 @@ and how the pieces fit.
   `docs/screenshots.json` (JSON, since Playwright's image has no YAML library): each page,
   what to wait for, what to crop to, and light or dark.
   It strips the metadata and records the ok3d version each was taken with (making the
-  files smaller is still to do: 14 pictures are about 4.4 MB). Docs and releases can then refresh every screenshot in one run.
+  files smaller is still to do: 14 pictures are about 4.7 MB). Docs and releases can then refresh every screenshot in one run.
 - The docs show both versions with a `<picture>` tag, so GitHub picks the one for the
   reader's theme. Every image has alt text that says what it shows, and the docs job fails
   on an image without it.
