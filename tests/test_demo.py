@@ -217,7 +217,8 @@ def test_demo_up_makes_the_network_and_starts_every_device_locked_down(
     for device, run in zip(devices, runs, strict=True):
         assert f"--name ok3d-demo-{device.name} " in run
         assert f"--ip {device.address} " in run
-        for flag in ("--read-only", "--cap-drop ALL", "--security-opt no-new-privileges", "--user 65534:65534"):
+        for flag in ("--read-only", "--cap-drop ALL", "--security-opt no-new-privileges", "--user 65534:65534",
+                     "--restart unless-stopped"):  # back after the server restarts
             assert flag in run, f"{device.name} runs without {flag}"
         assert "@sha256:" in run, "the image isn't pinned by digest"
     controller = next(run for run in runs if "ok3d-demo-unifi-controller" in run)
