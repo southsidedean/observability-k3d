@@ -93,7 +93,10 @@ when the cluster is down.
   that isn't there) is read and thrown away first: refused while the browser was still
   sending, the browser would show a reset connection instead of the refusal. A refused form
   over 1 MB isn't read, and is refused straight away. Every form must arrive within 30
-  seconds, so a client that sends one a byte at a time can't keep the server busy. No `GET`
+  seconds, so a client that sends one a byte at a time keeps a connection for about 40
+  seconds at most. (That's about 13 KB a second for the biggest settings or devices file.)
+  The request's first line and headers have only the 10-second limit on each read, so a
+  client sending those very slowly still keeps its connection. No `GET`
   changes anything. Started with
   `--origin https://my-server.lan:8444` (once for each address you open it at), it accepts
   forms only from those exact addresses, which the installer will pass; without, the Origin

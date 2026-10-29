@@ -9,8 +9,10 @@ frames, stop other sites' scripts, and keep it out of caches. A form is accepted
 the Dashboard's own pages: every POST must come with an Origin header naming the Dashboard
 (and, from browsers that send it, Sec-Fetch-Site: same-origin). GET never changes anything.
 
-A slow or silent client can't hold it up: each connection's TLS handshake happens in its own
-thread, with a time limit, every connection has a time limit, and only so many run at once.
+A slow or silent client can't hold it up for long: each connection's TLS handshake happens in
+its own thread, with a time limit; every read has a time limit, and a form's body has one of
+its own; and only so many connections run at once. The request line and headers have only the
+limit on each read, so a client that sends them very slowly still keeps its thread.
 """
 
 from __future__ import annotations
@@ -502,7 +504,7 @@ class Handler(BaseHTTPRequestHandler):
     def read_body(self, length: int) -> bytes | None:
         """A body of length bytes, or None if it hasn't all come within BODY_TIME seconds. Each
         read takes whatever has arrived, so the time is checked after every piece, and a client
-        sending a byte at a time can't keep a thread for long."""
+        sending a byte at a time keeps a thread for BODY_TIME, plus TIMEOUT for the last read."""
         deadline = time.monotonic() + BODY_TIME
         parts, left = [], length
         while left > 0:
