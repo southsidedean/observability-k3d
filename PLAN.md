@@ -75,8 +75,8 @@ about a problem. Each of these is fixed in the roadmap below:
 | The Dashboard's sign-in | Its own password, printed once by the installer, always works, because the Dashboard has to work when the cluster (and Authelia with it) is down. From 0.8 it also signs in through Authelia, as its own OIDC client, for everyday use. |
 | Grafana's sign-in | From 0.8, Grafana trusts the gateway's user header, and Authelia groups map to Grafana roles (admins are Admin, everyone else is Viewer). |
 | Remote access | Optional: Tailscale, so the Dashboard and the approval page work from your phone away from home without opening a port. Off by default. |
-| Agents | kagent 1.0 (Agent Substrate), pinned; until GA, the newest 1.0 alpha. kagent's packaged agents are used only where they fit (observability, PromQL, and Kubernetes, limited to ok3d's namespaces and read-only), with their prompts as starting points for ok3d's own. kagent-tools never gets cluster-wide access. Agents hold no model key; the gateway adds it. The built-in bash and file tools are off unless an agent needs them. Prompt caching is on. |
-| Model | Claude, through the gateway, with its own API key and a monthly spend limit. Other providers can be configured through the gateway. |
+| Agents | Until 0.9 chooses (see 0.9): kagent 1.0 (Agent Substrate), pinned; until GA, the newest 1.0 alpha. kagent's packaged agents are used only where they fit (observability, PromQL, and Kubernetes, limited to ok3d's namespaces and read-only), with their prompts as starting points for ok3d's own. kagent-tools never gets cluster-wide access. Agents hold no model key; the gateway adds it. The built-in bash and file tools are off unless an agent needs them. Prompt caching is on. |
+| Model | Claude, through the gateway, with its own API key, in its own Anthropic Console workspace with a monthly spend limit, on top of the gateway's budget. Other providers can be configured through the gateway. |
 | MCP tools | **Use** what exists: Grafana's MCP server with `--disable-write` and a Viewer service account (Prometheus, Loki, alerts, dashboards), and kagent-tools for Kubernetes, limited to ok3d's namespaces. **Build** an ok3d tools server first: what's down, a device's status, what changed in the last hour, an alert's history, the internet link's health, built around `devices.yaml` and ok3d's rules, so agents get reliable answers instead of writing queries. **Evaluate, then probably build** a UniFi server on Ubiquiti's official Network Integration API, starting from a view-only admin's key. **Plex** read tools come with the Plex module. All of them are served through the gateway. The ok3d tools server also offers starter prompts, as kia's MCP server does: *network checkup*, *explain this alert*, and *what changed today*. |
 | Remote MCP servers | `settings.yaml` can list other MCP servers, such as kia's. The gateway holds each one's key in `.env` and checks its certificate (including a self-issued one, which kagent itself can't), and the agents never see the key. The docs use kia as the example. |
 | Private additions | `local/` (gitignored) holds extra values files and agent definitions that `ok3d apply` loads after everything else: your own MCP servers and agents for things that aren't public, without a fork. |
@@ -159,6 +159,7 @@ install doc shows how to make one with LVM, and how to grow it later.
 ├── authelia/        its database (sessions, second factors); users.yml stays in your settings
 ├── certs/           the certificate authority (self-issued), or the ACME account key and the
 │                    certificate (public), restored into each new cluster
+├── gateway/         agentgateway's budget database, when agents are on (0.9)
 ├── kagent/          kagent's database
 └── kagent-ate/      kagent's sandbox state, mounted at /var/lib/ate on the server node
 ```
@@ -228,7 +229,7 @@ The other workflows:
 | `mutation` | weekly | Mutation testing (mutmut) on the code that guards something: the helper, the action runner's guardrails, and the MCP tools' handling of untrusted text. If a change to that code gets past every test, a test is missing. |
 | `upstream` | weekly | Whether the vendored dashboards have newer revisions. Opens an issue, never a change. |
 | `images` and `image scan` | from 0.5.0 | Build the Dashboard's image (and the in-cluster one, once the first tool that runs in the cluster arrives), scan with Trivy before pushing, push, attach an SBOM and a provenance attestation, and scan the published images weekly. |
-| `release` | a merge to `main` that changes the version | Tags the release and publishes its notes from `CHANGELOG.md`. |
+| `release` | a merge to `main` that changes the version | Tags the release and publishes its notes from `CHANGELOG.md`. Not built yet: releases are made by hand (CONTRIBUTING.md). A workflow can't sign the tag without a signing key in CI, which would be a decision of its own. |
 
 **Updates:** Renovate keeps the pinned versions current: the actions, the Helm chart
 dependencies in `Chart.yaml`, the image tags and base images (by digest), and the Python
@@ -237,11 +238,11 @@ opens one grouped pull request a month, for releases at least a week old, and se
 right away. Dependabot stays on only for security alerts.
 
 **Considered for later** (2026-10-29): a self-hosted runner on a test VM, so the real
-cluster runs on every pull request instead of by hand (never run anything by hand on it, or
-its runs break); a release script and workflow, so merging the release pull request makes
-the tag and the GitHub release; and a weekly job, outside pull requests, that deploys the
-newest kagent and agentgateway, to catch a break in either before Renovate proposes it (kia
-runs one for its own fast-moving upstream).
+cluster, agents included, runs on every pull request instead of by hand (never run anything
+by hand on it, or its runs break); and on that runner, a weekly job outside pull requests
+that deploys the newest kagent and agentgateway, to catch a break in either before Renovate
+proposes it (kia runs a weekly check of its own fast-moving upstream). GitHub's runners can't:
+the smoke test there runs with agents off to fit their memory.
 
 **Left to the test VM**, because CI can't do them: kagent with a real model, a real UniFi
 controller, an ntfy notification on a real phone, trusting the certificate authority in a
@@ -485,11 +486,16 @@ turn up. Production moves to ok3d at 0.4.0.
 - Tempo, with Alloy collecting traces from agentgateway and the waypoints. Traces, logs, and
   metrics linked in Grafana, and Tempo's service graph and request metrics in Prometheus.
 - Remote access with Tailscale, optional.
-- From kia's front door (kia 0.8.1 didn't start, and an end-to-end test found why): Authelia
-  needs a writable root filesystem, or it never makes its database (it still runs as non-root,
-  with no capabilities); and the gateway reads Authelia's keys from a file, since fetching them
-  at its own start fails while Authelia isn't serving yet. A Dashboard page to add household
-  members, with LLDAP behind Authelia, as kia 0.8.3 did, so ok3d never handles passwords.
+- From kia's front door (kia 0.8.1 didn't start, and an end-to-end test found why): Authelia's
+  startup checks fail on a read-only root filesystem, so it never made its database. ok3d
+  keeps every pod's root read-only (the charts job and Least privilege, below), so first give
+  Authelia writable `emptyDir` folders for the paths it writes; only if that isn't enough,
+  name it as an exception there, with its reason. And the gateway can't fetch Authelia's keys
+  at its own start (Authelia serves them only for its own name, through a listener that isn't
+  up yet), which is one more reason for the local copy in the Sign-in row.
+- To weigh when 0.8 starts: bringing LLDAP forward from 1.x, for a Dashboard page to add
+  household members, as kia 0.8.3 did. ok3d would never store or check a password (LLDAP
+  does), and the helper, never the Dashboard's container, would hold LLDAP's admin login.
 - Test: signed out, every page redirects to sign-in; signed in, every page loads, once; a
   page load shows as one trace from the gateway to the app; a pod outside the mesh can't
   reach an app inside it.
@@ -503,11 +509,12 @@ turn up. Production moves to ok3d at 0.4.0.
   read-only tools ("Ask kia", kia 0.8.4; the reasons are in kia's `plans/0.8-kagent-go-no-go.md`:
   an alpha with breaking changes, its own security off by default, no scheduler, and most of
   the value in the tools and the gateway). ok3d already runs the cluster kagent needs, so
-  kia's main objection, its weight, counts for less here; the others don't. Compare the two
+  kia's main objection, its weight, counts for less here, though kagent still adds about
+  4 GiB (The host, below); the others hold. Compare the two
   against this release's needs (the chat, the alert explainer, the briefing, the actions), and
   write down the choice before building either.
-- kagent 1.0 behind the front door at `agents.<domain>`, with the model route and MCP on the
-  gateway, read-only RBAC, and NetworkPolicies so the sandboxes reach only the gateway (not
+- If 0.9 chooses kagent: kagent 1.0 behind the front door at `agents.<domain>`, with the
+  model route and MCP on the gateway, read-only RBAC, and NetworkPolicies so the sandboxes reach only the gateway (not
   kagent's control plane, which trusts a plain identity header). `agents` joins the mesh
   once gVisor sandboxes are proven to work with ambient's traffic redirection.
 - The MCP tools: Grafana's (read-only), ok3d's own, UniFi (read), and Plex (read) with its
@@ -522,19 +529,22 @@ turn up. Production moves to ok3d at 0.4.0.
 - Defenses against planted instructions, in this order (from kia's review of its own agents
   plan): no tool that changes anything outside the action runner; no tool that fetches an
   address it's given; answers shown as plain text, with no image or link loaded by itself (an
-  image can carry data out); never a command that isn't in ok3d's docs; and a token cap per
-  request and a rate limit per key at the gateway, so text that makes an agent loop can't run
-  up a bill.
-- Each tool is allowed by its exact operation, never a settings call (the apps' settings
-  hold their API keys), and no metric label carries an address. A test runs every tool
-  against fixtures holding known secret values and checks none of them comes back.
-- Whatever reads strangers' text (logs, device and Wi-Fi names, syslog) holds no keys of its
-  own, so taking it over gets nothing.
-- The docs say to keep the model's key in its own Anthropic Console workspace, with a
-  monthly spend limit, on top of the gateway's budget.
+  image can carry data out); never a command that isn't in ok3d's docs; a token cap per
+  request and a rate limit per key at the gateway; and a limit on tool rounds in the agent's
+  own loop, since the gateway can't cap a whole conversation. Together they stop text that
+  makes an agent loop from running up a bill.
+- Each tool is allowed by its exact operation, never a settings or configuration call:
+  UniFi's settings carry Wi-Fi passphrases, and Plex's preferences carry its token. No tool's
+  answer passes on an address from a metric label. A test runs every tool against fixtures
+  holding known secret values and checks none of them comes back (kia's review asked for the
+  same).
+- Whatever reads strangers' text (logs, device and Wi-Fi names, syslog) holds only the
+  read-only key it needs: never one that writes, the model's key, or another tool's key.
 - Test: a planted instruction in a log line, a device name, or a Wi-Fi network name doesn't
-  change what the agent does or asks for; an action without approval doesn't run; a
-  protected device can't be touched even with approval.
+  change what the agent does or asks for; an answer shows as plain text, with no image or
+  link loaded by itself; no command outside ok3d's docs is suggested; the token cap, the rate
+  limit, and the tool-round limit stop a looping agent; an action without approval doesn't
+  run; a protected device can't be touched even with approval.
 
 ### The review before 1.0
 
@@ -629,20 +639,20 @@ Mermaid files:
 
 - agentgateway: does it reload a renewed certificate when the mounted Secret changes, or does
   it need a restart (0.4)? kia found its listener certificate and backend root reload by
-  themselves from mounted files (Compose, v1.7.0); a Secret's mount updates differently, so
-  check it here. Two traps kia hit: rustls refuses a certificate from plain `openssl req
+  themselves from mounted files (Compose, v1.6.0), but on Docker Desktop the gateway noticed
+  the first new file and missed later ones. A Secret's mount updates by swapping a link,
+  which is a rename too, so check more than one renewal in a row. Two traps kia hit: rustls refuses a certificate from plain `openssl req
   -x509` as a server certificate, since it's marked as a CA, and macOS LibreSSL's `openssl req
   -newkey ec` test keys gave a key mismatch.
 - agentgateway's model route (0.9), from kia's 0.8.4: use its Anthropic provider directly,
   since the OpenAI-to-Anthropic translation passes `arguments: null` through for a tool call
-  with no arguments, and Anthropic answers 400. A budget in dollars needs a SQLite database
-  that survives restarts, attaches only to a fixed key (one budget per key, not per person),
-  and answers 429 with `budget_exceeded` when it's spent. Prompt cache reads are billed at
-  cache rates.
-- MCP clients and a private certificate authority (0.9), from kia's checks: Gemini CLI needs
-  `NODE_EXTRA_CA_CERTS`, Codex reads `CODEX_CA_CERTIFICATE`, Claude Desktop reaches HTTP
-  servers only through `mcp-remote`, and claude.ai's connectors run from Anthropic's servers,
-  so they can't reach a home network at all.
+  with no arguments, and Anthropic answers 400. A budget in dollars needs agentgateway's
+  standalone mode and a database that survives restarts (SQLite is enough, in a folder its
+  user, uid 65532, can write: `gateway/` in the data root). It attaches only to a fixed key
+  (one budget per key, not per person), is charged after each answer (so one request can run
+  past it), and answers 429 with `budget_exceeded` once it's spent. With no price set for the
+  model, the budget stays at zero and never refuses anything. Prompt cache reads are billed
+  at cache rates.
 - cert-manager: does a CA Issuer built from the installer's authority keep issuing from it
   in each new cluster (0.4)? Does it adopt a restored Let's Encrypt certificate without
   issuing again? Test against staging, keeping the annotations it writes (1.1).
@@ -660,7 +670,9 @@ Mermaid files:
   needs the older controller API (0.6, 0.7, 0.9).
 - agentgateway with Authelia inside the cluster: does the token exchange need its own
   listener to set the forwarded headers, as in kia's proof of concept? How does the local
-  copy of Authelia's keys get refreshed when they rotate (0.8)?
+  copy of Authelia's keys get refreshed when they rotate (0.8)? kia makes Authelia's signing
+  key itself and writes the public half to a file, so there's no fetch, and a refresh is
+  needed only when kia rotates the key; ok3d can do the same.
 - Grafana: mapping a role from a gateway header, or Grafana's own OIDC against Authelia if
   the header can't carry the role (0.8).
 - Istio ambient on k3d: the install with k3d's platform setting, ztunnel and istio-cni with
