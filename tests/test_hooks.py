@@ -299,3 +299,34 @@ def test_no_list_and_no_script_means_no_check(repo: Path) -> None:
     (repo.parent / "scripts" / "private-names.sh").unlink()
     add(repo, "notes.md", "Nothing private here.\n")
     assert commit(repo).returncode == 0
+
+
+def test_a_scissors_line_typed_into_a_message_hides_nothing(repo: Path) -> None:
+    private_names(repo, "media-box\n")
+    add(repo, "notes.md", "Nothing private here.\n")
+    result = subprocess.run(["git", "commit", "-q", "-m", "title", "-m", "# --- >8 ---", "-m", "MediaBox"],
+                            cwd=repo, capture_output=True, text=True, check=False)  # fmt: skip
+    assert result.returncode == 1
+
+
+def test_commit_v_works_with_a_longer_comment_string(repo: Path) -> None:
+    add(repo, "leak.md", "Grafana runs on media-box.\n")
+    assert commit(repo).returncode == 0  # before the name was listed
+    private_names(repo, "media-box\n")
+    git(repo, "config", "core.commentString", "//")
+    git(repo, "rm", "-q", "leak.md")
+    editor = "sh -c 'printf \"Take the name out\\n\" | cat - \"$1\" >\"$1.new\" && mv \"$1.new\" \"$1\"' editor"
+    result = subprocess.run(["git", "commit", "-q", "-v"], cwd=repo, capture_output=True, text=True, check=False,
+                            env={**os.environ, "GIT_EDITOR": editor})  # fmt: skip
+    assert result.returncode == 0, result.stderr
+
+
+def test_a_merge_on_main_is_explained(repo: Path) -> None:
+    git(repo, "switch", "-q", "-c", "side")
+    add(repo, "side.md", "Side.\n")
+    assert commit(repo).returncode == 0
+    subprocess.run(["git", "switch", "-q", "-c", "main", "work"], cwd=repo, check=True)
+    result = subprocess.run(["git", "merge", "-q", "--no-ff", "-m", "Merge", "side"], cwd=repo,
+                            capture_output=True, text=True, check=False)  # fmt: skip
+    assert result.returncode != 0
+    assert "--ff-only" in result.stderr
