@@ -106,27 +106,21 @@ def test_no_home_folders() -> None:
 
 
 def test_nothing_from_the_private_names_list() -> None:
-    # The main repository's list, from a worktree too (where .git is a file).
+    # The patterns scripts/private-names.sh matches with (each plain name in the list also in its
+    # other spellings), so this and the commit hook agree. It finds the list from a worktree too.
+    # On a failure it names only the files, never the pattern, so the name isn't printed.
     try:
-        common = subprocess.run(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"], cwd=ROOT,
-                                capture_output=True, text=True, check=False).stdout.strip()  # fmt: skip
-    except FileNotFoundError:  # no git: look where a plain clone keeps it
-        common = ""
-    names_file = Path(common or ROOT / ".git") / "hooks" / "private-names"
-    if not names_file.is_file():
+        result = subprocess.run(["sh", str(ROOT / "scripts" / "private-names.sh"), "patterns"], cwd=ROOT,
+                                capture_output=True, text=True, check=False)  # fmt: skip
+    except FileNotFoundError:  # no sh or git: nothing to check against
+        return
+    if result.returncode == 3:
         return  # CI and fresh clones have no list; the generic checks above still ran
-    patterns = [
-        line.strip()
-        for line in names_file.read_text(encoding="utf-8").splitlines()
-        if line.strip() and not line.lstrip().startswith("#")
-    ]
+    assert result.returncode == 0, f"scripts/private-names.sh patterns failed: {result.stderr}"
+    patterns = [re.compile(line, re.IGNORECASE) for line in result.stdout.splitlines() if line]
     files = tracked_text_files()
-    found = {
-        pattern: [path for path, text in files.items() if re.search(pattern, text, re.IGNORECASE)]
-        for pattern in patterns
-    }
-    found = {pattern: paths for pattern, paths in found.items() if paths}
-    assert not found, f"private names in tracked files: {found}"
+    found = sorted(path for path, text in files.items() if any(p.search(text) for p in patterns))
+    assert not found, f"something from your private-names list is in these tracked files: {found}"
 
 
 def test_the_checks_catch_what_they_should() -> None:

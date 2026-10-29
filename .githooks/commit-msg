@@ -1,0 +1,38 @@
+#!/bin/sh
+# Runs on every commit's message, once turned on with: git config core.hooksPath .githooks
+#
+# Refuses a message that holds a private name from .git/hooks/private-names, the same check
+# the pre-commit hook makes on the files (scripts/private-names.sh). It says which line, not
+# the text. No list, no check: a fresh clone or CI has none. Anything else that goes wrong
+# stops the commit. A real emergency can skip it with git commit --no-verify.
+set -eu
+
+names=$(dirname "$0")/../scripts/private-names.sh
+list="$(git rev-parse --path-format=absolute --git-common-dir)/hooks/private-names"
+if [ ! -f "$names" ]; then
+	[ ! -s "$list" ] || {
+		echo "There's a private-names list, but not $names to check it with." >&2
+		exit 1
+	}
+	exit 0
+fi
+status=0
+sh "$names" patterns >/dev/null || status=$?
+[ "$status" -ne 3 ] || exit 0
+if [ "$status" -ne 0 ]; then
+	echo "The private-names check couldn't run (above), so nothing was committed." >&2
+	exit 1
+fi
+# Every line, # ones too: git keeps them with -m, --cleanup=verbatim, or another comment
+# character, and a subject like "#42 ..." is common. Only what git commit -v adds from its
+# scissors line on is left out: that's the diff, which would refuse the very commit that takes
+# a name out. Only git's own form of that line, with any comment string before it, so a
+# lookalike typed into a message doesn't hide what follows it.
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+sed '/^.\{1,\} -\{24\} >8 -\{24\}$/,$d' "$1" >"$work/message"
+if ! sh "$names" check "$work/message" 2>"$work/said"; then
+	echo "The commit message names something from your private-names list. Use a stand-in" >&2
+	echo "(192.168.1.20, my-server.lan, noc.home.arpa) instead, on $(sed -n 's/^.*: a private name on //p' "$work/said")." >&2
+	exit 1
+fi

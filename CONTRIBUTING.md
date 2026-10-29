@@ -20,20 +20,34 @@ amtool (from Alertmanager v0.34.1) in `.venv/bin/`, from their releases on GitHu
 skip without them, and CI always has them.
 
 The last line turns on the git hooks. Before each commit, they refuse a commit on `main`,
-your own settings files, secrets, private names, and images nobody has looked at. Before
-each push, they run every check.
+your own settings files, secrets, private names (in the files, their names, and the commit
+message), and images nobody has looked at. Before each push, they run every check.
 
 ### Your private names
 
 Make a file at `.git/hooks/private-names` with your own host names, domains, and addresses,
-one pattern per line (`#` starts a comment). It stays on your machine. The pre-commit hook
-and the privacy tests refuse anything that matches it:
+one pattern per line (`#` starts a comment). Put your own in it, not the examples below:
+they're written in this file, so listing them would refuse every commit. It stays on your
+machine. The git hooks and the privacy tests refuse anything that matches it, anywhere in
+what a commit would hold, and say which files without repeating the name:
 
 ```text
 # my own names
-myserver
+media-box
 mydomain\.example
 192\.168\.42\.
+```
+
+A line that's a plain name (letters, digits, spaces, `-`, and `_`) also matches the other
+ways it gets written: up to three other characters may stand between its parts, so
+`media-box` matches `media_box`, `mediabox`, `media - box`, and `Media Box`, and `box2`
+matches `box-2`. Write a name with its parts apart, as above: `mediabox` written as one word
+wouldn't match `media-box`. Anything else, like the addresses above, is used as written.
+
+Before posting a pull request's description or release notes, check them the same way:
+
+```sh
+scripts/private-names.sh check notes.md   # exits 0 only when the file is clean
 ```
 
 In the repository, examples use stand-ins instead: addresses like `192.168.1.20`,
