@@ -44,7 +44,7 @@ release and the reasons behind it.
 | The Dashboard's pages: settings, write-only secrets, devices, Check and Apply | Done ([#24](https://github.com/southsidedean/observability-k3d/pull/24)) |
 | The installer (`curl ... \| sh`): the host check, the helper's service, the Dashboard | Done ([#25](https://github.com/southsidedean/observability-k3d/pull/25)) |
 | The Dashboard's setup cards, module switches, and What's next | Done ([#27](https://github.com/southsidedean/observability-k3d/pull/27)) |
-| Screenshots of the pages for the docs (`scripts/screenshots.sh` on the test VM) | In progress |
+| Screenshots of the pages for the docs (`scripts/screenshots.sh` on the test VM) | Done ([#29](https://github.com/southsidedean/observability-k3d/pull/29)) |
 | The Dashboard answers every refused form, and every form has a time limit | Done ([#30](https://github.com/southsidedean/observability-k3d/pull/30)) |
 | A time limit on each whole request to the Dashboard, its headers too | Planned |
 | Release 0.5.0, tested from a bare test VM with the installer and the Dashboard alone | Planned |
