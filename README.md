@@ -35,26 +35,28 @@ every page, and AI agents that explain what went wrong.
 ## What you need
 
 - A Linux server with systemd and about 8 GB of memory free (more once agents arrive in 0.9),
-  Docker, [k3d](https://k3d.io) 5.9 or newer, [Helm](https://helm.sh), `kubectl`, and
-  `openssl`.
+  [Docker](https://docs.docker.com/engine/install/), [k3d](https://k3d.io) 5.9 or newer,
+  [Helm](https://helm.sh), [`kubectl`](https://kubernetes.io/docs/tasks/tools/), `git`,
+  `curl`, `openssl`, and Python 3.
 - A folder for ok3d's data, on a filesystem of its own if you can.
 - A way to add a name to your local DNS: most routers can, and so can Pi-hole.
 
 ## Install
 
 **With an AI assistant.** If you use one that can run commands on your server, such as Claude
-Code, open it in a terminal on the server, as yourself, and paste this in. It installs what's
-missing, asking before each `sudo` command, runs the installer, and stops once the Dashboard
-is running. It never reads your passwords or keys.
-[Installing with an AI assistant](docs/install-with-ai.md) says what it does.
+Code, open it in a terminal on the server, as yourself, and paste this in. It works out
+what's missing, gives you each `sudo` command to run yourself, runs the installer, and stops
+once the Dashboard is running. It's told never to read your passwords or keys.
+[Installing with an AI assistant](docs/install-with-ai.md) says what it does, and what to
+watch for.
 
 ```text
 Install ok3d on this Linux server for me, from https://github.com/southsidedean/observability-k3d.
-Find its newest release (the highest tag named like v0.5.0), and from that tag read
-docs/install-with-ai.md. Follow the steps there, in order, as written. Before each command
-that needs sudo, show it to me and wait for my yes. Never read, print, or ask me for a
-password or key. If a step fails, show me the exact error and stop. Stop when the Dashboard
-is running, and tell me how to open it.
+Use its latest release (the one GitHub marks Latest), and read docs/install-with-ai.md at
+that release's tag. Follow its rules and steps, in order, as written. Never run sudo
+yourself: show me each sudo command and I'll run it in my own terminal. Never read, print,
+or ask me for a password, API key, or other secret. If a step fails, show me the exact
+error and stop. Stop when the Dashboard is running, and tell me how to open it.
 ```
 
 **By hand.** On the server, as yourself (not root), with what's above installed:

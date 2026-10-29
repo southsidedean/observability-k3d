@@ -424,8 +424,8 @@ def sign_in_page(message: str = "") -> str:
     note = f"<p class=bad>{html.escape(message)}</p>" if message else ""
     return (
         "<section><h2>Sign in</h2>"
-        "<p class=muted>The Dashboard's password was shown when ok3d was installed. It's also in "
-        "<code>dashboard/password</code> in the data root, readable only by you.</p>"
+        "<p class=muted>The Dashboard's password is in <code>dashboard/password</code> in the data "
+        "root, readable only by you. If you ran the installer yourself, it showed it too.</p>"
         f'{note}<form method="post" action="/sign-in">'
         '<p><input type="password" name="password" autocomplete="current-password" required '
         'aria-label="Password" autofocus></p><p><button>Sign in</button></p></form></section>'

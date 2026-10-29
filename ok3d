@@ -8,8 +8,8 @@
 #                     different.
 #   ./ok3d install    Set up the Dashboard: the helper as a service of yours, the Dashboard's
 #                     certificate, and its container, which keeps running when the cluster
-#                     doesn't. Prints its address and password. Safe to run again: it brings
-#                     each part up to date. (Linux, with systemd.)
+#                     doesn't. Prints its address, and its password on a terminal. Safe to
+#                     run again: it brings each part up to date. (Linux, with systemd.)
 #   ./ok3d delete     Delete the cluster. The data root stays, so `./ok3d apply` brings
 #                     everything back. Asks first; --yes skips the question.
 #   ./ok3d demo up    Start the simulated network: a few small containers that stand in for a
@@ -169,7 +169,7 @@ env_value() {
 check_tools() {
 	for tool in docker k3d helm kubectl openssl; do
 		if ! command -v "$tool" >/dev/null 2>&1; then
-			fail "$tool isn't installed (docs/install.md says how to get it)"
+			fail "$tool isn't installed (README.md, What you need, links to how to get it)"
 		fi
 	done
 	if command -v docker >/dev/null 2>&1; then

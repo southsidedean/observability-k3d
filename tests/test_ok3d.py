@@ -557,20 +557,26 @@ def test_a_failed_pull_leaves_the_running_dashboard(linux: dict[str, str]) -> No
 def on_a_terminal(env: dict[str, str], *args: str) -> str:
     """What ./ok3d prints when its output is a terminal, as when you run the installer yourself."""
     main, side = pty.openpty()
-    proc = subprocess.Popen([str(ROOT / "ok3d"), *args], stdin=subprocess.DEVNULL, stdout=side,
-                            stderr=subprocess.DEVNULL, env=env)  # fmt: skip
-    os.close(side)
+    try:
+        proc = subprocess.Popen([str(ROOT / "ok3d"), *args], stdin=subprocess.DEVNULL, stdout=side,
+                                stderr=subprocess.PIPE, env=env)  # fmt: skip
+    finally:
+        os.close(side)
     out = b""
-    while True:
-        try:
-            chunk = os.read(main, 4096)
-        except OSError:  # Linux says EIO once the program has gone
-            break
-        if not chunk:
-            break
-        out += chunk
-    proc.wait()
-    os.close(main)
+    try:
+        while True:
+            try:
+                chunk = os.read(main, 4096)
+            except OSError:  # Linux says EIO once the program has gone
+                break
+            if not chunk:
+                break
+            out += chunk
+        _, errors = proc.communicate(timeout=30)
+    finally:
+        proc.kill()
+        os.close(main)
+    assert proc.returncode == 0, out.decode() + errors.decode()
     return out.decode()
 
 

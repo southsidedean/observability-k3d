@@ -230,8 +230,8 @@ again: it brings each part up to date. In order, it:
    was, then makes the container again (above).
 7. Prints the address. The password is printed the first time only, when the Dashboard has
    just made it, and only when the output is a terminal; otherwise it says which file holds
-   it. So when an AI assistant runs the installer for you, or its output goes to a log, the
-   password isn't in it.
+   it. So when an AI assistant runs the installer without a terminal, as Claude Code does, or
+   its output goes to a log, the password isn't in it.
 
 `install.sh`, for `curl -fsSL .../install.sh | sh`, comes before it: it checks out the newest
 release (or `OK3D_VERSION`) into `~/ok3d` (or `OK3D_DIR`), makes `settings.yaml` from

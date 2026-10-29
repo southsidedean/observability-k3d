@@ -6,7 +6,7 @@
 # It checks out the latest release of ok3d into ~/ok3d (or brings an existing checkout up to
 # that release), makes settings.yaml from settings.example.yaml if you have none, and runs
 # ./ok3d install, which starts the helper and the Dashboard and prints the Dashboard's address
-# and password. Run it again to move to a newer release.
+# (and its password, when the output is a terminal). Run it again to move to a newer release.
 #
 # What it reads, all optional:
 #   OK3D_DIR        where ok3d goes (default ~/ok3d)
