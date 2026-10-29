@@ -60,6 +60,8 @@
 - The Dashboard's forms work in a browser. It sent `Referrer-Policy: no-referrer`, which makes
   browsers send `Origin: null` on a form, and its own Origin check then refused them all,
   sign-in included. It now sends `same-origin`. (No release had the Dashboard yet.)
+- Grafana can have 1 GiB of memory, up from 512 MiB. It uses about 400 MiB once started,
+  and opening a dashboard took it over 512 MiB, so it was killed and restarted.
 
 - `.env.example` no longer says ok3d reads none of its secrets: 0.4 reads all but the agents'
   key.

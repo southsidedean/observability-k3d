@@ -535,6 +535,8 @@ def test_grafana_gets_time_for_its_first_start() -> None:
             assert probe["periodSeconds"] * probe["failureThreshold"] >= 600
             # Pulling its images and its first start together took over 10 minutes on the test VM.
             assert doc["spec"]["progressDeadlineSeconds"] >= 1800
+            # 512 MiB wasn't enough to open a dashboard: Grafana was killed for memory.
+            assert grafana["resources"]["limits"]["memory"] == "1Gi"
             return
     pytest.fail("no Grafana Deployment")
 
