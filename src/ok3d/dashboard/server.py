@@ -748,8 +748,9 @@ ACTIONS: dict[str, Callable[[Handler], None]] = {
 
 
 def cut_off(request: socket.socket | tuple[bytes, socket.socket]) -> None:
-    """Shuts a connection that has taken too long. socket.socket's own shutdown, not TLS's,
-    which would try to tell the client first and could wait on it too."""
+    """Shuts a connection that has taken too long, from the timer's thread. socket.socket's
+    own shutdown, not the TLS socket's, which would also drop the TLS state under the
+    connection's own thread, mid-read, and raises once the socket is closed."""
     if isinstance(request, socket.socket):
         with contextlib.suppress(OSError):  # closed already
             socket.socket.shutdown(request, socket.SHUT_RDWR)
@@ -778,13 +779,20 @@ class Server(ThreadingHTTPServer):
         # Each read has a time limit, but a client sending a byte just inside it, during the
         # handshake or the headers, would never finish. So the whole connection has one too:
         # after REQUEST_TIME the socket is shut, which ends any read or write waiting on it.
+        # socketserver's own version of this, written out so the timer is stopped before the
+        # socket is closed: shut after, its number might be a new connection's.
         timer = threading.Timer(REQUEST_TIME, cut_off, (request,))
         timer.daemon = True
-        timer.start()
         try:
-            super().process_request_thread(request, client_address)
+            timer.start()  # inside the try: a thread that won't start mustn't lose the slot
+            self.finish_request(request, client_address)
+        except Exception:
+            self.handle_error(request, client_address)
         finally:
             timer.cancel()
+            if timer.ident is not None:
+                timer.join()  # a cut_off already under way finishes first
+            self.shutdown_request(request)
             self.slots.release()
 
     def handle_error(self, request: object, client_address: object) -> None:
