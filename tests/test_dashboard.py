@@ -518,6 +518,7 @@ def raw_post(dash: Dashboard, path: str, length: int, origin: str | None = None,
     context = ssl.create_default_context()
     context.check_hostname = False
     context.verify_mode = ssl.CERT_NONE
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
     lines = [f"POST {path} HTTP/1.1", f"Host: 127.0.0.1:{dash.port}",
              f"Origin: {origin or f'https://127.0.0.1:{dash.port}'}",
              f"Content-Type: {kind}", f"Content-Length: {length}"]  # fmt: skip
