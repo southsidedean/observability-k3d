@@ -7,11 +7,11 @@
 #   scripts/screenshots.sh --setup   # on a fresh machine: set ok3d up on the simulated network first
 #   scripts/screenshots.sh           # ok3d is up on the simulated network already: just take them
 #
-# --setup makes settings.yaml from the example (with email alerts to a mail server on the
-# simulated network, which isn't there, so nothing is ever sent), devices.yaml from the
-# demo's, and .env with a stand-in mail password; starts the simulated network; builds the
-# Dashboard's image from this checkout; runs ./ok3d install and ./ok3d apply; and waits for
-# Grafana to have a few minutes of graphs. The data root must be there already, and yours.
+# --setup makes settings.yaml from the example and devices.yaml from the demo's; starts the
+# simulated network; builds the Dashboard's image from this checkout; runs ./ok3d install and
+# ./ok3d apply; and waits for Grafana to have a few minutes of graphs. It switches no alerts on:
+# with nowhere real to send them, Alertmanager would fire alerts about failing to send, and
+# they'd show in Grafana. The data root must be there already, and yours.
 #
 # Either way, it refuses to run unless settings.yaml is exactly what --setup makes and
 # devices.yaml is the demo's, so a screenshot can't show a real network, address, or name. The
@@ -41,22 +41,9 @@ case "${1:-}" in
 esac
 command -v docker >/dev/null 2>&1 || stop "This needs Docker."
 
-# The settings --setup makes: the example's, and email alerts to a mail server on the simulated
-# network that isn't there.
+# The settings --setup makes: the example's, as they are.
 screenshot_settings() {
 	cat settings.example.yaml
-	cat <<-'EOF'
-
-		# From scripts/screenshots.sh: email alerts, to a mail server on the simulated network
-		# that isn't there, so the Dashboard shows them on and nothing is ever sent.
-		alerts:
-		  email:
-		    enabled: true
-		    to: you@example.com
-		    from: ok3d@example.com
-		    smarthost: 198.51.100.25:25
-		    username: ok3d
-	EOF
 }
 
 if $setup; then
@@ -65,7 +52,6 @@ if $setup; then
 	done
 	screenshot_settings >"$settings"
 	cp devices.demo.yaml "$devices"
-	(umask 077 && printf 'SMTP_PASSWORD=a-stand-in-for-the-screenshots\n' >.env)
 	chmod 600 "$settings"
 fi
 

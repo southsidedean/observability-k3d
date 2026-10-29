@@ -35,7 +35,7 @@ minute.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../images/screenshots/dashboard-home-dark.png">
-  <img src="../images/screenshots/dashboard-home-light.png" alt="The Dashboard's Home page: ok3d's version, the helper running, the Check and Apply buttons, a Before you Apply list saying nothing's missing, What's next with five steps and links to the certificate authority and Grafana, and the helper's last answer, a Check that finished with exit status 0, with what ok3d check printed." width="700">
+  <img src="../images/screenshots/dashboard-home-light.png" alt="The Dashboard's Home page: ok3d's version, the helper running, the Check and Apply buttons, a Before you Apply list saying alerts go nowhere yet, What's next with five steps and links to the certificate authority and Grafana, and the helper's last answer, a Check that finished with exit status 0, with what ok3d check printed." width="700">
 </picture>
 
 Home is where you start and finish each change:
@@ -56,7 +56,7 @@ Home is where you start and finish each change:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../images/screenshots/dashboard-setup-dark.png">
-  <img src="../images/screenshots/dashboard-setup-light.png" alt="The Dashboard's Setup page: four ready-made setups as cards (Basic NOC, marked as the setup now; Network NOC, which needs the UniFi controller's address first; NOC with logs, coming in 0.6; and NOC with agents, coming in 0.9), then each part (UniFi, off until its controller's address is set, and the rest coming in later releases), then where alerts go, each with a button: ntfy (off), email (on), and the dead man's switch (off)." width="700">
+  <img src="../images/screenshots/dashboard-setup-light.png" alt="The Dashboard's Setup page: four ready-made setups as cards (Basic NOC, marked as the setup now; Network NOC, which needs the UniFi controller's address first; NOC with logs, coming in 0.6; and NOC with agents, coming in 0.9), then each part (UniFi, off until its controller's address is set, and the rest coming in later releases), then where alerts go: ntfy, email, and the dead man's switch, each off, with a Turn on button." width="700">
 </picture>
 
 Choose a ready-made setup, or switch the parts on and off yourself:

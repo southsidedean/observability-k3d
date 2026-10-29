@@ -104,12 +104,8 @@ def run(tmp_path: Path, *args: str, settings: str | None = None, devices: str | 
 
 
 def setup_settings() -> str:
-    """The settings scripts/screenshots.sh --setup makes: the example's, and the block its
-    heredoc adds (with the heredoc's leading tabs taken off, as <<- does)."""
-    script = (ROOT / "scripts" / "screenshots.sh").read_text()
-    block = script.split("\tcat <<-'EOF'\n", 1)[1].split("\tEOF\n", 1)[0]
-    return (ROOT / "settings.example.yaml").read_text() + "".join(
-        line.lstrip("\t") + "\n" for line in block.split("\n")[:-1])
+    """The settings scripts/screenshots.sh --setup makes: the example's."""
+    return (ROOT / "settings.example.yaml").read_text()
 
 
 # Settings that aren't exactly what --setup makes: each could put a real network in a picture.
@@ -117,8 +113,7 @@ NOT_SETUP = {
     "a real domain": lambda s: s.replace("domain: noc.home.arpa", "domain: my-server.lan"),
     "the domain twice, the real one last": lambda s: s.replace("  domain: noc.home.arpa\n",
                                                                "  domain: noc.home.arpa\n  domain: my-server.lan\n"),
-    "a real email address": lambda s: s.replace("to: you@example.com", "to: someone@example.org"),
-    "the example alone": lambda s: (ROOT / "settings.example.yaml").read_text(),
+    "an email address": lambda s: s + "alerts:\n  email:\n    enabled: true\n    to: someone@example.org\n",
 }  # fmt: skip
 
 
