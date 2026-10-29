@@ -43,10 +43,11 @@ MAX_CONNECTIONS = 32
 # %0D%0A).
 MAX_FORM = 4096
 MAX_FILE_FORM = 6 * 64 * 1024 + 1024
-# A body that's refused is read and thrown away first if it's at most this big, and arrives
-# within DISCARD_TIME seconds (see discard_body). A bigger one is refused straight away.
+# A body that's refused is read and thrown away first if it's at most this big (see
+# discard_body). A bigger one is refused straight away.
 MAX_DISCARD = 1024 * 1024
-DISCARD_TIME = 30
+# Seconds a form's body may take to arrive, however it's sent (see read_body).
+BODY_TIME = 30
 
 HEADERS = {
     "Content-Security-Policy": "default-src 'none'; style-src 'self'; img-src 'self'; form-action 'self'; "
@@ -498,20 +499,29 @@ class Handler(BaseHTTPRequestHandler):
             return origin in (o.lower() for o in self.config.origins)
         return bool(host) and origin == f"https://{host}"
 
+    def read_body(self, length: int) -> bytes | None:
+        """A body of length bytes, or None if it hasn't all come within BODY_TIME seconds. Each
+        read takes whatever has arrived, so the time is checked after every piece, and a client
+        sending a byte at a time can't keep a thread for long."""
+        deadline = time.monotonic() + BODY_TIME
+        parts, left = [], length
+        while left > 0:
+            if time.monotonic() >= deadline or not (chunk := self.rfile.read1(min(left, 65536))):
+                return None
+            parts.append(chunk)
+            left -= len(chunk)
+        return b"".join(parts)
+
     def discard_body(self) -> None:
         """Reads a body that won't be used, and throws it away. Refused and closed before the
         browser has sent it all, the connection would be reset, and the browser would show that
-        instead of the refusal. It stops after DISCARD_TIME seconds, however slowly the body
-        comes, so a client sending a byte at a time can't keep a thread for long."""
+        instead of the refusal."""
         try:
-            left = int(self.headers.get("Content-Length", "0"))
+            length = int(self.headers.get("Content-Length", "0"))
         except ValueError:
             return
-        if left > MAX_DISCARD:
-            return
-        deadline = time.monotonic() + DISCARD_TIME
-        while left > 0 and time.monotonic() < deadline and (chunk := self.rfile.read1(min(left, 65536))):
-            left -= len(chunk)
+        if 0 < length <= MAX_DISCARD:
+            self.read_body(length)
 
     def read_form(self, limit: int = 0) -> dict[str, str] | None:
         try:
@@ -524,8 +534,8 @@ class Handler(BaseHTTPRequestHandler):
         if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/x-www-form-urlencoded":
             self.discard_body()
             return None
-        body = self.rfile.read(length)
-        if len(body) != length:
+        body = self.read_body(length)
+        if body is None:
             return None
         try:
             fields = urllib.parse.parse_qs(body.decode("ascii"), max_num_fields=10, errors="strict")
