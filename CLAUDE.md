@@ -112,12 +112,12 @@ scripts/screenshots.sh [--setup]                   # on a test VM; --setup on a 
   `*secret*` (even a description of one) counts as a secret, and so does anything it flows
   into, such as a log line. Choose names accordingly.
 - Releases: user-facing changes go under the next version in `CHANGELOG.md`, marked
-  unreleased. The release pull request sets the version (`src/ok3d/__init__.py`, and
-  `version` and `appVersion` in both `chart/*/Chart.yaml`, as `X.Y.Z`, or `X.Y.Z-dev0` and
-  `X.Y.Z.dev0` between releases), the date, and the roadmap's status; then the signed tag,
-  `gh release create` with that changelog section as the notes, a check that the Dashboard's
-  image (and, once it exists, the in-cluster one) was published for amd64 and arm64 and
-  scanned, and a "Start X.Y.Z.dev0" pull request.
+  unreleased. The release pull request sets the version to `X.Y.Z` (`src/ok3d/__init__.py`,
+  and `version` and `appVersion` in both `chart/*/Chart.yaml`), the date, and the roadmap's
+  status; then the signed tag, `gh release create` with that changelog section as the notes,
+  a check that the Dashboard's image (and, once it exists, the in-cluster one) was published
+  for amd64 and arm64 and scanned, and a "Start X.Y.Z.dev0" pull request, which moves the
+  same places on (`X.Y.Z.dev0`, and `X.Y.Z-dev0` for the charts' `version`).
 
 ## Privacy (public repository)
 
@@ -128,12 +128,13 @@ notes. Examples use stand-ins: `192.168.1.20`, `192.0.2.x`, `fd00::5`, `my-serve
 committed.
 
 Check pull request bodies and release notes against it before posting, with this, run in
-`sh`. It exits 0 only when it's safe to post: a match, a missing body, or a missing list (in a
-fresh clone, say) all refuse. It finds the list from a worktree too, where `.git` is a file.
+`sh`. It exits 0 only when it's safe to post: a match, a missing body, or a missing or empty
+list (in a fresh clone, say) all refuse. It finds the list from a worktree too, where `.git` is a file.
 
 ```sh
 names="$(git rev-parse --path-format=absolute --git-common-dir)/hooks/private-names"
-[ -s "$names" ] && { grep -v -e '^#' -e '^[[:space:]]*$' "$names" | grep -i -E -f - body.md; [ $? -eq 1 ]; }
+patterns=$(grep -v -e '^#' -e '^[[:space:]]*$' "$names")
+[ -n "$patterns" ] && { printf '%s\n' "$patterns" | grep -i -E -f - body.md; [ $? -eq 1 ]; }
 ```
 
 Never show raw logs or command output from a machine watching a real network: they can hold
@@ -175,8 +176,8 @@ keeps backups) are gitignored; the first three have commented examples
   test that could pass by luck (a race, a clock, a timeout) is made to fail for the right
   reason instead.
 - Shell scripts are POSIX `sh`. The Dashboard, the helper, and the simulated network's
-  devices are Python, with only the standard library; the in-cluster tools (from 0.9) will
-  be Python too.
+  devices are Python, with only the standard library; the in-cluster tools (from 0.7) will
+  be Python too (PLAN.md, Images and language).
 - Anything a stranger or another program can send (a form, a file the Dashboard saves, the
   helper's requests) is untrusted: check it whole, with `re.fullmatch` (a `$` lets a final
   line break through), and put a limit on its size and on how long it may take.
