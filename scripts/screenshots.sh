@@ -115,5 +115,5 @@ docker run --rm --network host --ipc host --user "$(id -u):$(id -g)" --env HOME=
 		PYTHONPATH=/tmp/packages exec python3 -P /screenshots.py "$@"' screenshots \
 	--shots /shots.json --out /out --version "$version" \
 	--domain "$domain" --https-port "${https_port:-8443}" --dashboard-port "${dashboard_port:-8444}" \
-	--home "$HOME" --dashboard-password /dashboard-password --grafana-password /grafana-password
+	--home-folder "$HOME" --dashboard-password /dashboard-password --grafana-password /grafana-password
 echo "Done. Look at each picture in images/screenshots/ before committing them, with IMAGES_CHECKED=1."

@@ -109,8 +109,8 @@ def take(args: argparse.Namespace) -> None:
     from playwright.sync_api import sync_playwright  # type: ignore[import-not-found]  # only in its image
 
     config = load_shots(args.shots)
-    if not args.home.startswith("/") or args.home.rstrip("/") == "":
-        raise SystemExit("--home must be a full path, and not /.")
+    if not args.home_folder.startswith("/") or args.home_folder.rstrip("/") == "":
+        raise SystemExit("--home-folder must be a full path, and not /.")
     dashboard = address("dashboard", args.domain, args.dashboard_port)
     grafana = address("grafana", args.domain, args.https_port)
     sources: dict[str, str] = {}
@@ -161,7 +161,7 @@ def take(args: argparse.Namespace) -> None:
                 on.wait_for_load_state("networkidle")
                 # Grafana draws its panels after the data arrives.
                 on.wait_for_timeout(3000 if shot["site"] == "grafana" else 300)
-                on.evaluate(TILDE, args.home)
+                on.evaluate(TILDE, args.home_folder)
                 left = home_folders(on.inner_text("body"))
                 if left:
                     raise SystemExit(f"{shot['name']}: the page still shows a home folder ({', '.join(left)}), "
@@ -185,7 +185,7 @@ def main() -> None:
     parser.add_argument("--domain", required=True)
     parser.add_argument("--https-port", required=True)
     parser.add_argument("--dashboard-port", required=True)
-    parser.add_argument("--home", required=True, help="your home folder, which pages show as ~")
+    parser.add_argument("--home-folder", required=True, help="your home folder, which pages show as ~")
     parser.add_argument("--dashboard-password", type=Path, required=True, help="a file holding it")
     parser.add_argument("--grafana-password", type=Path, required=True, help="a file holding it")
     take(parser.parse_args())

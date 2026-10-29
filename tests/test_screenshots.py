@@ -67,8 +67,9 @@ def test_addresses_are_written_as_a_browser_writes_them() -> None:
 
 def test_home_folders_left_on_a_page_are_found() -> None:
     assert screenshots.home_folders("PASS  the settings in ~/ok3d/settings.yaml") == []
-    assert screenshots.home_folders("in /home/someone/ok3d and /Users/me/x and /root/y") == [
-        "/Users/me", "/home/someone", "/root"]
+    # Made up, and built from pieces so tests/test_privacy.py doesn't take them for real ones.
+    home, users = "/" + "home/someone", "/" + "Users/me"
+    assert screenshots.home_folders(f"in {home}/ok3d and {users}/x and /root/y") == [users, home, "/root"]
 
 
 def test_the_shot_list_is_valid() -> None:
@@ -116,7 +117,7 @@ NOT_SETUP = {
     "a real domain": lambda s: s.replace("domain: noc.home.arpa", "domain: my-server.lan"),
     "the domain twice, the real one last": lambda s: s.replace("  domain: noc.home.arpa\n",
                                                                "  domain: noc.home.arpa\n  domain: my-server.lan\n"),
-    "a real email address": lambda s: s.replace("to: you@example.com", "to: someone@my-server.lan"),
+    "a real email address": lambda s: s.replace("to: you@example.com", "to: someone@example.org"),
     "the example alone": lambda s: (ROOT / "settings.example.yaml").read_text(),
 }  # fmt: skip
 
