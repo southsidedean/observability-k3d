@@ -46,5 +46,5 @@ release and the reasons behind it.
 | The Dashboard's setup cards, module switches, and What's next | Done ([#27](https://github.com/southsidedean/observability-k3d/pull/27)) |
 | Screenshots of the pages for the docs (`scripts/screenshots.sh` on the test VM) | In progress |
 | The Dashboard answers every refused form, and every form has a time limit | Done ([#30](https://github.com/southsidedean/observability-k3d/pull/30)) |
-| A time limit on each whole request to the Dashboard, its headers too | Planned |
+| A time limit on each whole request to the Dashboard, its headers too | In progress |
 | Release 0.5.0, tested from a bare test VM with the installer and the Dashboard alone | Planned |

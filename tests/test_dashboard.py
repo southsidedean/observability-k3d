@@ -316,6 +316,44 @@ def test_connections_beyond_the_limit_are_closed(dash: Dashboard, monkeypatch: p
         pytest.fail("it didn't serve again after the idle connections closed")
 
 
+@pytest.mark.parametrize("where", ["handshake", "headers"])
+def test_a_slow_request_doesnt_keep_its_thread(dash: Dashboard, monkeypatch: pytest.MonkeyPatch, where: str) -> None:
+    # A byte at a time, each well within the limit on one read, but never finishing.
+    import ok3d.dashboard.server as server_module
+
+    monkeypatch.setattr(server_module, "REQUEST_TIME", 1)
+    raw = socket.create_connection(("127.0.0.1", dash.port))
+    conn: socket.socket = raw
+    if where == "headers":
+        context = ssl.create_default_context()
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+        context.minimum_version = ssl.TLSVersion.TLSv1_2
+        conn = context.wrap_socket(raw)
+    # A TLS record that says 16 KB is coming, or a request line, then a byte at a time.
+    drip = b"\x16\x03\x01\x40\x00" + b"\x00" * 500 if where == "handshake" else b"GET / HTTP/1.0\r\nX-Slow: " + b"x" * 500
+    started = time.monotonic()
+    closed = False
+    try:
+        for byte in drip:
+            conn.sendall(bytes([byte]))
+            conn.settimeout(0.3)
+            try:
+                if conn.recv(1) == b"":
+                    closed = True
+                    break
+            except TimeoutError:
+                pass
+            if time.monotonic() - started > 8:
+                break
+    except OSError:
+        closed = True
+    finally:
+        conn.close()
+    assert closed
+    assert time.monotonic() - started < 5
+
+
 def test_another_apps_odd_cookie_doesnt_sign_you_out(dash: Dashboard) -> None:
     session = dash.sign_in()
     response = dash.request("GET", "/", headers={"Cookie": f'a={{"x":1}}; {COOKIE}={session}; b=2'})
