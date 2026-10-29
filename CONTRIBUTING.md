@@ -27,13 +27,24 @@ each push, they run every check.
 
 Make a file at `.git/hooks/private-names` with your own host names, domains, and addresses,
 one pattern per line (`#` starts a comment). It stays on your machine. The pre-commit hook
-and the privacy tests refuse anything that matches it:
+and the privacy tests refuse anything that matches it, and say which file and line without
+repeating the name:
 
 ```text
 # my own names
 myserver
 mydomain\.example
 192\.168\.42\.
+```
+
+A line that's a plain name (letters, digits, spaces, `-`, and `_`) also matches the other
+ways it gets written: `my-server` matches `my_server`, `myserver`, and `My Server`, and
+`box2` matches `box-2`. Anything else, like the address above, is used as written.
+
+Before posting a pull request's description or release notes, check them the same way:
+
+```sh
+scripts/private-names.sh check notes.md   # exits 0 only when the file is clean
 ```
 
 In the repository, examples use stand-ins instead: addresses like `192.168.1.20`,

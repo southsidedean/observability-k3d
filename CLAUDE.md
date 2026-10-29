@@ -127,15 +127,12 @@ notes. Examples use stand-ins: `192.168.1.20`, `192.0.2.x`, `fd00::5`, `my-serve
 `noc.home.arpa`. The user's own names live in `.git/hooks/private-names`, which is never
 committed.
 
-Check pull request bodies and release notes against it before posting, with this, run in
-`sh`. It exits 0 only when it's safe to post: a match, a missing body, or a missing or empty
-list (in a fresh clone, say) all refuse. It finds the list from a worktree too, where `.git` is a file.
-
-```sh
-names="$(git rev-parse --path-format=absolute --git-common-dir)/hooks/private-names"
-patterns=$(grep -v -e '^#' -e '^[[:space:]]*$' "$names")
-[ -n "$patterns" ] && { printf '%s\n' "$patterns" | grep -i -E -f - body.md; [ $? -eq 1 ]; }
-```
+Check pull request bodies and release notes with `scripts/private-names.sh check body.md`
+before posting, and post only when it exits 0. A match, a missing body, or a missing or empty
+list (in a fresh clone, say) all exit non-zero. It says which line matched, never the text,
+and finds the list from a worktree too. The commit hook and `tests/test_privacy.py` use the
+same patterns, so each plain name also matches its other spellings (`media-box` matches
+`media_box` and `MediaBox`, `box9` matches `box-9`).
 
 Never show raw logs or command output from a machine watching a real network: they can hold
 the UniFi key, the ntfy topic, the mail password, or addresses. Redact first, or say what

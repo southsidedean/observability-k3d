@@ -19,6 +19,9 @@ def repo(tmp_path: Path) -> Path:
     """A new repository on a work branch, with the hooks turned on and one first commit."""
     hooks = tmp_path / "hooks"
     shutil.copytree(ROOT / ".githooks", hooks)
+    # The hook finds its name check next to it, as in the repository.
+    (tmp_path / "scripts").mkdir()
+    shutil.copy2(ROOT / "scripts" / "private-names.sh", tmp_path / "scripts")
     work = tmp_path / "repo"
     work.mkdir()
     for args in (
@@ -140,3 +143,51 @@ def test_an_image_needs_images_checked(repo: Path) -> None:
     assert result.returncode == 1
     assert "IMAGES_CHECKED=1" in result.stderr
     assert commit(repo, IMAGES_CHECKED="1").returncode == 0
+
+
+@pytest.mark.parametrize(("listed", "written"), [
+    ("media-box", "media_box"), ("media-box", "MediaBox"), ("media-box", "media.box"),
+    ("media box", "media-box"), ("box9", "box-9"), ("box9", "BOX 9"),
+])  # fmt: skip
+def test_a_private_name_is_refused_however_it_is_written(repo: Path, listed: str, written: str) -> None:
+    names = Path(git(repo, "rev-parse", "--absolute-git-dir").stdout.strip()) / "hooks" / "private-names"
+    names.write_text(f"{listed}\n")
+    add(repo, "notes.md", f"First line.\nGrafana runs on {written}.\n")
+    result = commit(repo)
+    assert result.returncode == 1
+    assert "notes.md: line 2" in result.stderr
+    # It says where, not what.
+    assert written.lower() not in result.stderr.lower()
+
+
+def test_without_its_name_check_the_hook_refuses(repo: Path) -> None:
+    names = Path(git(repo, "rev-parse", "--absolute-git-dir").stdout.strip()) / "hooks" / "private-names"
+    names.write_text("myrealhost\n")
+    (repo.parent / "scripts" / "private-names.sh").unlink()
+    add(repo, "notes.md", "Nothing private here.\n")
+    result = commit(repo)
+    assert result.returncode == 1
+    assert "private-names.sh" in result.stderr
+
+
+def check(repo: Path, *files: str) -> subprocess.CompletedProcess[str]:
+    """scripts/private-names.sh check, run in the test repository."""
+    return subprocess.run(["sh", str(ROOT / "scripts" / "private-names.sh"), "check", *files], cwd=repo,
+                          capture_output=True, text=True, check=False)  # fmt: skip
+
+
+def test_the_name_check_passes_only_clean_text(repo: Path) -> None:
+    names = Path(git(repo, "rev-parse", "--absolute-git-dir").stdout.strip()) / "hooks" / "private-names"
+    (repo / "clean.md").write_text("Grafana runs on my-server.lan.\n")
+    (repo / "named.md").write_text("Grafana runs on my_real_host.\n")
+    assert check(repo, "clean.md").returncode == 2  # no list: it can't check, so it doesn't pass
+    names.write_text("# only a comment\n\n")
+    assert check(repo, "clean.md").returncode == 2  # nor with a list of no patterns
+    names.write_text("my-real-host\n")
+    assert check(repo, "clean.md").returncode == 0
+    named = check(repo, "named.md")
+    assert named.returncode == 1
+    assert "named.md: a private name on line 1" in named.stderr
+    assert "real" not in named.stderr
+    assert check(repo, "clean.md", "missing.md").returncode == 2
+    assert check(repo).returncode == 2  # no files: the usage

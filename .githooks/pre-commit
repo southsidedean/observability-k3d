@@ -6,7 +6,8 @@
 #   2. adds anyone's own setup or a key (settings.yaml, devices.yaml, .env, local/, ...),
 #   3. adds a line that looks like a secret,
 #   4. adds a private name: your own host names, domains, and addresses, listed one pattern
-#      per line in .git/hooks/private-names, a file that stays on your machine,
+#      per line in .git/hooks/private-names, a file that stays on your machine
+#      (scripts/private-names.sh does the matching),
 #   5. adds or changes an image without IMAGES_CHECKED=1, which says every image was looked
 #      at and its metadata stripped.
 # A real emergency can skip it with git commit --no-verify.
@@ -45,29 +46,35 @@ if [ -n "$secrets" ]; then
 	exit 1
 fi
 
-# 4. Private names. Lines starting with # in the list are comments. grep exits 1 when
-# nothing matches, which is the good case.
-# The main repository's list, from a worktree too (where .git is a file, and --git-dir is the
-# worktree's own folder, which has no hooks).
-names="$(git rev-parse --path-format=absolute --git-common-dir)/hooks/private-names"
-if [ -s "$names" ]; then
-	patterns=$(grep -v -e '^#' -e '^[[:space:]]*$' "$names" || true)
-	if [ -n "$patterns" ]; then
-		# One pattern at a time, so a bad pattern in the list can't hide the others.
-		found=""
-		while IFS= read -r pattern; do
-			hit=$(printf '%s\n' "$added" | grep -i -E -e "$pattern" || true)
-			[ -n "$hit" ] && found="$found$hit
+# 4. Private names, from the list, in each file as it's staged (scripts/private-names.sh,
+# which also matches a name written with other separators). It says which file and line, not
+# the text, so the name isn't shown wherever this output goes. No list, no check: a fresh
+# clone or CI has none, and the tests' own checks still run.
+names=$(dirname "$0")/../scripts/private-names.sh
+list="$(git rev-parse --path-format=absolute --git-common-dir)/hooks/private-names"
+if [ -s "$list" ] && [ ! -f "$names" ]; then
+	echo "There's a private-names list, but not $names to check it with." >&2
+	exit 1
+fi
+if [ -f "$names" ] && sh "$names" patterns >/dev/null 2>&1; then
+	work=$(mktemp -d)
+	trap 'rm -rf "$work"' EXIT
+	found=""
+	while IFS= read -r file; do
+		[ -n "$file" ] || continue
+		git show ":$file" >"$work/staged" 2>/dev/null || continue
+		if ! sh "$names" check "$work/staged" 2>"$work/said"; then
+			found="$found  $file: $(sed -n 's/^.*: a private name on //p' "$work/said")
 "
-		done <<EOF
-$patterns
-EOF
-		if [ -n "$found" ]; then
-			echo "These lines name something from your private-names list. Use a stand-in" >&2
-			echo "(192.168.1.20, my-server.lan, noc.home.arpa) instead:" >&2
-			printf '%s' "$found" | sed 's/^/  /' >&2
-			exit 1
 		fi
+	done <<EOF
+$staged
+EOF
+	if [ -n "$found" ]; then
+		echo "These name something from your private-names list. Use a stand-in" >&2
+		echo "(192.168.1.20, my-server.lan, noc.home.arpa) instead:" >&2
+		printf '%s' "$found" >&2
+		exit 1
 	fi
 fi
 
