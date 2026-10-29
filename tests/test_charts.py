@@ -15,6 +15,8 @@ from typing import Any
 
 import pytest
 
+from ok3d.dashboard import switches
+
 ROOT = Path(__file__).resolve().parent.parent
 CHART = ROOT / "chart" / "ok3d"
 EXAMPLE = ROOT / "settings.example.yaml"
@@ -535,3 +537,22 @@ def test_grafana_gets_time_for_its_first_start() -> None:
             assert doc["spec"]["progressDeadlineSeconds"] >= 1800
             return
     pytest.fail("no Grafana Deployment")
+
+
+@pytest.mark.parametrize("card", [c for c in switches.CARDS if c.available], ids=lambda c: c.id)
+def test_every_setup_card_makes_settings_that_validate_and_render(tmp_path: Path, card: switches.Card) -> None:
+    # As the Setup page makes them, from the example with UniFi's address filled in, which a
+    # card that turns UniFi on needs first.
+    current = tmp_path / "current.yaml"
+    current.write_text(EXAMPLE.read_text() + "unifi:\n  url: https://192.168.1.1\n")
+    text = current.read_text()
+    for setting, on in card.changes().items():
+        text = switches.set_flag(text, switches.SWITCHES[setting].path, on)
+    settings = tmp_path / "settings.yaml"
+    settings.write_text(text)
+    # As the helper checks a save from the Dashboard: nothing only the server may change, changed.
+    result = ok3d_validate("settings", str(settings), "--from-dashboard", settings=current)
+    assert result.returncode == 0, result.stdout + result.stderr
+    rendered = helm("template", "ok3d", str(CHART), "--namespace", "monitoring", "--values", str(settings))
+    assert rendered.returncode == 0, rendered.stderr
+    assert any("name: unpoller" in d for d in documents(rendered.stdout, "Deployment")) is ("modules.unifi" in card.on)

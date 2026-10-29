@@ -522,6 +522,13 @@ cmd_apply() {
 		echo "The admin password is in $DATA_ROOT/admin-password."
 	fi
 	echo "Point *.$DOMAIN at this computer in your router or local DNS server (docs/certificate.md)."
+	# When it worked, for the Dashboard's What's next, in the helper's folder once the
+	# installer has made it (docs/dashboard-under-the-hood.md).
+	if [ -d "$DATA_ROOT/helper" ] && [ ! -L "$DATA_ROOT/helper" ]; then
+		rm -f "$DATA_ROOT/helper/.applied.tmp"
+		date -u +%Y-%m-%dT%H:%M:%SZ >"$DATA_ROOT/helper/.applied.tmp"
+		mv -f "$DATA_ROOT/helper/.applied.tmp" "$DATA_ROOT/helper/applied"
+	fi
 }
 
 # The Dashboard's certificate, issued by ok3d's certificate authority for dashboard.<domain>,
@@ -719,6 +726,8 @@ cmd_delete() {
 		fi
 	fi
 	k3d cluster delete "$CLUSTER_NAME"
+	# The Dashboard's What's next is for a cluster that's there.
+	rm -f "$DATA_ROOT/helper/applied"
 	echo "Deleted. Everything in $DATA_ROOT is still there: ./ok3d apply brings the cluster back."
 }
 

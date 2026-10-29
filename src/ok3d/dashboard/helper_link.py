@@ -87,6 +87,12 @@ def current(helper: Path, name: str) -> str | None:
     return read(helper / f"current-{name}")
 
 
+def applied(helper: Path) -> str | None:
+    """When the last Apply that worked finished, as the helper wrote it; None before one has."""
+    text = (read(helper / "applied") or "").strip()
+    return text if re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", text) else None
+
+
 def env_set(helper: Path) -> set[str]:
     return set((read(helper / "env-set") or "").split())
 

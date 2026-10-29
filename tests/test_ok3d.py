@@ -7,6 +7,7 @@ tested on the test VM: PLAN.md, "The test VM".)
 from __future__ import annotations
 
 import os
+import re
 import stat
 import subprocess
 from pathlib import Path
@@ -361,6 +362,25 @@ def test_delete_with_yes_deletes_the_cluster_and_keeps_the_data(env: dict[str, s
     assert result.returncode == 0
     assert "k3d cluster delete ok3d" in calls(env)
     assert keep.is_dir()
+
+
+def test_an_apply_that_works_is_recorded_for_whats_next_and_delete_clears_it(env: dict[str, str]) -> None:
+    helper = Path(env["FAKE_DATA_ROOT"]) / "helper"
+    assert ok3d(env, "apply").returncode == 0
+    assert not helper.exists()  # not made here: the installer makes it
+    helper.mkdir()
+    assert ok3d(env, "apply").returncode == 0
+    assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ\n", (helper / "applied").read_text())
+    assert ok3d(env, "delete", "--yes").returncode == 0
+    assert not (helper / "applied").exists()
+
+
+def test_an_apply_that_fails_isnt_recorded(env: dict[str, str]) -> None:
+    helper = Path(env["FAKE_DATA_ROOT"]) / "helper"
+    helper.mkdir()
+    result = ok3d(env | {"FAKE_DOCKER_STATUS": "1"}, "apply")
+    assert result.returncode != 0
+    assert not (helper / "applied").exists()
 
 
 def test_an_unknown_command_shows_the_usage(env: dict[str, str]) -> None:
