@@ -9,8 +9,10 @@ frames, stop other sites' scripts, and keep it out of caches. A form is accepted
 the Dashboard's own pages: every POST must come with an Origin header naming the Dashboard
 (and, from browsers that send it, Sec-Fetch-Site: same-origin). GET never changes anything.
 
-A slow or silent client can't hold it up: each connection's TLS handshake happens in its own
-thread, with a time limit, every connection has a time limit, and only so many run at once.
+A slow or silent client can't hold it up for long: each connection's TLS handshake happens in
+its own thread, with a time limit; every read has a time limit, and a form's body has one of
+its own; and only so many connections run at once. The request line and headers have only the
+limit on each read, so a client that sends them very slowly still keeps its thread.
 """
 
 from __future__ import annotations
@@ -43,6 +45,11 @@ MAX_CONNECTIONS = 32
 # %0D%0A).
 MAX_FORM = 4096
 MAX_FILE_FORM = 6 * 64 * 1024 + 1024
+# A body that's refused is read and thrown away first if it's at most this big (see
+# discard_body). A bigger one is refused straight away.
+MAX_DISCARD = 1024 * 1024
+# Seconds a form's body may take to arrive, however it's sent (see read_body).
+BODY_TIME = 30
 
 HEADERS = {
     "Content-Security-Policy": "default-src 'none'; style-src 'self'; img-src 'self'; form-action 'self'; "
@@ -496,17 +503,43 @@ class Handler(BaseHTTPRequestHandler):
             return origin in (o.lower() for o in self.config.origins)
         return bool(host) and origin == f"https://{host}"
 
+    def read_body(self, length: int) -> bytes | None:
+        """A body of length bytes, or None if it hasn't all come within BODY_TIME seconds. Each
+        read takes whatever has arrived, so the time is checked after every piece, and a client
+        sending a byte at a time keeps a thread for BODY_TIME, plus TIMEOUT for the last read."""
+        deadline = time.monotonic() + BODY_TIME
+        parts, left = [], length
+        while left > 0:
+            if time.monotonic() >= deadline or not (chunk := self.rfile.read1(min(left, 65536))):
+                return None
+            parts.append(chunk)
+            left -= len(chunk)
+        return b"".join(parts)
+
+    def discard_body(self) -> None:
+        """Reads a body that won't be used, and throws it away. Refused and closed before the
+        browser has sent it all, the connection would be reset, and the browser would show that
+        instead of the refusal."""
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            return
+        if 0 < length <= MAX_DISCARD:
+            self.read_body(length)
+
     def read_form(self, limit: int = 0) -> dict[str, str] | None:
         try:
             length = int(self.headers.get("Content-Length", ""))
         except ValueError:
             return None
         if not 0 <= length <= (limit or MAX_FORM):
+            self.discard_body()
             return None
         if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/x-www-form-urlencoded":
+            self.discard_body()
             return None
-        body = self.rfile.read(length)
-        if len(body) != length:
+        body = self.read_body(length)
+        if body is None:
             return None
         try:
             fields = urllib.parse.parse_qs(body.decode("ascii"), max_num_fields=10, errors="strict")
@@ -537,6 +570,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         path = urllib.parse.urlsplit(self.path).path
         if not self.same_origin():
+            self.discard_body()
             self.send(403, page("Refused", "<section><h2>Refused</h2><p>That form didn't come from "
                                 "this Dashboard.</p></section>"))  # fmt: skip
             return
@@ -547,10 +581,12 @@ class Handler(BaseHTTPRequestHandler):
             self.redirect("/sign-in", {"Set-Cookie": f"{COOKIE}=; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=0"})
         elif path in ACTIONS:
             if not self.signed_in():
+                self.discard_body()
                 self.redirect("/sign-in")
                 return
             ACTIONS[path](self)
         else:
+            self.discard_body()
             self.send(404, page("Not found", "<section><h2>Not found</h2></section>", self.signed_in()))
 
     def sign_in(self) -> None:
@@ -605,6 +641,7 @@ class Handler(BaseHTTPRequestHandler):
 
         try:
             if int(self.headers.get("Content-Length", "0")) > MAX_FILE_FORM:
+                self.discard_body()
                 self.send(413, page(title, render(self.config, "That's bigger than 64 KB."), True))
                 return
         except ValueError:

@@ -515,6 +515,94 @@ def test_a_file_too_big_isnt_sent(ready: Dashboard) -> None:
     assert not (ready.state / "outbox" / "request").exists()
 
 
+def raw_post(dash: Dashboard, path: str, length: int, origin: str | None = None, session: str = "",
+             kind: str = "application/x-www-form-urlencoded") -> ssl.SSLSocket:  # fmt: skip
+    """A TLS connection that has sent a POST's headers, saying the body is length bytes, and none of it."""
+    context = ssl.create_default_context()
+    context.check_hostname = False
+    context.verify_mode = ssl.CERT_NONE
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+    lines = [f"POST {path} HTTP/1.1", f"Host: 127.0.0.1:{dash.port}",
+             f"Origin: {origin or f'https://127.0.0.1:{dash.port}'}",
+             f"Content-Type: {kind}", f"Content-Length: {length}"]  # fmt: skip
+    if session:
+        lines.append(f"Cookie: {COOKIE}={session}")
+    conn = context.wrap_socket(socket.create_connection(("127.0.0.1", dash.port)))
+    conn.sendall(("\r\n".join(lines) + "\r\n\r\n").encode())
+    return conn
+
+
+def answer_of(conn: ssl.SSLSocket) -> bytes:
+    conn.settimeout(10)
+    answer = b""
+    while chunk := conn.recv(65536):
+        answer += chunk
+    conn.close()
+    return answer
+
+
+# Every refusal that comes before a form is used: a file too big, a form too big or of the
+# wrong kind, no session, a form from elsewhere, and a page that isn't there.
+FORM = "application/x-www-form-urlencoded"
+REFUSALS = {
+    "a file too big": ("/devices", 420_000, None, True, FORM, 413),
+    "a form too big": ("/sign-in", 420_000, None, False, FORM, 400),
+    "a form of the wrong kind": ("/sign-in", 3000, None, False, "text/plain", 400),
+    "no session": ("/devices", 300_000, None, False, FORM, 303),
+    "from elsewhere": ("/devices", 300_000, "https://example.com", True, FORM, 403),
+    "not there": ("/nowhere", 300_000, None, True, FORM, 404),
+}
+
+
+@pytest.mark.parametrize(("path", "size", "origin", "signed_in", "kind", "status"), REFUSALS.values(),
+                         ids=REFUSALS.keys())  # fmt: skip
+def test_a_refused_form_is_read_before_its_refused(ready: Dashboard, path: str, size: int, origin: str | None,
+                                                   signed_in: bool, kind: str, status: int) -> None:  # fmt: skip
+    # Refused straight away and closed, the browser would still be sending, and would show a
+    # reset connection instead of the refusal. So the server reads the body first.
+    conn = raw_post(ready, path, size, origin, ready.sign_in() if signed_in else "", kind)
+    conn.settimeout(1)
+    with pytest.raises(TimeoutError):
+        conn.recv(1)  # nothing yet: it's waiting for the body
+    conn.sendall(b"x" * size)
+    assert answer_of(conn).startswith(f"HTTP/1.0 {status} ".encode())
+
+
+def test_a_body_too_big_to_read_is_refused_straight_away(ready: Dashboard) -> None:
+    from ok3d.dashboard.server import MAX_DISCARD
+
+    conn = raw_post(ready, "/devices", MAX_DISCARD + 1, session=ready.sign_in())
+    assert answer_of(conn).startswith(b"HTTP/1.0 413 ")
+
+
+def test_a_negative_length_gets_an_answer(dash: Dashboard) -> None:
+    assert answer_of(raw_post(dash, "/sign-in", -5)).startswith(b"HTTP/1.0 400 ")
+
+
+# A form sent slowly: one to be thrown away (too big), and one within the limit, to be read.
+@pytest.mark.parametrize("size", [100_000, 4000], ids=["refused", "read"])
+def test_a_slow_body_doesnt_keep_its_thread(ready: Dashboard, monkeypatch: pytest.MonkeyPatch, size: int) -> None:
+    from ok3d.dashboard import server as server_module
+
+    monkeypatch.setattr(server_module, "BODY_TIME", 1)
+    conn = raw_post(ready, "/sign-in", size)
+    started = time.monotonic()
+    answer = b""
+    while time.monotonic() - started < 8:
+        try:
+            conn.sendall(b"x" * 10)  # a little at a time, quicker than the timeout between reads
+            conn.settimeout(0.3)
+            answer = conn.recv(65536)
+            break
+        except TimeoutError:
+            continue
+        except OSError:
+            break
+    conn.close()
+    assert time.monotonic() - started < 5
+    assert answer == b"" or answer.startswith(b"HTTP/1.0 400 ")
+
+
 def test_keys_show_only_whether_each_is_set(ready: Dashboard) -> None:
     (ready.helper / "env-set").write_text("UNIFI_API_KEY\nOK3D_ADMIN_PASSWORD\n")
     shown = body(ready.get("/keys", ready.sign_in()))

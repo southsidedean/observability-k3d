@@ -419,6 +419,9 @@ turn up. Production moves to ok3d at 0.4.0.
 - `scripts/screenshots.sh` (moved from 0.4, decided 2026-10-28), with Grafana's dashboards
   and the Dashboard's pages as its first shots, so one script covers both.
 - The helper, and its tests for every request it must refuse.
+- The Dashboard: a time limit on each whole request, its first line and headers too, not
+  only on each read, so a client sending them slowly can't keep a connection (found in the
+  review of #30).
 - Test: from a bare test VM, the installer and the Dashboard alone give the 0.4 stack, with
   no terminal after the installer, and the upgrade from 0.4 works from the Dashboard.
 
