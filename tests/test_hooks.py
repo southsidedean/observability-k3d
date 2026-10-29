@@ -256,3 +256,46 @@ def test_the_name_check_passes_only_clean_text(repo: Path) -> None:
     assert name_check(repo, "check").returncode == 2  # no files: the usage
     private_names(repo, "my(host\n")
     assert name_check(repo, "check", "clean.md").returncode == 2
+
+
+def test_a_message_line_starting_with_a_hash_is_checked_too(repo: Path) -> None:
+    # With -m, git keeps lines that start with #, and "#42 ..." is a common subject.
+    private_names(repo, "media-box\n")
+    add(repo, "notes.md", "Nothing private here.\n")
+    result = subprocess.run(["git", "commit", "-q", "-m", "#42 MediaBox fix"], cwd=repo,
+                            capture_output=True, text=True, check=False)  # fmt: skip
+    assert result.returncode == 1
+    assert "commit message" in result.stderr
+
+
+def test_a_commit_that_takes_a_name_out_can_be_made_with_v(repo: Path) -> None:
+    # git commit -v shows the diff below the message, and the diff still has the name in it.
+    add(repo, "leak.md", "Grafana runs on media-box.\n")
+    assert commit(repo).returncode == 0  # before the name was listed
+    private_names(repo, "media-box\n")
+    git(repo, "rm", "-q", "leak.md")
+    editor = "sh -c 'printf \"Take the name out\\n\" | cat - \"$1\" >\"$1.new\" && mv \"$1.new\" \"$1\"' editor"
+    result = subprocess.run(["git", "commit", "-q", "-v"], cwd=repo, capture_output=True, text=True, check=False,
+                            env={**os.environ, "GIT_EDITOR": editor})  # fmt: skip
+    assert result.returncode == 0, result.stderr
+
+
+def test_a_merge_gets_the_same_checks(repo: Path) -> None:
+    private_names(repo, "media-box\n")
+    git(repo, "switch", "-q", "-c", "side")
+    add(repo, "leak.md", "Grafana runs on media-box.\n")
+    # Committed past the hooks, as --no-verify can; the merge mustn't bring it in unchecked.
+    subprocess.run(["git", "commit", "-q", "--no-verify", "-m", "side"], cwd=repo, check=True)
+    git(repo, "switch", "-q", "work")
+    add(repo, "other.md", "Something else.\n")
+    assert commit(repo).returncode == 0
+    result = subprocess.run(["git", "merge", "-q", "--no-ff", "-m", "Merge the side branch", "side"], cwd=repo,
+                            capture_output=True, text=True, check=False)  # fmt: skip
+    assert result.returncode != 0
+    assert "private-names" in result.stderr
+
+
+def test_no_list_and_no_script_means_no_check(repo: Path) -> None:
+    (repo.parent / "scripts" / "private-names.sh").unlink()
+    add(repo, "notes.md", "Nothing private here.\n")
+    assert commit(repo).returncode == 0

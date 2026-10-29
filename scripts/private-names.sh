@@ -19,7 +19,8 @@
 # a capital. So media-box matches media_box, mediabox, media.box, media - box, and Media Box;
 # box9 matches box-9; and MediaBox matches media-box. List a name with its parts apart
 # (media-box, not mediabox): a name written as one word can't be split. Anything else, like an
-# address, is used as written.
+# address, is used as written. Matching is line by line, so a name broken across two lines
+# isn't found here; tests/test_privacy.py, which reads whole files, finds it.
 set -eu
 
 usage() {

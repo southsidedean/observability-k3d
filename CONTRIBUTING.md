@@ -32,16 +32,16 @@ which files without repeating the name:
 
 ```text
 # my own names
-my-server
+media-box
 mydomain\.example
 192\.168\.42\.
 ```
 
 A line that's a plain name (letters, digits, spaces, `-`, and `_`) also matches the other
 ways it gets written: up to three other characters may stand between its parts, so
-`my-server` matches `my_server`, `myserver`, `my - server`, and `My Server`, and `box2`
-matches `box-2`. Write a name with its parts apart, as above: `myserver` written as one word
-wouldn't match `my-server`. Anything else, like the addresses above, is used as written.
+`media-box` matches `media_box`, `mediabox`, `media - box`, and `Media Box`, and `box2`
+matches `box-2`. Write a name with its parts apart, as above: `mediabox` written as one word
+wouldn't match `media-box`. Anything else, like the addresses above, is used as written.
 
 Before posting a pull request's description or release notes, check them the same way:
 

@@ -5,9 +5,10 @@
 #   1. is on main (changes reach main only through pull requests),
 #   2. adds anyone's own setup or a key (settings.yaml, devices.yaml, .env, local/, ...),
 #   3. adds a line that looks like a secret,
-#   4. adds a private name: your own host names, domains, and addresses, listed one pattern
-#      per line in .git/hooks/private-names, a file that stays on your machine
-#      (scripts/private-names.sh does the matching; the commit-msg hook checks the message),
+#   4. would hold a private name anywhere (any file as staged, or a file's name): your own host
+#      names, domains, and addresses, listed one pattern per line in .git/hooks/private-names,
+#      a file that stays on your machine (scripts/private-names.sh does the matching; the
+#      commit-msg hook checks the message, and pre-merge-commit runs this on a merge),
 #   5. adds or changes an image without IMAGES_CHECKED=1, which says every image was looked
 #      at and its metadata stripped.
 # A real emergency can skip it with git commit --no-verify.
@@ -51,18 +52,19 @@ fi
 # 4. Private names, from the list (scripts/private-names.sh, which also matches a name written
 # with other separators), in everything the commit would hold, as staged, and in the names of
 # the files it adds or changes. git grep reads the staged content itself, whatever a file is
-# called, and takes a file for binary only when it holds a NUL byte. It says which files, not
+# called, and takes a file for binary only when it holds a NUL byte (or .gitattributes marks it
+# binary; tests/test_privacy.py reads those as text, and pre-push runs it). It says which files, not
 # the text, so the name isn't shown wherever this output goes. No list, no check: a fresh
 # clone or CI has none, and the tests' own checks still run. Anything else that goes wrong
 # stops the commit, so the check can't be skipped by mistake.
 names=$(dirname "$0")/../scripts/private-names.sh
 list="$(git rev-parse --path-format=absolute --git-common-dir)/hooks/private-names"
-if [ -s "$list" ] && [ ! -f "$names" ]; then
+if [ ! -f "$names" ] && [ -s "$list" ]; then
 	echo "There's a private-names list, but not $names to check it with." >&2
 	exit 1
 fi
-status=0
-patterns=$(sh "$names" patterns) || status=$?
+status=3
+[ ! -f "$names" ] || { status=0; patterns=$(sh "$names" patterns) || status=$?; }
 if [ "$status" -ne 0 ] && [ "$status" -ne 3 ]; then
 	echo "The private-names check couldn't run (above), so nothing was committed." >&2
 	exit 1
@@ -86,10 +88,11 @@ if [ "$status" -eq 0 ]; then
 $patterns
 EOF
 	if [ -n "$files" ] || [ "$in_names" = true ]; then
-		echo "Something from your private-names list is in this commit. Use a stand-in" >&2
-		echo "(192.168.1.20, my-server.lan, noc.home.arpa) instead." >&2
+		echo "Something from your private-names list is in what this commit would hold. Use a" >&2
+		echo "stand-in (192.168.1.20, my-server.lan, noc.home.arpa) instead." >&2
 		if [ -n "$files" ]; then
-			echo "In these files (scripts/private-names.sh check FILE says which lines):" >&2
+			echo "In these files as staged, which may include ones this commit doesn't change" >&2
+			echo "(git show :FILE >staged.txt, then scripts/private-names.sh check staged.txt, says which lines):" >&2
 			printf '%s' "$files" | sort -u | sed 's/^/  /' >&2
 		fi
 		[ "$in_names" = false ] || echo "In the name of a file being added or changed." >&2
