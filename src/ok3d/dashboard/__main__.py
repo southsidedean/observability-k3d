@@ -17,10 +17,13 @@ def main(argv: list[str] | None = None) -> None:
     # Every address inside its container; the installer publishes the port on the server.
     parser.add_argument("--host", default="0.0.0.0")  # noqa: S104  # nosec B104
     parser.add_argument("--port", type=int, default=8444)
+    parser.add_argument("--origin", action="append", default=[],
+                        help="the Dashboard's own address, such as https://my-server.lan:8444 (more than once for "
+                             "several); forms are accepted only from these")  # fmt: skip
     args = parser.parse_args(argv)
     if not args.cert.is_file() or not args.key.is_file():
         raise SystemExit(f"ok3d-dashboard: no certificate at {args.cert} and {args.key}; it serves HTTPS only")
-    server = make_server(Config(args.state, args.helper), args.host, args.port, args.cert, args.key)
+    server = make_server(Config(args.state, args.helper, tuple(args.origin)), args.host, args.port, args.cert, args.key)
     print(f"ok3d-dashboard: serving on port {args.port}", flush=True)
     server.serve_forever()
 

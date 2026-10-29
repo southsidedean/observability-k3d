@@ -9,8 +9,11 @@ unescaped.
 from __future__ import annotations
 
 import concurrent.futures
+import hashlib
 import http.client
 import json
+import re
+import urllib.parse
 import os
 import shutil
 import socket
@@ -140,7 +143,7 @@ def test_the_password_signs_you_in_with_a_safe_cookie(dash: Dashboard) -> None:
     session = cookie.split(";")[0].split("=", 1)[1]
     home = dash.get("/", session)
     assert home.status == 200
-    assert f"Version {__version__}" in body(home)
+    assert f"ok3d {__version__}" in body(home)
 
 
 def test_a_wrong_password_signs_nobody_in(dash: Dashboard) -> None:
@@ -257,7 +260,7 @@ def test_the_home_page_shows_the_helpers_last_answer_escaped(dash: Dashboard) ->
 
 
 def test_the_home_page_without_an_answer(dash: Dashboard) -> None:
-    assert "No answer from the helper yet" in body(dash.get("/", dash.sign_in()))
+    assert "None yet." in body(dash.get("/", dash.sign_in()))
 
 
 def test_plain_http_gets_nothing(dash: Dashboard) -> None:
@@ -387,3 +390,242 @@ def test_a_folder_it_cant_write_stops_it_with_a_clear_message(tmp_path: Path) ->
             Auth(tmp_path).ensure()
     finally:
         tmp_path.chmod(0o700)
+
+
+# The pages that ask the helper for something. The helper itself isn't running here: these
+# check what the Dashboard writes to its outbox, and what it shows from the helper's folder.
+
+
+def alive(dash: Dashboard) -> None:
+    from datetime import UTC, datetime
+
+    (dash.helper / "alive").write_text(datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ") + "\n")
+
+
+def outbox(dash: Dashboard) -> bytes:
+    return (dash.state / "outbox" / "request").read_bytes()
+
+
+@pytest.fixture
+def ready(dash: Dashboard) -> Dashboard:
+    (dash.state / "outbox").mkdir()
+    alive(dash)
+    return dash
+
+
+def head(data: bytes) -> dict[str, str]:
+    return dict(line.split("=", 1) for line in data.partition(b"\n\n")[0].decode().splitlines())
+
+
+def test_check_leaves_a_request_for_the_helper(ready: Dashboard) -> None:
+    response = ready.post("/check", session=ready.sign_in())
+    assert response.status == 303
+    request = outbox(ready)
+    fields = head(request)
+    assert fields["action"] == "check"
+    assert re.fullmatch(r"[0-9a-f]{32}", fields["id"])
+    assert request == f"id={fields['id']}\naction=check\n".encode()
+    assert stat.S_IMODE((ready.state / "outbox" / "request").stat().st_mode) == 0o600
+
+
+def test_nothing_is_sent_without_a_session_or_from_another_site(ready: Dashboard) -> None:
+    assert ready.post("/check").status == 303  # to sign in
+    assert ready.post("/check", origin="https://evil.example", session=ready.sign_in()).status == 403
+    assert not (ready.state / "outbox" / "request").exists()
+
+
+def test_one_request_at_a_time(ready: Dashboard) -> None:
+    session = ready.sign_in()
+    ready.post("/check", session=session)
+    first = outbox(ready)
+    assert ready.post("/check", session=session).status == 409
+    assert outbox(ready) == first
+    (ready.state / "outbox" / "request").unlink()
+    (ready.helper / "result").write_text("id=x\naction=check\nstate=running\n\n")
+    assert ready.post("/check", session=session).status == 409
+
+
+def test_nothing_is_sent_while_the_helper_isnt_running(ready: Dashboard) -> None:
+    (ready.helper / "alive").write_text("2020-01-01T00:00:00Z\n")
+    session = ready.sign_in()
+    assert "The helper isn't running" in body(ready.get("/", session))
+    assert ready.post("/check", session=session).status == 503
+    assert not (ready.state / "outbox" / "request").exists()
+
+
+def test_apply_waits_for_a_check_that_passed(ready: Dashboard) -> None:
+    session = ready.sign_in()
+    assert "<button disabled>Apply</button>" in body(ready.get("/", session))
+    assert ready.post("/apply", session=session).status == 409
+    ready.post("/check", session=session)
+    sent = head(outbox(ready))["id"]
+    (ready.state / "outbox" / "request").unlink()
+    (ready.helper / "result").write_text(f"id={sent}\naction=check\nstate=finished\nexit=1\n\nFAIL  x\n")
+    assert ready.post("/apply", session=session).status == 409
+    (ready.helper / "result").write_text(f"id={sent}\naction=check\nstate=finished\nexit=0\n\nReady.\n")
+    assert "<button>Apply</button>" in body(ready.get("/", session))
+    assert ready.post("/apply", session=session).status == 303
+    assert head(outbox(ready))["action"] == "apply"
+    # Anything sent since the Check turns it off again, even before its answer arrives.
+    (ready.state / "outbox" / "request").unlink()
+    assert (ready.state / "last-sent").read_text().split()[0] != sent
+    (ready.helper / "result").write_text(f"id={sent}\naction=check\nstate=finished\nexit=0\n\nReady.\n")
+    assert ready.post("/apply", session=session).status == 409
+
+
+def test_the_settings_page_shows_yours_and_saves_a_change(ready: Dashboard) -> None:
+    (ready.helper / "current-settings.yaml").write_text("settingsVersion: 1\nhost:\n  dataRoot: /srv/ok3d\n# <b>x</b>\n")
+    session = ready.sign_in()
+    shown = body(ready.get("/settings", session))
+    assert "dataRoot: /srv/ok3d" in shown
+    assert "&lt;b&gt;x&lt;/b&gt;" in shown
+    new = "settingsVersion: 1\r\nmetrics:\r\n  retention: 60d"
+    shown_copy = (ready.helper / "current-settings.yaml").read_text()
+    base = hashlib.sha256(shown_copy.encode()).hexdigest()
+    assert f'name="base" value="{base}"' in shown
+    response = ready.post("/settings", f"base={base}&file=" + urllib.parse.quote(new), session=session)
+    assert response.status == 303
+    request = outbox(ready)
+    assert head(request)["action"] == "save-settings"
+    assert request.partition(b"\n\n")[2] == b"settingsVersion: 1\nmetrics:\n  retention: 60d\n"
+    assert head(request)["base"] == base
+
+
+def test_settings_cant_be_saved_before_there_are_any(ready: Dashboard) -> None:
+    assert "There's no settings.yaml on the server yet" in body(ready.get("/settings", ready.sign_in()))
+
+
+def test_devices_are_saved_the_same_way(ready: Dashboard) -> None:
+    session = ready.sign_in()
+    assert "devices: []" in body(ready.get("/devices", session))
+    assert 'name="base" value="none"' in body(ready.get("/devices", session))
+    ready.post("/devices", "base=none&file=" + urllib.parse.quote("devices: []\n"), session=session)
+    assert head(outbox(ready))["action"] == "save-devices"
+    assert head(outbox(ready))["base"] == "none"
+
+
+def test_a_file_too_big_isnt_sent(ready: Dashboard) -> None:
+    response = ready.post("/devices", "base=none&file=" + "x" * (65 * 1024), session=ready.sign_in())
+    assert response.status == 413
+    lines = ready.post("/devices", "base=none&file=" + "%0D%0A" * 70000, session=ready.sign_in())
+    assert lines.status == 413
+    assert not (ready.state / "outbox" / "request").exists()
+
+
+def test_keys_show_only_whether_each_is_set(ready: Dashboard) -> None:
+    (ready.helper / "env-set").write_text("UNIFI_API_KEY\nOK3D_ADMIN_PASSWORD\n")
+    shown = body(ready.get("/keys", ready.sign_in()))
+    assert "<code>UNIFI_API_KEY</code> <span class=good>set</span>" in shown
+    assert "<code>NTFY_TOPIC</code> <span class=muted>not set</span>" in shown
+    assert "<code>OK3D_ADMIN_PASSWORD</code> (set)" in shown
+    assert 'name="value" value' not in shown
+
+
+def test_a_key_is_sent_to_the_helper(ready: Dashboard) -> None:
+    response = ready.post("/keys", "name=NTFY_TOPIC&value=ok3d-7f3k9q2m8x", session=ready.sign_in())
+    assert response.status == 303
+    request = outbox(ready)
+    assert head(request)["action"] == "set-env"
+    assert head(request)["name"] == "NTFY_TOPIC"
+    assert request.partition(b"\n\n")[2] == b"ok3d-7f3k9q2m8x"
+
+
+@pytest.mark.parametrize("form", ["name=OK3D_ADMIN_PASSWORD&value=x", "name=PATH&value=x",
+                                  "name=NTFY_TOPIC&value=a%20b", "name=NTFY_TOPIC&value=%24(reboot)"])  # fmt: skip
+def test_a_key_the_helper_would_refuse_isnt_sent(ready: Dashboard, form: str) -> None:
+    assert ready.post("/keys", form, session=ready.sign_in()).status == 400
+    assert not (ready.state / "outbox" / "request").exists()
+
+
+def test_a_value_is_never_shown_back(ready: Dashboard) -> None:
+    session = ready.sign_in()
+    response = ready.post("/keys", "name=NTFY_TOPIC&value=a%20b", session=session)
+    assert "a b" not in body(response)
+
+
+def test_the_dashboards_own_addresses_when_given(tmp_path: Path, dash: Dashboard) -> None:
+    from ok3d.dashboard import server as server_module
+
+    handler_config = Config(dash.state, dash.helper, origins=("https://my-server.lan:8444",))
+    handler = server_module.Handler
+    assert handler_config.origins == ("https://my-server.lan:8444",)
+    # The running server was made without, so its own Host counts; one made with them
+    # accepts only those (checked through same_origin directly).
+    fake = handler.__new__(handler)
+    fake.config = handler_config
+    fake.headers = http.client.HTTPMessage()
+    fake.headers["Origin"] = f"https://127.0.0.1:{dash.port}"
+    fake.headers["Host"] = f"127.0.0.1:{dash.port}"
+    assert not fake.same_origin()
+    fake.headers.replace_header("Origin", "https://my-server.lan:8444")
+    assert fake.same_origin()
+
+
+def test_the_dashboard_and_the_helper_agree_on_what_may_be_sent() -> None:
+    from ok3d import helper
+    from ok3d.dashboard import helper_link, server
+
+    assert helper_link.ENV_NAMES == helper.ENV_NAMES
+    assert tuple(name for name, _ in server.KEY_ABOUT) == helper.ENV_NAMES
+    assert helper_link.ENV_VALUE.pattern == helper.ENV_VALUE.pattern
+    assert helper_link.MAX_FILE == helper.MAX_FILE
+
+
+
+def test_a_passed_check_from_before_doesnt_turn_apply_on(ready: Dashboard) -> None:
+    # A Check this Dashboard didn't send (or sent before something else) doesn't count.
+    (ready.helper / "result").write_text("id=0123456789abcdef\naction=check\nstate=finished\nexit=0\n\n")
+    assert ready.post("/apply", session=ready.sign_in()).status == 409
+
+
+def test_busy_until_the_answer_to_our_last_request_arrives(ready: Dashboard) -> None:
+    session = ready.sign_in()
+    (ready.helper / "result").write_text("id=0123456789abcdef\naction=check\nstate=finished\nexit=0\n\n")
+    ready.post("/check", session=session)
+    sent = head(outbox(ready))["id"]
+    (ready.state / "outbox" / "request").unlink()  # taken, but not answered yet
+    assert ready.post("/check", session=session).status == 409
+    (ready.helper / "result").write_text(f"id={sent}\naction=check\nstate=finished\nexit=0\n\n")
+    assert ready.post("/check", session=session).status == 303
+
+
+def test_a_running_answer_from_a_helper_that_stopped_doesnt_block_forever(ready: Dashboard) -> None:
+    (ready.helper / "result").write_text("id=0123456789abcdef\naction=apply\nstate=running\n\n")
+    (ready.helper / "alive").write_text("2020-01-01T00:00:00Z\n")
+    from ok3d.dashboard import helper_link
+
+    assert not helper_link.busy(ready.state, ready.helper)
+
+
+def test_two_tabs_sending_at_once_send_one(ready: Dashboard) -> None:
+    session = ready.sign_in()
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+        codes = list(pool.map(lambda _: ready.post("/check", session=session).status, range(8)))
+    assert codes.count(303) == 1
+    assert codes.count(409) == 7
+
+
+def test_no_outbox_gets_an_answer(dash: Dashboard) -> None:
+    alive(dash)
+    response = dash.post("/check", session=dash.sign_in())
+    assert response.status == 503
+    assert "write its outbox" in body(response)
+
+
+def test_a_file_starting_with_a_blank_line_keeps_it(ready: Dashboard) -> None:
+    (ready.helper / "current-devices.yaml").write_text("\ndevices: []\n")
+    assert '">\n\ndevices: []' in body(ready.get("/devices", ready.sign_in()))
+
+
+def test_a_form_that_isnt_utf8_is_refused(ready: Dashboard) -> None:
+    response = ready.post("/devices", "base=none&file=%FF%FE", session=ready.sign_in())
+    assert response.status == 400
+    assert not (ready.state / "outbox" / "request").exists()
+
+
+@pytest.mark.parametrize("path", ["/check", "/apply", "/settings", "/devices", "/keys"])
+def test_every_form_refuses_a_cross_site_fetch(ready: Dashboard, path: str) -> None:
+    response = ready.request("POST", path, "name=NTFY_TOPIC&value=x", {
+        "Content-Type": "application/x-www-form-urlencoded", "Origin": f"https://127.0.0.1:{ready.port}",
+        "Sec-Fetch-Site": "cross-site", "Cookie": f"{COOKIE}={ready.sign_in()}"})  # fmt: skip
+    assert response.status == 403

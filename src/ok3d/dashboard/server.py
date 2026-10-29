@@ -1,7 +1,8 @@
 """The Dashboard's web server: HTTPS only, behind its own sign-in.
 
-This first version has the sign-in and one page, which shows ok3d's version and the helper's
-last answer. The pages for settings, devices, and Check and Apply build on it.
+It has the sign-in and four pages: Home (Check and Apply), Settings, Devices, and Keys. Each
+page reads what the helper publishes, and each button leaves a request for it
+(helper_link.py).
 
 Every page is made here, with every value escaped, and carries headers that keep it out of
 frames, stop other sites' scripts, and keep it out of caches. A form is accepted only from
@@ -15,16 +16,19 @@ thread, with a time limit, every connection has a time limit, and only so many r
 from __future__ import annotations
 
 import html
+import re
 import socket
 import ssl
 import threading
 import time
 import urllib.parse
+from collections.abc import Callable
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from ok3d import __version__
+from ok3d.dashboard import helper_link
 from ok3d.dashboard.auth import SESSION_TTL, Auth, Paused
 
 # __Host-: browsers accept it only over HTTPS, for this host and every path, so no other site
@@ -34,10 +38,11 @@ COOKIE = "__Host-ok3d_session"
 TIMEOUT = 10
 # The most connections served at once; the rest are closed straight away.
 MAX_CONNECTIONS = 32
-# The most of a form that's read. The sign-in form is a few dozen bytes.
+# The most of a form that's read. The sign-in form is a few dozen bytes; a settings or devices
+# file may be 64 KB, which a browser may send at up to six times that (a line break goes as
+# %0D%0A).
 MAX_FORM = 4096
-# The most of the helper's answer that's read.
-MAX_RESULT = 256 * 1024
+MAX_FILE_FORM = 6 * 64 * 1024 + 1024
 
 HEADERS = {
     "Content-Security-Policy": "default-src 'none'; style-src 'self'; img-src 'self'; form-action 'self'; "
@@ -72,6 +77,12 @@ button { font: inherit; padding: 8px 14px; border-radius: 6px; border: 1px solid
   background: var(--accent); color: #fff; cursor: pointer; }
 button.plain { background: none; color: var(--fg); border-color: var(--line); }
 form.inline { display: inline; }
+nav a { margin-right: 12px; color: var(--fg); }
+h3 { font-size: 15px; margin: 12px 0 4px; }
+textarea { font: 13px/1.4 ui-monospace, monospace; width: 100%; box-sizing: border-box; padding: 8px;
+  border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); }
+input[type=password] { max-width: 420px; }
+button[disabled] { opacity: 0.5; cursor: not-allowed; }
 """
 
 
@@ -79,6 +90,9 @@ form.inline { display: inline; }
 class Config:
     state: Path  # <data root>/dashboard, the Dashboard's own folder
     helper: Path  # <data root>/helper, read-only: the helper's answers
+    # The Dashboard's own addresses, such as https://my-server.lan:8444. When given, a form's
+    # Origin must be one of them; without, it must match the Host the browser asked for.
+    origins: tuple[str, ...] = ()
 
 
 def page(title: str, body: str, signed_in: bool = False) -> bytes:
@@ -92,55 +106,143 @@ def page(title: str, body: str, signed_in: bool = False) -> bytes:
         "<!doctype html><html lang=en><meta charset=utf-8>"
         '<meta name=viewport content="width=device-width, initial-scale=1">'
         f"<title>{html.escape(title)} · ok3d</title><link rel=stylesheet href=/style.css>"
-        f"<header><h1>ok3d</h1>{sign_out}</header><main>{body}</main></html>"
+        f"<header><h1>ok3d</h1>{NAV if signed_in else ''}{sign_out}</header><main>{body}</main></html>"
     ).encode()
 
 
-def read_result(helper: Path) -> tuple[dict[str, str], str] | None:
-    """The helper's last answer: its fields, and what ok3d printed. None if there's none."""
-    try:
-        with (helper / "result").open("rb") as f:
-            text = f.read(MAX_RESULT).decode("utf-8", errors="replace")
-    except OSError:
-        return None
-    head, _, output = text.partition("\n\n")
-    fields = dict(line.split("=", 1) for line in head.splitlines() if "=" in line)
-    return fields, output
+NAV = (
+    '<nav><a href="/">Home</a> <a href="/settings">Settings</a> <a href="/devices">Devices</a> '
+    '<a href="/keys">Keys</a></nav>'
+)
+
+# What each page says about saving: the helper checks first, and keeps your old file.
+SAVE_NOTE = (
+    "<p class=muted>Saving sends this to the helper, which checks it with <code>./ok3d validate</code> "
+    "and saves it only if it passes, keeping a copy of the old one. Home shows the answer.</p>"
+)
 
 
-def home(config: Config) -> str:
-    """The first page: ok3d's version, and the helper's last answer."""
-    parts = [
-        "<section><h2>ok3d</h2>"
-        f"<p>Version {html.escape(__version__)}. The pages for your settings, devices, and Check and "
-        "Apply arrive during 0.5.</p></section>"
-    ]
-    result = read_result(config.helper)
-    if result is None:
-        parts.append(
-            "<section><h2>The helper</h2><p class=muted>No answer from the helper yet. It runs "
-            "<code>./ok3d check</code> and <code>./ok3d apply</code> for this page.</p></section>"
+def answer_section(config: Config) -> str:
+    last = helper_link.answer(config.helper)
+    if last is None:
+        return "<section><h2>The helper's last answer</h2><p class=muted>None yet.</p></section>"
+    state = last.state or "unknown"
+    status = {"finished": "good" if last.passed else "bad", "refused": "bad", "failed": "bad"}
+    words = {
+        "running": "is running",
+        "finished": f"finished with exit status {last.fields.get('exit', '?')}",
+        "refused": f"was refused: {last.fields.get('reason', '')}",
+        "failed": f"couldn't run: {last.fields.get('reason', '')}",
+    }
+    what = last.action or "a request"
+    if last.fields.get("name"):
+        what += f" {last.fields['name']}"
+    when = f" at {last.fields['finished']}" if "finished" in last.fields else ""
+    return (
+        "<section><h2>The helper's last answer</h2>"
+        f'<p class="{status.get(state, "muted")}">{html.escape(what)} '
+        f"{html.escape(words.get(state, state))}{html.escape(when)}.</p>"
+        + (f"<pre>{html.escape(last.output)}</pre>" if last.output.strip() else "")
+        + "</section>"
+    )
+
+
+def home(config: Config, message: str = "") -> str:
+    """Home: the helper, Check and Apply, and the helper's last answer."""
+    note = f"<p class=bad>{html.escape(message)}</p>" if message else ""
+    if not helper_link.alive(config.helper):
+        helper = (
+            "<p class=bad>The helper isn't running, so Check, Apply, and saving can't happen from "
+            "here. On the server: <code>systemctl --user status ok3d-helper</code>.</p>"
         )
     else:
-        fields, output = result
-        state = fields.get("state", "unknown")
-        status = {"finished": "good" if fields.get("exit") == "0" else "bad", "refused": "bad", "failed": "bad"}
-        words = {
-            "running": "is running",
-            "finished": f"finished with exit status {fields.get('exit', '?')}",
-            "refused": f"was refused: {fields.get('reason', '')}",
-            "failed": f"couldn't run: {fields.get('reason', '')}",
-        }
-        action = fields.get("action", "a request")
-        when = f" at {fields['finished']}" if "finished" in fields else ""
-        parts.append(
-            "<section><h2>The helper's last answer</h2>"
-            f'<p class="{status.get(state, "muted")}">{html.escape(action)} '
-            f"{html.escape(words.get(state, state))}{html.escape(when)}.</p>"
-            + (f"<pre>{html.escape(output)}</pre>" if output.strip() else "")
-            + "</section>"
+        helper = "<p class=good>The helper is running.</p>"
+    apply_note = (
+        ""
+        if helper_link.can_apply(config.state, config.helper)
+        else "<p class=muted>Apply turns on once a Check finds no problems, and off again when anything "
+        "else is sent.</p>"
+    )
+    disabled = "" if helper_link.can_apply(config.state, config.helper) else " disabled"
+    return (
+        f"<section><h2>ok3d {html.escape(__version__)}</h2>{note}{helper}"
+        "<p>Check that the server and your settings are ready, then Apply to make the cluster and "
+        "deploy, or bring it up to date with your settings.</p>"
+        '<form class="inline" method="post" action="/check"><button>Check</button></form> '
+        f'<form class="inline" method="post" action="/apply"><button{disabled}>Apply</button></form>'
+        f"{apply_note}</section>" + answer_section(config)
+    )
+
+
+def file_page(config: Config, name: str, message: str = "") -> str:
+    """Settings or Devices: the file as it is on the server, to change and save."""
+    title = {"settings.yaml": "Settings", "devices.yaml": "Devices"}[name]
+    text = helper_link.current(config.helper, name)
+    about = {
+        "settings.yaml": (
+            "<p>Your <code>settings.yaml</code>. <code>settings.example.yaml</code> explains every "
+            "setting. Some settings decide where ok3d keeps its data and where it sends your keys "
+            "and passwords: those you change in the file on the server, and a save here that "
+            "changes them is refused (docs/helper-under-the-hood.md lists them).</p>"
+        ),
+        "devices.yaml": (
+            "<p>Your <code>devices.yaml</code>: every device ok3d watches. "
+            "<code>devices.example.yaml</code> and docs/devices.md explain each field.</p>"
+        ),
+    }[name]
+    base = helper_link.fingerprint(text)
+    if text is None:
+        if name == "settings.yaml":
+            return (f"<section><h2>{title}</h2>{about}<p class=bad>There's no settings.yaml on the "
+                    "server yet. Make it there first, from settings.example.yaml; after that you can "
+                    "change it here.</p></section>")  # fmt: skip
+        text = "devices: []\n"
+    note = f"<p class=bad>{html.escape(message)}</p>" if message else ""
+    return (
+        f"<section><h2>{title}</h2>{about}{note}"
+        f'<form method="post" action="/{title.lower()}"><input type="hidden" name="base" value="{base}">'
+        # The newline after <textarea> is one HTML drops, so a file that starts with a blank line keeps it.
+        f'<p><textarea name="file" rows="24" spellcheck="false" aria-label="{name}">\n{html.escape(text)}</textarea></p>'
+        f"{SAVE_NOTE}<p><button>Save</button></p></form></section>"
+    )
+
+
+# What each line of .env on the Keys page is, as (name, what it is) pairs.
+KEY_ABOUT = (
+    ("UNIFI_API_KEY", "The UniFi controller's API key, from a view-only admin."),
+    ("NTFY_TOPIC", "Your ntfy topic: a long, random name, since anyone who knows it can read your alerts."),
+    ("NTFY_TOKEN", "The ntfy topic's access token, if it needs one."),
+    ("SMTP_PASSWORD", "The password of the mailbox alerts are sent from."),
+)
+
+
+def keys_page(config: Config, message: str = "") -> str:
+    """Keys: set the lines of .env the Dashboard may set. It never shows a value back."""
+    have = helper_link.env_set(config.helper)
+    note = f"<p class=bad>{html.escape(message)}</p>" if message else ""
+    rows = []
+    for name, about in KEY_ABOUT:
+        state = "<span class=good>set</span>" if name in have else "<span class=muted>not set</span>"
+        rows.append(
+            f'<form method="post" action="/keys"><h3><code>{name}</code> {state}</h3>'
+            f"<p class=muted>{html.escape(about)}</p>"
+            f'<input type="hidden" name="name" value="{name}">'
+            f'<p><input type="password" name="value" autocomplete="off" aria-label="{name}"> '
+            "<button>Save</button></p></form>"
         )
-    return "".join(parts)
+    others = ", ".join(
+        f"<code>{n}</code> ({'set' if n in have else 'not set'})"
+        for n in ("OK3D_ADMIN_PASSWORD", "DEADMAN_URL", "ANTHROPIC_API_KEY")
+    )
+    return (
+        f"<section><h2>Keys and passwords</h2>{note}"
+        "<p>Each goes into <code>.env</code> on the server. The Dashboard never shows one back: "
+        "only whether it's set. Saving an empty value clears it. A value is one line of letters, "
+        "digits, and symbols, with no spaces, quotes, backslashes, <code>$</code>, or backticks; "
+        "one with those goes into <code>.env</code> by hand.</p>"
+        + "".join(rows)
+        + f"<p class=muted>Set only on the server, in <code>.env</code>: {others}.</p></section>"
+    )
 
 
 def sign_in_page(message: str = "") -> str:
@@ -220,14 +322,18 @@ class Handler(BaseHTTPRequestHandler):
         origin = (self.headers.get("Origin") or "").lower()
         host = (self.headers.get("Host") or "").lower()
         fetch_site = self.headers.get("Sec-Fetch-Site")
-        return bool(origin and host) and origin == f"https://{host}" and fetch_site in (None, "same-origin")
+        if fetch_site not in (None, "same-origin") or not origin:
+            return False
+        if self.config.origins:
+            return origin in (o.lower() for o in self.config.origins)
+        return bool(host) and origin == f"https://{host}"
 
-    def read_form(self) -> dict[str, str] | None:
+    def read_form(self, limit: int = 0) -> dict[str, str] | None:
         try:
             length = int(self.headers.get("Content-Length", ""))
         except ValueError:
             return None
-        if not 0 <= length <= MAX_FORM:
+        if not 0 <= length <= (limit or MAX_FORM):
             return None
         if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/x-www-form-urlencoded":
             return None
@@ -235,8 +341,8 @@ class Handler(BaseHTTPRequestHandler):
         if len(body) != length:
             return None
         try:
-            fields = urllib.parse.parse_qs(body.decode("utf-8", errors="replace"), max_num_fields=10)
-        except ValueError:
+            fields = urllib.parse.parse_qs(body.decode("ascii"), max_num_fields=10, errors="strict")
+        except (ValueError, UnicodeDecodeError):
             return None
         return {k: v[0] for k, v in fields.items()}
 
@@ -249,11 +355,11 @@ class Handler(BaseHTTPRequestHandler):
                 self.redirect("/")
             else:
                 self.send(200, page("Sign in", sign_in_page()))
-        elif path == "/":
-            if self.signed_in():
-                self.send(200, page("Home", home(self.config), signed_in=True))
-            else:
+        elif path in PAGES:
+            if not self.signed_in():
                 self.redirect("/sign-in")
+                return
+            self.send(200, page(PAGES[path][0], PAGES[path][1](self.config, ""), signed_in=True))
         else:
             self.send(404, page("Not found", "<section><h2>Not found</h2></section>", self.signed_in()))
 
@@ -267,26 +373,125 @@ class Handler(BaseHTTPRequestHandler):
                                 "this Dashboard.</p></section>"))  # fmt: skip
             return
         if path == "/sign-in":
-            form = self.read_form()
-            if form is None:
-                self.send(400, page("Sign in", sign_in_page("That didn't arrive in one piece. Try again.")))
-                return
-            try:
-                session = self.auth.sign_in(form.get("password", ""), self.client_address[0])
-            except Paused:
-                self.send(429, page("Sign in", sign_in_page("Too many wrong passwords. Wait a minute, then try again.")))
-                return
-            if session is None:
-                time.sleep(0.5)  # a little slower, for anyone guessing
-                self.send(401, page("Sign in", sign_in_page("That's not the password.")))
-                return
-            cookie = f"{COOKIE}={session}; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age={SESSION_TTL}"
-            self.redirect("/", {"Set-Cookie": cookie})
+            self.sign_in()
         elif path == "/sign-out":
             self.auth.sign_out(self.session())
             self.redirect("/sign-in", {"Set-Cookie": f"{COOKIE}=; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=0"})
+        elif path in ACTIONS:
+            if not self.signed_in():
+                self.redirect("/sign-in")
+                return
+            ACTIONS[path](self)
         else:
             self.send(404, page("Not found", "<section><h2>Not found</h2></section>", self.signed_in()))
+
+    def sign_in(self) -> None:
+        form = self.read_form()
+        if form is None:
+            self.send(400, page("Sign in", sign_in_page("That didn't arrive in one piece. Try again.")))
+            return
+        try:
+            session = self.auth.sign_in(form.get("password", ""), self.client_address[0])
+        except Paused:
+            self.send(429, page("Sign in", sign_in_page("Too many wrong passwords. Wait a minute, then try again.")))
+            return
+        if session is None:
+            time.sleep(0.5)  # a little slower, for anyone guessing
+            self.send(401, page("Sign in", sign_in_page("That's not the password.")))
+            return
+        cookie = f"{COOKIE}={session}; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age={SESSION_TTL}"
+        self.redirect("/", {"Set-Cookie": cookie})
+
+    def ask_helper(self, back: str, render: Callable[[Config, str], str], title: str, action: str,
+                   name: str | None = None, body: bytes | None = None, base: str | None = None) -> None:  # fmt: skip
+        """Leaves a request for the helper, then sends you Home to watch for the answer, or
+        back to the page with what went wrong."""
+        if not helper_link.alive(self.config.helper):
+            self.send(503, page(title, render(self.config, "The helper isn't running, so nothing was sent."), True))
+            return
+        try:
+            helper_link.send(self.config.state, self.config.helper, action, name, body, base)
+        except helper_link.Unavailable:
+            self.send(503, page(title, render(self.config, "The Dashboard can't write its outbox, so nothing "
+                                              "was sent. Check the Dashboard's folder on the server."), True))  # fmt: skip
+            return
+        except helper_link.Busy:
+            self.send(409, page(title, render(self.config, "The helper is busy with the last request. "
+                                              "Try again when Home shows its answer."), True))  # fmt: skip
+            return
+        self.redirect(back)
+
+    def post_check(self) -> None:
+        self.ask_helper("/", home, "Home", "check")
+
+    def post_apply(self) -> None:
+        if not helper_link.can_apply(self.config.state, self.config.helper):
+            self.send(409, page("Home", home(self.config, "") + "<p class=bad>Run a Check that finds "
+                                "no problems first.</p>", True))  # fmt: skip
+            return
+        self.ask_helper("/", home, "Home", "apply")
+
+    def post_file(self, name: str, action: str, title: str) -> None:
+        def render(config: Config, message: str) -> str:
+            return file_page(config, name, message)
+
+        try:
+            if int(self.headers.get("Content-Length", "0")) > MAX_FILE_FORM:
+                self.send(413, page(title, render(self.config, "That's bigger than 64 KB."), True))
+                return
+        except ValueError:
+            pass
+        form = self.read_form(MAX_FILE_FORM)
+        text = (form or {}).get("file")
+        base = (form or {}).get("base", "")
+        if text is None or not re.fullmatch(r"[0-9a-f]{64}|none", base):
+            self.send(400, page(title, render(self.config, "That didn't arrive in one piece. Try again."), True))
+            return
+        # A browser sends a text box's lines with \r\n; the files use \n.
+        data = text.replace("\r\n", "\n").encode("utf-8")
+        if not data.endswith(b"\n"):
+            data += b"\n"
+        if len(data) > helper_link.MAX_FILE:
+            self.send(413, page(title, render(self.config, "That's bigger than 64 KB."), True))
+            return
+        self.ask_helper("/", render, title, action, body=data, base=base)
+
+    def post_settings(self) -> None:
+        self.post_file("settings.yaml", "save-settings", "Settings")
+
+    def post_devices(self) -> None:
+        self.post_file("devices.yaml", "save-devices", "Devices")
+
+    def post_keys(self) -> None:
+        form = self.read_form()
+        name = (form or {}).get("name", "")
+        value = (form or {}).get("value", "")
+        if form is None or name not in helper_link.ENV_NAMES:
+            self.send(400, page("Keys", keys_page(self.config, "That didn't arrive in one piece. Try again."), True))
+            return
+        if not helper_link.ENV_VALUE.fullmatch(value):
+            self.send(400, page("Keys", keys_page(self.config, f"{name} has characters .env can't hold "
+                                                  "safely (see above). Nothing was saved."), True))  # fmt: skip
+            return
+        self.ask_helper("/", keys_page, "Keys", "set-env", name=name, body=value.encode("ascii"))
+
+
+# The pages, by path: their title and what makes them.
+PAGES: dict[str, tuple[str, Callable[[Config, str], str]]] = {
+    "/": ("Home", home),
+    "/settings": ("Settings", lambda c, m: file_page(c, "settings.yaml", m)),
+    "/devices": ("Devices", lambda c, m: file_page(c, "devices.yaml", m)),
+    "/keys": ("Keys", keys_page),
+}
+
+# What each form does, by path. Every one needs a session and the Dashboard's own Origin.
+ACTIONS: dict[str, Callable[[Handler], None]] = {
+    "/check": Handler.post_check,
+    "/apply": Handler.post_apply,
+    "/settings": Handler.post_settings,
+    "/devices": Handler.post_devices,
+    "/keys": Handler.post_keys,
+}
 
 
 class Server(ThreadingHTTPServer):

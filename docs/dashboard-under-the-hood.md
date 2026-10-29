@@ -1,9 +1,8 @@
 # The Dashboard under the hood
 
 How the Dashboard is built, as the code stands. It's arriving in parts during 0.5: so far it
-has its sign-in and a first page showing ok3d's version and the helper's last answer. The
-pages for settings, devices, and Check and Apply come next, and the installer that sets it
-all up comes after them. To see how Check and Apply reach the server, read
+has its sign-in and four pages (Home, with Check and Apply; Settings; Devices; and Keys). The
+installer that sets it all up comes next. To see how a request reaches the server, read
 [the helper under the hood](helper-under-the-hood.md).
 
 ## Where it runs
@@ -81,9 +80,11 @@ when the cluster is down.
   one, it sends you to sign in.
 - Every form must come with an `Origin` header naming the Dashboard itself, and, from
   browsers that send it, `Sec-Fetch-Site: same-origin`, or it's refused. A form is read only
-  when it's `application/x-www-form-urlencoded`, at most 4 KB, with at most 10 fields. No
-  `GET` changes anything. Before the pages that change settings arrive, the Origin will also
-  be checked against the Dashboard's own address from your settings.
+  when it's `application/x-www-form-urlencoded`, at most 4 KB (about 200 KB for a settings
+  or devices file), with at most 10 fields. No `GET` changes anything. Started with
+  `--origin https://my-server.lan:8444` (once for each address you open it at), it accepts
+  forms only from those exact addresses, which the installer will pass; without, the Origin
+  must match the address the browser asked for.
 - Every page is made in `src/ok3d/dashboard/server.py`, with every value escaped, including
   what `ok3d` printed in the helper's answer.
 - Every answer carries the same headers: a Content Security Policy that allows only the
@@ -95,6 +96,46 @@ when the cluster is down.
 - It logs one line per request: the address, the method, the path without its query, and
   the status. Control characters are escaped, so nothing in a request can rewrite your
   terminal.
+
+## The pages
+
+| Page | What it shows | What it can do |
+|---|---|---|
+| Home | Whether the helper is running, and the helper's last answer with what `ok3d` printed | **Check**, and **Apply** once a Check has found no problems |
+| Settings | Your `settings.yaml`, as the helper last copied it | Save a changed one |
+| Devices | Your `devices.yaml` (or an empty list) | Save a changed one |
+| Keys | Which lines of `.env` are set, never their values | Set or clear `UNIFI_API_KEY`, `NTFY_TOPIC`, `NTFY_TOKEN`, or `SMTP_PASSWORD` |
+
+Each page reads only the helper's folder, mounted read-only at `/helper`:
+
+- `current-settings.yaml` and `current-devices.yaml`: the helper's copies of yours.
+- `env-set`: the names of the lines in `.env` that have a value.
+- `alive`: when the helper last wrote it: every 30 seconds, after every request, and every
+  30 seconds while a Check or Apply runs. While it's more than 90 seconds old, the pages say
+  the helper isn't running and send nothing.
+- `result`: the answer to the last request.
+
+Every button leaves one request in `/state/outbox/request`, written to a temporary file and
+renamed into place, then sends you to Home, where the answer appears. The Dashboard keeps the
+id of the request it last sent in `/state/last-sent`. One request at a time, however many
+tabs are open: while ours waits in the outbox, while the helper says it's running one, or
+until the answer to the one we last sent arrives (or 10 minutes pass), a new one is refused
+with a note to wait. If the outbox can't be written, the page says so and sends nothing.
+
+- **Apply** turns on only when the helper's answer to the last request this Dashboard sent
+  is a Check that found no problems. Anything sent since (a save, a key) turns it off again,
+  as does a failed Check. The server checks this too, not only the button. It doesn't see
+  changes you make to the files on the server after the Check, and the helper doesn't
+  enforce it: Apply is something you could run yourself anyway.
+- **Saving settings or devices** sends the whole file, with a browser's `\r\n` line endings
+  turned into `\n`, at most 64 KB, and the SHA-256 of the file as the page showed it. The
+  helper refuses the save if the file has changed on the server since, so an edit there
+  isn't overwritten. Then it checks the file with `./ok3d validate` and saves it only if it
+  passes. A settings save can't change the settings only you may change on the
+  server, and Settings has nothing to save until `settings.yaml` exists on the server.
+- **Keys** checks a value the way the helper will (one line of letters, digits, and symbols,
+  with no spaces, quotes, backslashes, `$`, or backticks), so a value the helper would
+  refuse is never sent. A value is never shown back, not even in an error.
 
 ## Running it from the checkout
 
