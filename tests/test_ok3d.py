@@ -494,9 +494,13 @@ def test_install_sets_up_the_helper_and_the_dashboard(linux: dict[str, str], tmp
     assert "systemctl --user daemon-reload" in log
     assert "systemctl --user restart ok3d-helper" in log
     run = next(line for line in log if line.startswith("docker run"))
+    from ok3d import __version__
+
+    # A release pulls its own version's image; between releases, main's.
+    image = "ghcr.io/southsidedean/ok3d-dashboard:" + ("main" if "dev" in __version__ else __version__)
     for part in ("--name ok3d-dashboard", "--read-only", "--cap-drop ALL", "--security-opt no-new-privileges",
                  "--publish 0.0.0.0:8444:8444", f"--volume {data}/dashboard:/state",
-                 f"--volume {data}/helper:/helper:ro", "ghcr.io/southsidedean/ok3d-dashboard:main",
+                 f"--volume {data}/helper:/helper:ro", image,
                  "--origin https://dashboard.noc.home.arpa:8444"):  # fmt: skip
         assert part in run, part
     assert f"--user {os.getuid()}:{os.getgid()}" in run
