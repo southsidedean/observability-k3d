@@ -89,13 +89,19 @@ version=$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' src/ok3d/__init__.py)
 mkdir -p images/screenshots
 # --network host, so the browser reaches the Dashboard and the gateway on this machine; it's
 # told to send every name under the domain here (scripts/screenshots.py).
+# The image has the browsers but not Playwright's Python package, which goes in first, at the
+# versions and hashes in scripts/screenshots-requirements.txt.
 docker run --rm --network host --ipc host --user "$(id -u):$(id -g)" --env HOME=/tmp \
 	--volume "$PWD/docs/screenshots.json:/shots.json:ro" \
 	--volume "$PWD/scripts/screenshots.py:/screenshots.py:ro" \
+	--volume "$PWD/scripts/screenshots-requirements.txt:/requirements.txt:ro" \
 	--volume "$PWD/images/screenshots:/out" \
 	--volume "$data_root/dashboard/password:/dashboard-password:ro" \
 	--volume "$data_root/admin-password:/grafana-password:ro" \
-	"$image" python3 -I /screenshots.py --shots /shots.json --out /out --version "$version" \
+	"$image" sh -c 'python3 -m pip install --quiet --disable-pip-version-check --no-deps --require-hashes \
+		--only-binary :all: --target /tmp/packages --requirement /requirements.txt &&
+		PYTHONPATH=/tmp/packages exec python3 -P /screenshots.py "$@"' screenshots \
+	--shots /shots.json --out /out --version "$version" \
 	--domain "$domain" --https-port "${https_port:-8443}" --dashboard-port "${dashboard_port:-8444}" \
 	--dashboard-password /dashboard-password --grafana-password /grafana-password
 echo "Done. Look at each picture in images/screenshots/ before committing them, with IMAGES_CHECKED=1."
