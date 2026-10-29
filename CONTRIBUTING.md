@@ -26,7 +26,8 @@ message), and images nobody has looked at. Before each push, they run every chec
 ### Your private names
 
 Make a file at `.git/hooks/private-names` with your own host names, domains, and addresses,
-one pattern per line (`#` starts a comment). It stays on your machine. The git hooks and the
+one pattern per line (`#` starts a comment). Put your own in it, not the examples below:
+they're written in this file, so listing them would refuse every commit. It stays on your machine. The git hooks and the
 privacy tests refuse anything that matches it, anywhere in what a commit would hold, and say
 which files without repeating the name:
 
