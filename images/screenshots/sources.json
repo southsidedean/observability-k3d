@@ -1,0 +1,16 @@
+{
+  "dashboard-devices-dark.png": "0.5.0.dev0",
+  "dashboard-devices-light.png": "0.5.0.dev0",
+  "dashboard-home-dark.png": "0.5.0.dev0",
+  "dashboard-home-light.png": "0.5.0.dev0",
+  "dashboard-keys-dark.png": "0.5.0.dev0",
+  "dashboard-keys-light.png": "0.5.0.dev0",
+  "dashboard-settings-dark.png": "0.5.0.dev0",
+  "dashboard-settings-light.png": "0.5.0.dev0",
+  "dashboard-setup-dark.png": "0.5.0.dev0",
+  "dashboard-setup-light.png": "0.5.0.dev0",
+  "dashboard-sign-in-dark.png": "0.5.0.dev0",
+  "dashboard-sign-in-light.png": "0.5.0.dev0",
+  "grafana-devices-dark.png": "0.5.0.dev0",
+  "grafana-devices-light.png": "0.5.0.dev0"
+}

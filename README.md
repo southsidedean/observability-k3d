@@ -68,6 +68,7 @@ and keeps your data; `./ok3d apply` brings it back.
 | Page | What it covers |
 |---|---|
 | [How ok3d fits together](docs/architecture.md) | The pieces, and how you set it up |
+| [Setting up from the Dashboard](docs/dashboard.md) | The installer, and each of the Dashboard's pages (from 0.5) |
 | [Opening ok3d's pages](docs/certificate.md) | Local DNS, and trusting the certificate authority |
 | [Your devices](docs/devices.md) | `devices.yaml`, the checks, node_exporter, UniFi |
 | [Alerts](docs/alerts.md) | ntfy, email, the dead man's switch, silences |
