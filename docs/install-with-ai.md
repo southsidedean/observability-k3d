@@ -62,7 +62,11 @@ Follow these in order. Every step is safe to repeat.
      (`sudo usermod -aG docker "$USER"`), which works only after they log out and in again.
      Tell them to do that, then start you again and paste the same prompt: you'll pick up
      from here.
-   - k3d, Helm, and `kubectl`, each the way its own docs say for this Linux distribution.
+   - k3d, Helm, and `kubectl`: from a package manager that checks what it downloads, such
+     as Homebrew (which runs on Linux too) or the distribution's own, or from each project's
+     release page, checking the download against its published checksum. Not by piping a
+     script from a project's main branch into a shell, as k3d's README suggests: that runs
+     whatever is on main that day.
    - The inotify limits, which k3d's clusters need:
 
      ```sh
