@@ -488,11 +488,11 @@ turn up. Production moves to ok3d at 0.4.0.
 - Remote access with Tailscale, optional.
 - From kia's front door (kia 0.8.1 didn't start, and an end-to-end test found why): Authelia's
   startup checks fail on a read-only root filesystem, so it never made its database. ok3d
-  keeps every pod's root read-only (the charts job and Least privilege, below), so first give
+  keeps every pod's root read-only (the charts job and Least privilege, above), so first give
   Authelia writable `emptyDir` folders for the paths it writes; only if that isn't enough,
   name it as an exception there, with its reason. And the gateway can't fetch Authelia's keys
-  at its own start (Authelia serves them only for its own name, through a listener that isn't
-  up yet), which is one more reason for the local copy in the Sign-in row.
+  at its own start (Authelia serves them only for its own name, through the gateway's own
+  listener, which isn't up yet), which is one more reason for the local copy in the Sign-in row.
 - To weigh when 0.8 starts: bringing LLDAP forward from 1.x, for a Dashboard page to add
   household members, as kia 0.8.3 did. ok3d would never store or check a password (LLDAP
   does), and the helper, never the Dashboard's container, would hold LLDAP's admin login.
@@ -509,14 +509,15 @@ turn up. Production moves to ok3d at 0.4.0.
   read-only tools ("Ask kia", kia 0.8.4; the reasons are in kia's `plans/0.8-kagent-go-no-go.md`:
   an alpha with breaking changes, its own security off by default, no scheduler, and most of
   the value in the tools and the gateway). ok3d already runs the cluster kagent needs, so
-  kia's main objection, its weight, counts for less here, though kagent still adds about
-  4 GiB (The host, below); the others hold. Compare the two
+  kia's main objection, its weight, counts for less here, though kagent's node alone measured
+  1.7 GiB at rest (the host, above); the others hold. Compare the two
   against this release's needs (the chat, the alert explainer, the briefing, the actions), and
   write down the choice before building either.
 - If 0.9 chooses kagent: kagent 1.0 behind the front door at `agents.<domain>`, with the
-  model route and MCP on the gateway, read-only RBAC, and NetworkPolicies so the sandboxes reach only the gateway (not
-  kagent's control plane, which trusts a plain identity header). `agents` joins the mesh
-  once gVisor sandboxes are proven to work with ambient's traffic redirection.
+  model route and MCP on the gateway, read-only RBAC, and NetworkPolicies so the sandboxes
+  reach only the gateway (not kagent's control plane, which trusts a plain identity header).
+  `agents` joins the mesh once gVisor sandboxes are proven to work with ambient's traffic
+  redirection.
 - The MCP tools: Grafana's (read-only), ok3d's own, UniFi (read), and Plex (read) with its
   module. Remote MCP servers from settings, and `local/` for your own.
 - The first agents: one that explains a firing alert (what changed, what the logs say, what
@@ -533,8 +534,8 @@ turn up. Production moves to ok3d at 0.4.0.
   request and a rate limit per key at the gateway; and a limit on tool rounds in the agent's
   own loop, since the gateway can't cap a whole conversation. Together they stop text that
   makes an agent loop from running up a bill.
-- Each tool is allowed by its exact operation, never a settings or configuration call:
-  UniFi's settings carry Wi-Fi passphrases, and Plex's preferences carry its token. No tool's
+- Each tool is allowed by its exact operation, never a settings or configuration call: UniFi's
+  WLAN configuration, for one, returns each network's Wi-Fi passphrase. No tool's
   answer passes on an address from a metric label. A test runs every tool against fixtures
   holding known secret values and checks none of them comes back (kia's review asked for the
   same).
@@ -641,9 +642,10 @@ Mermaid files:
   it need a restart (0.4)? kia found its listener certificate and backend root reload by
   themselves from mounted files (Compose, v1.6.0), but on Docker Desktop the gateway noticed
   the first new file and missed later ones. A Secret's mount updates by swapping a link,
-  which is a rename too, so check more than one renewal in a row. Two traps kia hit: rustls refuses a certificate from plain `openssl req
-  -x509` as a server certificate, since it's marked as a CA, and macOS LibreSSL's `openssl req
-  -newkey ec` test keys gave a key mismatch.
+  which is a rename too, so check more than one renewal in a row. Two traps kia hit: rustls
+  refuses a certificate from plain `openssl req -x509` as a server certificate, since it's
+  marked as a CA, and macOS LibreSSL's `openssl req -newkey ec` test keys gave a key
+  mismatch.
 - agentgateway's model route (0.9), from kia's 0.8.4: use its Anthropic provider directly,
   since the OpenAI-to-Anthropic translation passes `arguments: null` through for a tool call
   with no arguments, and Anthropic answers 400. A budget in dollars needs agentgateway's
