@@ -1,9 +1,16 @@
 # Changelog
 
-## 0.5.0 (unreleased)
+## 0.5.0 (2026-10-29)
 
 ### Upgrading
 
+- From 0.4, run the installer, which brings your checkout in `~/ok3d` to 0.5.0, keeps your
+  settings and certificate authority, and starts the Dashboard:
+  `curl -fsSL https://raw.githubusercontent.com/southsidedean/observability-k3d/main/install.sh | sh`.
+  Then Check and Apply on the Dashboard. If your copy of ok3d isn't in `~/ok3d`, put
+  `OK3D_DIR=/path/to/ok3d` before `sh`. [docs/upgrading.md](docs/upgrading.md) has the steps.
+- If you run the simulated network, run `./ok3d demo down` and `./ok3d demo up` once after
+  upgrading: its devices from 0.4 don't come back after a restart, and new ones do.
 - `settings.yaml` may hold only your own settings, and `devices.yaml` only `devices`.
   `./ok3d check` now refuses either one if it sets the chart's own sections
   (`kube-prometheus-stack`, `prometheus-blackbox-exporter`, `gateway`, `global`), which
