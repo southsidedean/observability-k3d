@@ -477,7 +477,7 @@ def test_install_sets_up_the_helper_and_the_dashboard(linux: dict[str, str], tmp
                  "--origin https://dashboard.noc.home.arpa:8444"):  # fmt: skip
         assert part in run, part
     assert f"--user {os.getuid()}:{os.getgid()}" in run
-    assert "https://dashboard.noc.home.arpa:8444/" in result.stdout
+    assert "Done. Open the Dashboard at https://dashboard.noc.home.arpa:8444/" in result.stdout.splitlines()
     assert "kxq7-m2pa-9fht-3bnd" in result.stdout
 
 
