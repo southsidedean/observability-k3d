@@ -7,6 +7,7 @@ tested on the test VM: PLAN.md, "The test VM".)
 from __future__ import annotations
 
 import os
+import pty
 import re
 import stat
 import subprocess
@@ -500,7 +501,7 @@ def test_install_sets_up_the_helper_and_the_dashboard(linux: dict[str, str], tmp
         assert part in run, part
     assert f"--user {os.getuid()}:{os.getgid()}" in run
     assert "Done. Open the Dashboard at https://dashboard.noc.home.arpa:8444/" in result.stdout.splitlines()
-    assert "kxq7-m2pa-9fht-3bnd" in result.stdout
+    assert "kxq7-m2pa-9fht-3bnd" not in result.stdout  # not a terminal (test_the_password_is_shown_only_on_a_terminal)
 
 
 def test_install_issues_the_dashboards_certificate_for_its_name(linux: dict[str, str]) -> None:
@@ -553,11 +554,39 @@ def test_a_failed_pull_leaves_the_running_dashboard(linux: dict[str, str]) -> No
     assert not any(line.startswith("docker rm") for line in calls(linux))
 
 
+def on_a_terminal(env: dict[str, str], *args: str) -> str:
+    """What ./ok3d prints when its output is a terminal, as when you run the installer yourself."""
+    main, side = pty.openpty()
+    proc = subprocess.Popen([str(ROOT / "ok3d"), *args], stdin=subprocess.DEVNULL, stdout=side,
+                            stderr=subprocess.DEVNULL, env=env)  # fmt: skip
+    os.close(side)
+    out = b""
+    while True:
+        try:
+            chunk = os.read(main, 4096)
+        except OSError:  # Linux says EIO once the program has gone
+            break
+        if not chunk:
+            break
+        out += chunk
+    proc.wait()
+    os.close(main)
+    return out.decode()
+
+
 def test_the_password_is_shown_on_first_install_only(linux: dict[str, str]) -> None:
-    assert "kxq7-m2pa-9fht-3bnd" in ok3d(linux, "install").stdout
-    again = ok3d(linux, "install").stdout
+    assert "kxq7-m2pa-9fht-3bnd" in on_a_terminal(linux, "install")
+    again = on_a_terminal(linux, "install")
     assert "kxq7-m2pa-9fht-3bnd" not in again
     assert "Its password is in" in again
+
+
+def test_the_password_is_shown_only_on_a_terminal(linux: dict[str, str]) -> None:
+    # Read by an AI assistant, a log, or another program, the output says where it is instead.
+    result = ok3d(linux, "install")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "kxq7-m2pa-9fht-3bnd" not in result.stdout
+    assert "Its password is in" in result.stdout
 
 
 def test_install_refuses_one_port_for_both(linux: dict[str, str]) -> None:

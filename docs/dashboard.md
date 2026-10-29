@@ -28,7 +28,9 @@ at the server, and trust ok3d's certificate authority on your computer:
 </picture>
 
 The password is the one the installer printed. It's also in `dashboard/password` in the data
-root, readable only by you. After five wrong tries from one computer, sign-in pauses for a
+root, readable only by you: `cat /srv/ok3d/dashboard/password` shows it, with the example
+settings. (When an AI assistant ran the installer for you, it isn't printed; get it from that
+file yourself.) After five wrong tries from one computer, sign-in pauses for a
 minute.
 
 ## Home

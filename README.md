@@ -28,20 +28,49 @@ and looks after itself.
   the server, so upgrading means making the cluster again, and it picks up where it left off.
 
 ok3d is being built release by release: [docs/roadmap.md](docs/roadmap.md) says where it
-stands, and [PLAN.md](PLAN.md) says where it's going, with the reasons. Coming next: a
-Dashboard to set it all up from a web page, logs and syslog, a NOC board, one sign-in for
+stands, and [PLAN.md](PLAN.md) says where it's going, with the reasons. From 0.5 you set it
+up on a web page, the Dashboard. Coming next: logs and syslog, a NOC board, one sign-in for
 every page, and AI agents that explain what went wrong.
 
 ## What you need
 
-- A Linux server with about 8 GB of memory free (more once agents arrive in 0.9), Docker,
-  [k3d](https://k3d.io) 5.9 or newer, [Helm](https://helm.sh), `kubectl`, and `openssl`.
+- A Linux server with systemd and about 8 GB of memory free (more once agents arrive in 0.9),
+  Docker, [k3d](https://k3d.io) 5.9 or newer, [Helm](https://helm.sh), `kubectl`, and
+  `openssl`.
 - A folder for ok3d's data, on a filesystem of its own if you can.
 - A way to add a name to your local DNS: most routers can, and so can Pi-hole.
 
-## Try it
+## Install
 
-On the server:
+**With an AI assistant.** If you use one that can run commands on your server, such as Claude
+Code, open it in a terminal on the server, as yourself, and paste this in. It installs what's
+missing, asking before each `sudo` command, runs the installer, and stops once the Dashboard
+is running. It never reads your passwords or keys.
+[Installing with an AI assistant](docs/install-with-ai.md) says what it does.
+
+```text
+Install ok3d on this Linux server for me, from https://github.com/southsidedean/observability-k3d.
+Find its newest release (the highest tag named like v0.5.0), and from that tag read
+docs/install-with-ai.md. Follow the steps there, in order, as written. Before each command
+that needs sudo, show it to me and wait for my yes. Never read, print, or ask me for a
+password or key. If a step fails, show me the exact error and stop. Stop when the Dashboard
+is running, and tell me how to open it.
+```
+
+**By hand.** On the server, as yourself (not root), with what's above installed:
+
+```sh
+sudo install -d -o "$USER" -m 0755 /srv/ok3d   # the data folder, owned by you
+curl -fsSL https://raw.githubusercontent.com/southsidedean/observability-k3d/main/install.sh | sh
+```
+
+Either way, the installer puts ok3d in `~/ok3d` and starts the Dashboard, a web page where
+you choose what ok3d watches and where alerts go, then Check and Apply. It prints the
+Dashboard's address. [Setting up from the Dashboard](docs/dashboard.md) goes through each
+page, and [Opening ok3d's pages](docs/certificate.md) says how to reach it from your
+computer.
+
+**With commands instead.** Everything the Dashboard does is an `./ok3d` command too:
 
 ```sh
 git clone https://github.com/southsidedean/observability-k3d.git ok3d && cd ok3d
@@ -53,15 +82,10 @@ cp devices.demo.yaml devices.yaml             # watch the simulated network for 
 ./ok3d apply                                  # make the cluster and deploy everything
 ```
 
-`./ok3d apply` ends by printing the pages' addresses. Then:
-
-1. [Open the pages](docs/certificate.md): point the names at the server, and trust ok3d's
-   certificate authority on your devices.
-2. [Get alerts](docs/alerts.md): ntfy, email, and the dead man's switch.
-3. [List your own devices](docs/devices.md), and switch UniFi on if you have it.
-
-`./ok3d test-alert` checks that alerts reach you. `./ok3d delete --yes` deletes the cluster
-and keeps your data; `./ok3d apply` brings it back.
+`./ok3d apply` ends by printing the pages' addresses. Then
+[open the pages](docs/certificate.md), [get alerts](docs/alerts.md), and
+[list your own devices](docs/devices.md). `./ok3d test-alert` checks that alerts reach you.
+`./ok3d delete --yes` deletes the cluster and keeps your data; `./ok3d apply` brings it back.
 
 ## The docs
 
@@ -69,6 +93,7 @@ and keeps your data; `./ok3d apply` brings it back.
 |---|---|
 | [How ok3d fits together](docs/architecture.md) | The pieces, and how you set it up |
 | [Setting up from the Dashboard](docs/dashboard.md) | The installer, and each of the Dashboard's pages (from 0.5) |
+| [Installing with an AI assistant](docs/install-with-ai.md) | The prompt, and the steps it follows |
 | [Opening ok3d's pages](docs/certificate.md) | Local DNS, and trusting the certificate authority |
 | [Your devices](docs/devices.md) | `devices.yaml`, the checks, node_exporter, UniFi |
 | [Alerts](docs/alerts.md) | ntfy, email, the dead man's switch, silences |

@@ -687,7 +687,9 @@ cmd_install() {
 	make_certificate_authority
 	make_dashboard_certificate
 	install_helper
-	# The Dashboard makes its password on first start; it's shown that once.
+	# The Dashboard makes its password on first start; it's shown that once, and only on a
+	# terminal. Read by an AI assistant, a log, or another program, it says where it is instead,
+	# so the password isn't sent anywhere with the rest of the output.
 	password="$DATA_ROOT/dashboard/password"
 	first=false
 	[ -e "$password" ] || first=true
@@ -699,7 +701,7 @@ cmd_install() {
 	done
 	echo
 	echo "Done. Open the Dashboard at $dashboard_address/"
-	if [ "$first" = true ] && [ -f "$password" ] && [ ! -L "$password" ]; then
+	if [ "$first" = true ] && [ -t 1 ] && [ -f "$password" ] && [ ! -L "$password" ]; then
 		echo "Its password, which you'll need once to sign in (it's also in $password, readable only by you):"
 		echo "  $(head -c 64 "$password" | tr -cd 'A-Za-z0-9-')"
 	elif [ -s "$password" ]; then
