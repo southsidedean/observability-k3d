@@ -9,7 +9,8 @@ left off.
    "Upgrading".
 2. Back up the data root's small, precious parts: `grafana/`, `certs/`, and your
    `settings.yaml`, `devices.yaml`, and `.env`. (From 0.7, `./ok3d backup` does this.)
-3. Run the installer again, on the server, as yourself:
+3. Run the installer again, on the server, as yourself. If you cloned ok3d somewhere other
+   than `~/ok3d`, put `OK3D_DIR=/path/to/ok3d` before `sh`, or it makes a fresh copy there:
 
    ```sh
    curl -fsSL https://raw.githubusercontent.com/southsidedean/observability-k3d/main/install.sh | sh
@@ -17,10 +18,11 @@ left off.
 
    It brings `~/ok3d` to the latest release, keeps your settings, devices, `.env`, and the
    certificate authority, and starts the new release's Dashboard. From 0.4, this is also
-   what first sets up the Dashboard. If your copy of ok3d is somewhere else, say where:
-   `... | OK3D_DIR=/path/to/ok3d sh`.
+   what first sets up the Dashboard. It stops if you changed ok3d's own files (your settings
+   are safe: they're not ok3d's).
 4. On the Dashboard, **Check**, then **Apply**, which brings the cluster up to date with the
-   new release.
+   new release. If a release changes the cluster itself (its Kubernetes version, say), its
+   Upgrading notes say to make the cluster again instead, with the commands below.
 
 From 0.5.1, an Upgrade button on the Dashboard does steps 2 to 4.
 
@@ -31,6 +33,7 @@ To move to a release yourself and make the cluster again from scratch:
 ```sh
 cd ~/ok3d
 git fetch --tags && git switch --detach v0.5.0   # the release you're moving to
+./ok3d install   # the new release's helper and Dashboard (Linux with systemd)
 ./ok3d check
 ./ok3d delete --yes
 ./ok3d apply

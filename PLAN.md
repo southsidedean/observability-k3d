@@ -420,7 +420,8 @@ turn up. Production moves to ok3d at 0.4.0.
 ### 0.5: The Dashboard (from here, setup starts on a web page)
 
 - The installer (`curl ... | sh`): the host check, the certificate authority, the helper,
-  and the Dashboard container. It prints the Dashboard's address and its password.
+  and the Dashboard container. It prints the Dashboard's address, and its password on a
+  terminal.
 - The Dashboard: the setup cards and choosing parts yourself, settings, write-only secrets,
   the module switches, the Devices page, Check and Apply (Apply stays off until Check finds
   no problems, and keeps the settings from before), and What's next. The action switches
@@ -444,7 +445,8 @@ turn up. Production moves to ok3d at 0.4.0.
   say which assistants it's been tested with.
 - Test: from a bare test VM, the installer and the Dashboard alone give the 0.4 stack, with
   no terminal after the installer, and the upgrade from 0.4 works with the installer and the
-  Dashboard. The AI prompt does the same on another bare VM.
+  Dashboard. The AI prompt does the same on a bare VM (it can be the same install the
+  Dashboard-alone run then continues from).
 
 ### 0.5.1: The Dashboard's second step (moved from 0.5.0, decided 2026-10-29)
 
