@@ -9,6 +9,7 @@ one port, over HTTPS:
 | Prometheus | `https://prometheus.noc.home.arpa:8443/` | the same |
 | Alertmanager | `https://alertmanager.noc.home.arpa:8443/` | the same |
 | The certificate authority | `https://ca.noc.home.arpa:8443/` | none: it's a download |
+| The Dashboard (from 0.5) | `https://dashboard.noc.home.arpa:8444/` | its own password, which `./ok3d install` prints |
 
 The admin password is `OK3D_ADMIN_PASSWORD` from `.env`, or, if you left that empty, the one
 ok3d made the first time: it's in `admin-password` in the data root, readable only by you.
@@ -29,13 +30,13 @@ router or your network's DNS server, for every name under the domain:
   `*.noc.home.arpa`, the server's address.
 - **Pi-hole:** Local DNS, DNS Records. Pi-hole has no wildcard there, so add each name
   (`grafana.noc.home.arpa`, `prometheus.noc.home.arpa`, `alertmanager.noc.home.arpa`,
-  `ca.noc.home.arpa`) with the server's address.
+  `ca.noc.home.arpa`, `dashboard.noc.home.arpa`) with the server's address.
 - **dnsmasq:** `address=/noc.home.arpa/192.168.1.20`.
 - **No DNS of your own:** on one computer, add the names to its hosts file
   (`/etc/hosts`, or `C:\Windows\System32\drivers\etc\hosts`):
 
   ```text
-  192.168.1.20  grafana.noc.home.arpa prometheus.noc.home.arpa alertmanager.noc.home.arpa ca.noc.home.arpa
+  192.168.1.20  grafana.noc.home.arpa prometheus.noc.home.arpa alertmanager.noc.home.arpa ca.noc.home.arpa dashboard.noc.home.arpa
   ```
 
 `home.arpa` is set aside for home networks, so it can never clash with a name on the
@@ -68,7 +69,8 @@ device:
 
 The authority can only vouch for names under ok3d's domain: it carries a name constraint
 that browsers enforce. Even if its key were ever stolen, it couldn't be used to pass off any
-other site (your bank, say) on a device that trusts it.
+other site (your bank, say) on a device that trusts it. An authority made by 0.5 or later
+also can't vouch for any IP address.
 
 Its key stays in the data root (`certs/ca.key`), readable only by you, and in the cluster as
 the Secret cert-manager issues from. The page certificate cert-manager issues lasts 90 days

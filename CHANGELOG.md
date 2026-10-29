@@ -9,6 +9,9 @@
   (`kube-prometheus-stack`, `prometheus-blackbox-exporter`, `gateway`, `global`), which
   choose images and how pods run. Nothing in the docs ever asked for them;
   [chart/ok3d-files/README.md](chart/ok3d-files/README.md) has the list.
+- A certificate authority made from 0.5 on can't vouch for any IP address, only for names
+  under your domain. One you already have is kept as it is, so your devices keep trusting it;
+  to get the new limit, move `certs/` aside and run `./ok3d apply`, then trust the new one.
 - A device's address can't be a name inside the cluster (`.svc`, `.cluster.local`),
   `localhost`, or a loopback, link-local, or `0.x` address: ok3d watches your network, not
   itself.
@@ -32,6 +35,11 @@
   copies of each file in `local/backups/`.
 - `./ok3d validate settings FILE` and `./ok3d validate devices FILE` check a file before it
   replaces yours, the way `./ok3d check` checks the ones in place.
+- The installer: `curl -fsSL https://raw.githubusercontent.com/southsidedean/observability-k3d/main/install.sh | sh`
+  checks out the newest release into `~/ok3d`, makes your first `settings.yaml`, and runs the
+  new `./ok3d install`, which starts the helper as a service of yours and the Dashboard's
+  container, issues the Dashboard's certificate, and prints its address
+  (`https://dashboard.<domain>:8444`) and password. `cluster.ports.dashboard` sets its port.
 - The Dashboard's pages: Home, with **Check** and **Apply** (which stays off until a Check
   finds no problems); **Settings** and **Devices**, to change and save your files; and
   **Keys**, to set the UniFi key, the ntfy topic and token, and the mail password, showing

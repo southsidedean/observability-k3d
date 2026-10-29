@@ -204,7 +204,8 @@ In the ok3d checkout: `settings.yaml`, `devices.yaml`, and `.env` when you save 
 
 ## Running it
 
-The installer sets the service up later in 0.5. Until then, from the ok3d checkout:
+`./ok3d install` sets the service up (docs/dashboard-under-the-hood.md says how). To try it
+by hand instead, from the ok3d checkout:
 
 ```sh
 python3 -I src/ok3d/helper.py once --ok3d-dir . --data-root /srv/ok3d    # handle one request

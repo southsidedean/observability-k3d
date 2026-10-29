@@ -18,7 +18,12 @@ ROOT = Path(__file__).resolve().parent.parent
 # Each stand-in logs its name and arguments, then does just enough to keep ok3d going. Their
 # behavior can be changed per test through FAKE_* variables.
 FAKES = {
-    "docker": 'echo "docker $*" >>"$FAKE_LOG"; exit "${FAKE_DOCKER_STATUS:-0}"',
+    # docker run, for the Dashboard, makes its password, as the real one does on first start.
+    "docker": r"""echo "docker $*" >>"$FAKE_LOG"
+if [ "$1" = run ] && [ -d "$FAKE_DATA_ROOT/dashboard" ]; then printf 'kxq7-m2pa-9fht-3bnd\n' >"$FAKE_DATA_ROOT/dashboard/password"; fi
+if [ "$1" = pull ]; then exit "${FAKE_PULL_STATUS:-0}"; fi
+exit "${FAKE_DOCKER_STATUS:-0}"
+""",
     "k3d": r"""echo "k3d $*" >>"$FAKE_LOG"
 case "$1 ${2:-}" in
 "version "*) echo "k3d version v${FAKE_K3D_VERSION:-5.9.0}" ;;
@@ -42,6 +47,7 @@ data:
   API_PORT: "6445"
   PUBLISH_ADDRESS: "0.0.0.0"
   HTTPS_PORT: "8443"
+  DASHBOARD_PORT: "${FAKE_DASHBOARD_PORT:-8444}"
   DATA_ROOT: "$FAKE_DATA_ROOT"
   TLS_MODE: "self-issued"
   DOMAIN: "${FAKE_DOMAIN:-noc.home.arpa}"
@@ -74,6 +80,12 @@ if [ "$1" = req ]; then
 		case "$1" in -keyout | -out) touch "$2"; shift ;; esac
 		shift
 	done
+elif [ "$1" = x509 ] && [ "$2" = -req ]; then
+	# What the certificate would say, kept for the test to read.
+	while [ $# -gt 0 ]; do
+		case "$1" in -extfile) cp "$2" "$FAKE_LOG.ext"; shift ;; -out) touch "$2"; shift ;; esac
+		shift
+	done
 elif [ "$1" = x509 ]; then
 	echo "    Permitted:"
 	echo "      DNS:.${FAKE_CA_DOMAIN:-noc.home.arpa}"
@@ -84,7 +96,9 @@ elif [ "$1" = dgst ]; then
 fi""",
     # Darwin, so ok3d skips the Linux-only checks (inotify, free memory, the filesystem type)
     # whatever machine the tests run on.
-    "uname": 'echo Darwin',
+    "uname": 'echo "${FAKE_UNAME:-Darwin}"',
+    "systemctl": 'echo "systemctl $*" >>"$FAKE_LOG"',
+    "loginctl": 'echo "loginctl $*" >>"$FAKE_LOG"; echo "${FAKE_LINGER:-yes}"',
 }
 
 
@@ -434,3 +448,132 @@ def test_check_reads_settings_and_devices_through_the_section_check(env: dict[st
     log = calls(env)
     assert any(line.startswith(f"helm template ok3d-files chart/ok3d-files/settings --values {env['OK3D_SETTINGS']}") for line in log)
     assert any(line.startswith(f"helm template ok3d-files chart/ok3d-files/devices --values {devices}") for line in log)
+
+
+
+@pytest.fixture
+def linux(env: dict[str, str], tmp_path: Path) -> dict[str, str]:
+    """A Linux machine with systemd, its user config under tmp_path."""
+    return {**env, "FAKE_UNAME": "Linux", "XDG_CONFIG_HOME": str(tmp_path / "config")}
+
+
+def test_install_sets_up_the_helper_and_the_dashboard(linux: dict[str, str], tmp_path: Path) -> None:
+    result = ok3d(linux, "install")
+    assert result.returncode == 0, result.stdout + result.stderr
+    data = Path(linux["FAKE_DATA_ROOT"])
+    for folder in ("dashboard", "dashboard/outbox", "dashboard/tls", "helper"):
+        assert stat.S_IMODE((data / folder).stat().st_mode) == 0o700, folder
+    unit = (tmp_path / "config" / "systemd" / "user" / "ok3d-helper.service").read_text()
+    assert f"ExecStart=/usr/bin/python3 -I {ROOT}/src/ok3d/helper.py watch --ok3d-dir {ROOT} --data-root {data}" in unit
+    for placeholder in ("@DIR@", "@DATA_ROOT@", "@PATH@"):
+        assert placeholder not in unit
+    log = calls(linux)
+    assert "systemctl --user daemon-reload" in log
+    assert "systemctl --user restart ok3d-helper" in log
+    run = next(line for line in log if line.startswith("docker run"))
+    for part in ("--name ok3d-dashboard", "--read-only", "--cap-drop ALL", "--security-opt no-new-privileges",
+                 "--publish 0.0.0.0:8444:8444", f"--volume {data}/dashboard:/state",
+                 f"--volume {data}/helper:/helper:ro", "ghcr.io/southsidedean/ok3d-dashboard:main",
+                 "--origin https://dashboard.noc.home.arpa:8444"):  # fmt: skip
+        assert part in run, part
+    assert f"--user {os.getuid()}:{os.getgid()}" in run
+    assert "Done. Open the Dashboard at https://dashboard.noc.home.arpa:8444/" in result.stdout.splitlines()
+    assert "kxq7-m2pa-9fht-3bnd" in result.stdout
+
+
+def test_install_issues_the_dashboards_certificate_for_its_name(linux: dict[str, str]) -> None:
+    ok3d(linux, "install")
+    issue = next(line for line in calls(linux) if line.startswith("openssl x509 -req"))
+    assert "-days 397" in issue
+    assert "-set_serial 0x" in issue
+    ext = Path(linux["FAKE_LOG"] + ".ext").read_text()
+    assert "subjectAltName=DNS:dashboard.noc.home.arpa\n" in ext
+    assert "basicConstraints=critical,CA:FALSE" in ext
+    # Made where the Dashboard's container can't reach, and only the result moved into tls/.
+    data = linux["FAKE_DATA_ROOT"]
+    assert f"-extfile {data}/certs/issue." in issue
+    assert "-CAserial" not in issue
+    assert sorted(os.listdir(Path(data) / "dashboard" / "tls")) == ["dashboard.crt", "dashboard.key"]
+    assert [n for n in os.listdir(Path(data) / "certs") if n.startswith("issue.")] == []
+
+
+def test_a_new_certificate_authority_vouches_for_no_ip_address(linux: dict[str, str]) -> None:
+    ok3d(linux, "install")
+    make = next(line for line in calls(linux) if line.startswith("openssl req -x509"))
+    assert "excluded;IP:0.0.0.0/0.0.0.0" in make
+
+
+def test_install_replaces_links_in_tls_instead_of_following_them(linux: dict[str, str], tmp_path: Path) -> None:
+    tls = Path(linux["FAKE_DATA_ROOT"]) / "dashboard" / "tls"
+    tls.mkdir(parents=True)
+    victim = tmp_path / "authorized_keys"
+    victim.write_text("mine\n")
+    (tls / "dashboard.key").symlink_to(victim)
+    ok3d(linux, "install")
+    assert victim.read_text() == "mine\n"
+    assert not (tls / "dashboard.key").is_symlink()
+
+
+def test_install_refuses_a_tls_folder_that_is_a_link(linux: dict[str, str], tmp_path: Path) -> None:
+    dashboard = Path(linux["FAKE_DATA_ROOT"]) / "dashboard"
+    dashboard.mkdir()
+    (tmp_path / "elsewhere").mkdir()
+    (dashboard / "tls").symlink_to(tmp_path / "elsewhere")
+    result = ok3d(linux, "install")
+    assert result.returncode == 1
+    assert "isn't a folder" in result.stderr
+
+
+def test_a_failed_pull_leaves_the_running_dashboard(linux: dict[str, str]) -> None:
+    result = ok3d({**linux, "FAKE_PULL_STATUS": "1"}, "install")
+    assert result.returncode == 1
+    assert "left as it was" in result.stderr
+    assert not any(line.startswith("docker rm") for line in calls(linux))
+
+
+def test_the_password_is_shown_on_first_install_only(linux: dict[str, str]) -> None:
+    assert "kxq7-m2pa-9fht-3bnd" in ok3d(linux, "install").stdout
+    again = ok3d(linux, "install").stdout
+    assert "kxq7-m2pa-9fht-3bnd" not in again
+    assert "Its password is in" in again
+
+
+def test_install_refuses_one_port_for_both(linux: dict[str, str]) -> None:
+    result = ok3d({**linux, "FAKE_DASHBOARD_PORT": "8443"}, "install")
+    assert result.returncode == 1
+    assert "need a port each" in result.stderr
+
+
+def test_install_refuses_a_path_the_service_file_cant_hold(linux: dict[str, str]) -> None:
+    result = ok3d({**linux, "PATH": linux["PATH"] + ':/opt/"odd'}, "install")
+    assert result.returncode == 1
+    assert "PATH has a quote" in result.stderr
+
+
+def test_install_escapes_percent_signs_for_systemd(linux: dict[str, str], tmp_path: Path) -> None:
+    ok3d({**linux, "PATH": linux["PATH"] + ":/opt/100%"}, "install")
+    unit = (tmp_path / "config" / "systemd" / "user" / "ok3d-helper.service").read_text()
+    assert "/opt/100%%" in unit
+
+
+def test_install_says_how_to_keep_the_helper_running_after_logout(linux: dict[str, str]) -> None:
+    result = ok3d({**linux, "FAKE_LINGER": "no"}, "install")
+    assert "sudo loginctl enable-linger" in result.stdout
+
+
+def test_install_uses_the_image_you_name(linux: dict[str, str]) -> None:
+    ok3d({**linux, "OK3D_DASHBOARD_IMAGE": "ok3d-dashboard:local"}, "install")
+    assert any(line.startswith("docker run") and " ok3d-dashboard:local " in line for line in calls(linux))
+
+
+def test_install_needs_linux_with_systemd(env: dict[str, str]) -> None:
+    result = ok3d(env, "install")
+    assert result.returncode == 1
+    assert "needs Linux with systemd" in result.stderr
+
+
+def test_install_needs_a_data_root(linux: dict[str, str]) -> None:
+    Path(linux["FAKE_DATA_ROOT"]).rmdir()
+    result = ok3d(linux, "install")
+    assert result.returncode == 1
+    assert not any(line.startswith("docker run") for line in calls(linux))
