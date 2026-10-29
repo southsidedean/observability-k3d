@@ -64,7 +64,7 @@
   makes browsers send `Origin: null` on Grafana's own requests, and Grafana refused every
   one ("origin not allowed"), so each panel showed an error. It now sends `same-origin`,
   which still keeps your pages' addresses from other sites. Grafana also trusts its own
-  address (`grafana.<domain>:<port>`) as an origin: the gateway passes Grafana its
+  name (`grafana.<domain>`) as an origin: the gateway passes Grafana its
   in-cluster name, so Grafana took the browser's real Origin for another site's and refused
   its queries too. In 0.4.0, Grafana's dashboards show no data in a browser until you
   upgrade.

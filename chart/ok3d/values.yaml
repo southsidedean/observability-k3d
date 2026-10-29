@@ -198,10 +198,11 @@ kube-prometheus-stack:
         cookie_secure: true
         cookie_samesite: strict
         disable_gravatar: true
-        # Grafana's own pages, by the name and port you open them at, which ok3d apply passes.
-        # The gateway hands Grafana its in-cluster name as the Host, so without this Grafana
-        # takes the browser's Origin for another site's and refuses every query it sends.
-        csrf_trusted_origins: grafana.noc.home.arpa:8443
+        # Grafana's own name, grafana.<domain>, which ok3d apply passes. The gateway hands
+        # Grafana its in-cluster name as the Host, so without this Grafana takes the browser's
+        # Origin for another site's and refuses every query it sends. A name with no port
+        # (Grafana compares names without one) and no scheme: the test VM showed only this works.
+        csrf_trusted_origins: grafana.noc.home.arpa
   alertmanager:
     enabled: true
     alertmanagerSpec:
