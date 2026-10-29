@@ -81,8 +81,10 @@ when the cluster is down.
   no answer.
 - Each connection gets its own thread, and its TLS handshake happens there, so a client that
   connects and says nothing holds up nobody else. A connection has 10 seconds for its
-  handshake and between each read and write after it. At most 32 are served at once; more
-  are closed straight away.
+  handshake and between each read and write after it, and 60 seconds in all, from the
+  handshake to the end of the answer. After that it's closed, however it's going, so a
+  client sending a byte at a time can't keep it. At most 32 are served at once; more are
+  closed straight away.
 - Every page but the sign-in page, the stylesheet, and "not found" needs a session; without
   one, it sends you to sign in.
 - Every form must come with an `Origin` header naming the Dashboard itself, and, from
@@ -93,11 +95,8 @@ when the cluster is down.
   that isn't there) is read and thrown away first: refused while the browser was still
   sending, the browser would show a reset connection instead of the refusal. A refused form
   over 1 MB isn't read, and is refused straight away. Every form must arrive within 30
-  seconds, so a client that sends one a byte at a time keeps a connection for about 40
-  seconds at most. (That's about 13 KB a second for the biggest settings or devices file.)
-  The request's first line and headers have only the 10-second limit on each read, so a
-  client sending those very slowly still keeps its connection. No `GET`
-  changes anything. Started with
+  seconds: about 13 KB a second for the biggest settings or devices file. No `GET` changes
+  anything. Started with
   `--origin https://my-server.lan:8444` (once for each address you open it at), it accepts
   forms only from those exact addresses, which the installer will pass; without, the Origin
   must match the address the browser asked for.
