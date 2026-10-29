@@ -13,10 +13,12 @@
 # Dashboard's image from this checkout; runs ./ok3d install and ./ok3d apply; and waits for
 # Grafana to have a few minutes of graphs. The data root must be there already, and yours.
 #
-# Either way, it refuses to run unless the settings use the stand-in domain noc.home.arpa and
-# devices.yaml is the demo's, so a screenshot can't show a real network. The browser is
-# Playwright's Chromium, from a container image pinned by digest, and it can reach only this
-# machine. Look at every picture before committing them (CLAUDE.md).
+# Either way, it refuses to run unless settings.yaml is exactly what --setup makes and
+# devices.yaml is the demo's, so a screenshot can't show a real network, address, or name. The
+# browser is Playwright's Chromium, from a container image pinned by digest; every name under
+# the domain goes to this machine, and every other name fails. It writes your home folder as
+# ~ in what it shows, and stops if a home folder is still on a page. Look at every picture
+# before committing them (CLAUDE.md).
 set -eu
 cd "$(dirname "$0")/.."
 
@@ -39,12 +41,11 @@ case "${1:-}" in
 esac
 command -v docker >/dev/null 2>&1 || stop "This needs Docker."
 
-if $setup; then
-	for file in "$settings" "$devices" .env; do
-		[ ! -e "$file" ] || stop "--setup is for a fresh machine, and $file is here already. Run without --setup to use it."
-	done
-	cp settings.example.yaml "$settings"
-	cat >>"$settings" <<-'EOF'
+# The settings --setup makes: the example's, and email alerts to a mail server on the simulated
+# network that isn't there.
+screenshot_settings() {
+	cat settings.example.yaml
+	cat <<-'EOF'
 
 		# From scripts/screenshots.sh: email alerts, to a mail server on the simulated network
 		# that isn't there, so the Dashboard shows them on and nothing is ever sent.
@@ -56,12 +57,23 @@ if $setup; then
 		    smarthost: 198.51.100.25:25
 		    username: ok3d
 	EOF
+}
+
+if $setup; then
+	for file in "$settings" "$devices" .env; do
+		[ ! -e "$file" ] || stop "--setup is for a fresh machine, and $file is here already. Run without --setup to use it."
+	done
+	screenshot_settings >"$settings"
 	cp devices.demo.yaml "$devices"
 	(umask 077 && printf 'SMTP_PASSWORD=a-stand-in-for-the-screenshots\n' >.env)
 	chmod 600 "$settings"
 fi
 
-# What the settings say, read the simple way, since they're the example's.
+# Exactly the settings --setup makes, so nothing of a real network (an email address, a
+# server, a domain) can be in the Settings or Setup pictures.
+screenshot_settings | cmp -s - "$settings" ||
+	stop "$settings isn't the one scripts/screenshots.sh --setup makes: screenshots are taken only on the simulated network."
+# What the settings say, read the simple way, since they're exactly the ones above.
 setting() { sed -n "s/^$1: *//p" "$settings" | head -n 1 | sed "s/^[\"']//; s/[\"'] *\$//; s/ *#.*//"; }
 domain=$(setting '  domain')
 data_root=$(setting '  dataRoot')
@@ -103,5 +115,5 @@ docker run --rm --network host --ipc host --user "$(id -u):$(id -g)" --env HOME=
 		PYTHONPATH=/tmp/packages exec python3 -P /screenshots.py "$@"' screenshots \
 	--shots /shots.json --out /out --version "$version" \
 	--domain "$domain" --https-port "${https_port:-8443}" --dashboard-port "${dashboard_port:-8444}" \
-	--dashboard-password /dashboard-password --grafana-password /grafana-password
+	--home "$HOME" --dashboard-password /dashboard-password --grafana-password /grafana-password
 echo "Done. Look at each picture in images/screenshots/ before committing them, with IMAGES_CHECKED=1."

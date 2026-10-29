@@ -68,9 +68,9 @@
   in-cluster name, so Grafana took the browser's real Origin for another site's and refused
   its queries too. In 0.4.0, Grafana's dashboards show no data in a browser until you
   upgrade.
+- Grafana's Devices dashboard no longer shows a `namespace` column in its table of checks.
 - Grafana can have 1 GiB of memory, up from 512 MiB. It uses about 400 MiB once started,
   and opening a dashboard took it over 512 MiB, so it was killed and restarted.
-
 - `.env.example` no longer says ok3d reads none of its secrets: 0.4 reads all but the agents'
   key.
 

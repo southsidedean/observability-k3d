@@ -13,6 +13,7 @@ import struct
 import subprocess
 import zlib
 from pathlib import Path
+from collections.abc import Callable
 from types import ModuleType
 
 import pytest
@@ -59,6 +60,17 @@ def test_a_damaged_png_is_refused(bad: bytes) -> None:
         screenshots.strip(bad)
 
 
+def test_addresses_are_written_as_a_browser_writes_them() -> None:
+    assert screenshots.address("grafana", "noc.home.arpa", "8443") == "https://grafana.noc.home.arpa:8443"
+    assert screenshots.address("dashboard", "noc.home.arpa", "443") == "https://dashboard.noc.home.arpa"
+
+
+def test_home_folders_left_on_a_page_are_found() -> None:
+    assert screenshots.home_folders("PASS  the settings in ~/ok3d/settings.yaml") == []
+    assert screenshots.home_folders("in /home/someone/ok3d and /Users/me/x and /root/y") == [
+        "/Users/me", "/home/someone", "/root"]
+
+
 def test_the_shot_list_is_valid() -> None:
     config = screenshots.load_shots(SHOTS)
     assert {shot["site"] for shot in config["shots"]} == {"dashboard", "grafana"}
@@ -90,16 +102,38 @@ def run(tmp_path: Path, *args: str, settings: str | None = None, devices: str | 
                           text=True, check=False)  # fmt: skip
 
 
-def test_it_refuses_settings_for_a_real_domain(tmp_path: Path) -> None:
-    (tmp_path / "settings.yaml").write_text("host:\n  dataRoot: /srv/ok3d\ntls:\n  domain: my-server.lan\n")
+def setup_settings() -> str:
+    """The settings scripts/screenshots.sh --setup makes: the example's, and the block its
+    heredoc adds (with the heredoc's leading tabs taken off, as <<- does)."""
+    script = (ROOT / "scripts" / "screenshots.sh").read_text()
+    block = script.split("\tcat <<-'EOF'\n", 1)[1].split("\tEOF\n", 1)[0]
+    return (ROOT / "settings.example.yaml").read_text() + "".join(
+        line.lstrip("\t") + "\n" for line in block.split("\n")[:-1])
+
+
+# Settings that aren't exactly what --setup makes: each could put a real network in a picture.
+NOT_SETUP = {
+    "a real domain": lambda s: s.replace("domain: noc.home.arpa", "domain: my-server.lan"),
+    "the domain twice, the real one last": lambda s: s.replace("  domain: noc.home.arpa\n",
+                                                               "  domain: noc.home.arpa\n  domain: my-server.lan\n"),
+    "a real email address": lambda s: s.replace("to: you@example.com", "to: someone@my-server.lan"),
+    "the example alone": lambda s: (ROOT / "settings.example.yaml").read_text(),
+}  # fmt: skip
+
+
+@pytest.mark.parametrize("change", NOT_SETUP.values(), ids=NOT_SETUP.keys())
+def test_it_refuses_settings_it_didnt_make(tmp_path: Path, change: Callable[[str], str]) -> None:
+    text = change(setup_settings())
+    assert text != setup_settings()
+    (tmp_path / "settings.yaml").write_text(text)
     result = run(tmp_path)
     assert result.returncode == 1
-    assert "not noc.home.arpa" in result.stderr
+    assert "isn't the one scripts/screenshots.sh --setup makes" in result.stderr
     assert not (tmp_path / "docker.log").exists()
 
 
 def test_it_refuses_devices_that_arent_the_demos(tmp_path: Path) -> None:
-    (tmp_path / "settings.yaml").write_text((ROOT / "settings.example.yaml").read_text())
+    (tmp_path / "settings.yaml").write_text(setup_settings())
     devices = tmp_path / "devices.yaml"
     devices.write_text("devices:\n  - name: router\n    address: 192.168.1.1\n    role: gateway\n    checks: [ping]\n")
     result = run(tmp_path, devices=str(devices))
@@ -116,9 +150,9 @@ def test_setup_wont_touch_settings_that_are_there(tmp_path: Path) -> None:
     assert (tmp_path / "settings.yaml").read_text() == "settingsVersion: 1\n"
 
 
+@pytest.mark.skipif(Path("/srv/ok3d/dashboard/password").exists(), reason="ok3d is installed here")
 def test_it_needs_ok3d_installed(tmp_path: Path) -> None:
-    text = (ROOT / "settings.example.yaml").read_text().replace("dataRoot: /srv/ok3d", f"dataRoot: {tmp_path}/data")
-    (tmp_path / "settings.yaml").write_text(text)
+    (tmp_path / "settings.yaml").write_text(setup_settings())
     result = run(tmp_path)
     assert result.returncode == 1
     assert "is ok3d installed and applied here?" in result.stderr

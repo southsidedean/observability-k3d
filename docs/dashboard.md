@@ -56,7 +56,7 @@ Home is where you start and finish each change:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../images/screenshots/dashboard-setup-dark.png">
-  <img src="../images/screenshots/dashboard-setup-light.png" alt="The Dashboard's Setup page: four ready-made setups as cards (Basic NOC, marked as the setup now; Network NOC, which needs the UniFi controller's address first; NOC with logs, coming in 0.6; and NOC with agents, coming in 0.9), then a switch for each part, then where alerts go: ntfy, email (on), and the dead man's switch." width="700">
+  <img src="../images/screenshots/dashboard-setup-light.png" alt="The Dashboard's Setup page: four ready-made setups as cards (Basic NOC, marked as the setup now; Network NOC, which needs the UniFi controller's address first; NOC with logs, coming in 0.6; and NOC with agents, coming in 0.9), then each part (UniFi, off until its controller's address is set, and the rest coming in later releases), then where alerts go, each with a button: ntfy (off), email (on), and the dead man's switch (off)." width="700">
 </picture>
 
 Choose a ready-made setup, or switch the parts on and off yourself:

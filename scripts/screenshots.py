@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import struct
 import zlib
 from pathlib import Path
@@ -21,6 +22,17 @@ KEEP = {b"IHDR", b"PLTE", b"tRNS", b"IDAT", b"IEND", b"sRGB", b"gAMA", b"cHRM", 
 SIGNATURE = b"\x89PNG\r\n\x1a\n"
 THEMES = ("light", "dark")
 SITES = ("dashboard", "grafana")
+# Home folders, which a page mustn't show once your own has been written as ~ (CLAUDE.md: no
+# home paths in screenshots).
+HOME_FOLDER = re.compile(r"/home/[^/\s]+|/Users/[^/\s]+|/root\b")
+# Writes the home folder as ~ in every bit of text on the page: the helper's answer shows
+# where ok3d is checked out, which is in someone's home folder.
+TILDE = """home => {
+  const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  for (let node = walk.nextNode(); node; node = walk.nextNode()) {
+    node.nodeValue = node.nodeValue.split(home).join("~");
+  }
+}"""
 
 
 def chunks(data: bytes) -> list[tuple[bytes, bytes]]:
@@ -82,30 +94,46 @@ def wait_for(page: Any, url: str, selector: str, timeout: int) -> None:
         page.wait_for_timeout(5000)
 
 
+def address(name: str, domain: str, port: str) -> str:
+    """https://<name>.<domain>:<port>, without the port when it's HTTPS's own, as a browser
+    writes it."""
+    return f"https://{name}.{domain}" + ("" if port == "443" else f":{port}")
+
+
+def home_folders(text: str) -> list[str]:
+    """The home folders still in a page's text."""
+    return sorted(set(HOME_FOLDER.findall(text)))
+
+
 def take(args: argparse.Namespace) -> None:
     from playwright.sync_api import sync_playwright  # type: ignore[import-not-found]  # only in its image
 
     config = load_shots(args.shots)
-    dashboard = f"https://dashboard.{args.domain}:{args.dashboard_port}"
-    grafana = f"https://grafana.{args.domain}:{args.https_port}"
+    if not args.home.startswith("/") or args.home.rstrip("/") == "":
+        raise SystemExit("--home must be a full path, and not /.")
+    dashboard = address("dashboard", args.domain, args.dashboard_port)
+    grafana = address("grafana", args.domain, args.https_port)
     sources: dict[str, str] = {}
     with sync_playwright() as p:
-        # Every name under the domain goes to this machine, whatever DNS says, so the browser
-        # can't reach anything but the ok3d running here.
-        browser = p.chromium.launch(args=[f"--host-resolver-rules=MAP *.{args.domain} 127.0.0.1"])
+        # Every name under the domain goes to this machine, whatever DNS says, and every other
+        # name fails, so the browser reaches only the ok3d running here (by name; it never
+        # needs an address).
+        browser = p.chromium.launch(args=[f"--host-resolver-rules=MAP *.{args.domain} 127.0.0.1, MAP * ~NOTFOUND"])
         for theme in THEMES:
             # The certificates are from ok3d's own authority, which this browser doesn't trust;
-            # it only ever talks to this machine (above).
+            # it can only reach this machine (above). bypass_csp lets TILDE run on the pages,
+            # which allow no scripts of their own.
             context = browser.new_context(color_scheme=theme, viewport=config["viewport"], device_scale_factor=2,
-                                          ignore_https_errors=True)  # fmt: skip
+                                          ignore_https_errors=True, bypass_csp=True)  # fmt: skip
             page = context.new_page()
             page.goto(f"{grafana}/login")
             page.fill("input[name='user']", "admin")
             page.fill("input[name='password']", args.grafana_password.read_text().strip())
             page.click("button[type='submit']")
             page.wait_for_url(lambda url: "/login" not in url)
-            signed_out = browser.new_context(color_scheme=theme, viewport=config["viewport"], device_scale_factor=2,
-                                             ignore_https_errors=True).new_page()  # fmt: skip
+            signed_out_context = browser.new_context(color_scheme=theme, viewport=config["viewport"],
+                                                     device_scale_factor=2, ignore_https_errors=True, bypass_csp=True)
+            signed_out = signed_out_context.new_page()  # fmt: skip
             signed_in = False
             for shot in config["shots"]:
                 on = page if shot.get("signed_in", True) else signed_out
@@ -133,12 +161,18 @@ def take(args: argparse.Namespace) -> None:
                 on.wait_for_load_state("networkidle")
                 # Grafana draws its panels after the data arrives.
                 on.wait_for_timeout(3000 if shot["site"] == "grafana" else 300)
+                on.evaluate(TILDE, args.home)
+                left = home_folders(on.inner_text("body"))
+                if left:
+                    raise SystemExit(f"{shot['name']}: the page still shows a home folder ({', '.join(left)}), "
+                                     "so it isn't saved.")  # fmt: skip
                 target = on.locator(shot["crop"]).first if "crop" in shot else on
                 name = f"{shot['name']}-{theme}.png"
                 (args.out / name).write_bytes(strip(target.screenshot()))
                 sources[name] = args.version
                 print(f"images/screenshots/{name}", flush=True)
             context.close()
+            signed_out_context.close()
         browser.close()
     (args.out / "sources.json").write_text(json.dumps(sources, indent=2, sort_keys=True) + "\n")
 
@@ -151,6 +185,7 @@ def main() -> None:
     parser.add_argument("--domain", required=True)
     parser.add_argument("--https-port", required=True)
     parser.add_argument("--dashboard-port", required=True)
+    parser.add_argument("--home", required=True, help="your home folder, which pages show as ~")
     parser.add_argument("--dashboard-password", type=Path, required=True, help="a file holding it")
     parser.add_argument("--grafana-password", type=Path, required=True, help="a file holding it")
     take(parser.parse_args())
