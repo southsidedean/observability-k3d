@@ -10,13 +10,13 @@ the Dashboard's own pages: every POST must come with an Origin header naming the
 (and, from browsers that send it, Sec-Fetch-Site: same-origin). GET never changes anything.
 
 A slow or silent client can't hold it up for long: each connection's TLS handshake happens in
-its own thread, with a time limit; every read has a time limit, and a form's body has one of
-its own; and only so many connections run at once. The request line and headers have only the
-limit on each read, so a client that sends them very slowly still keeps its thread.
+its own thread; every read has a time limit, a form's body has one of its own, and so does
+each whole connection; and only so many connections run at once.
 """
 
 from __future__ import annotations
 
+import contextlib
 import html
 import re
 import socket
@@ -50,6 +50,9 @@ MAX_FILE_FORM = 6 * 64 * 1024 + 1024
 MAX_DISCARD = 1024 * 1024
 # Seconds a form's body may take to arrive, however it's sent (see read_body).
 BODY_TIME = 30
+# Seconds a whole connection may take, from the TLS handshake to the last byte of the answer
+# (see Server.process_request_thread).
+REQUEST_TIME = 60
 
 HEADERS = {
     "Content-Security-Policy": "default-src 'none'; style-src 'self'; img-src 'self'; form-action 'self'; "
@@ -744,6 +747,15 @@ ACTIONS: dict[str, Callable[[Handler], None]] = {
 }
 
 
+def cut_off(request: socket.socket | tuple[bytes, socket.socket]) -> None:
+    """Shuts a connection that has taken too long, from the timer's thread. socket.socket's
+    own shutdown, not the TLS socket's, which would also drop the TLS state under the
+    connection's own thread, mid-read."""
+    if isinstance(request, socket.socket):
+        with contextlib.suppress(OSError):  # closed already
+            socket.socket.shutdown(request, socket.SHUT_RDWR)
+
+
 class Server(ThreadingHTTPServer):
     """A thread for each connection, up to MAX_CONNECTIONS at once."""
 
@@ -764,9 +776,23 @@ class Server(ThreadingHTTPServer):
             raise
 
     def process_request_thread(self, request: socket.socket | tuple[bytes, socket.socket], client_address: object) -> None:
+        # Each read has a time limit, but a client sending a byte just inside it, during the
+        # handshake or the headers, would never finish. So the whole connection has one too:
+        # after REQUEST_TIME the socket is shut, which ends any read or write waiting on it.
+        # socketserver's own version of this, written out so the timer is stopped before the
+        # socket is closed: shut after, its number might be a new connection's.
+        timer = threading.Timer(REQUEST_TIME, cut_off, (request,))
+        timer.daemon = True
         try:
-            super().process_request_thread(request, client_address)
+            timer.start()  # inside the try: a thread that won't start mustn't lose the slot
+            self.finish_request(request, client_address)
+        except Exception:
+            self.handle_error(request, client_address)
         finally:
+            timer.cancel()
+            if timer.ident is not None:
+                timer.join()  # a cut_off already under way finishes first
+            self.shutdown_request(request)
             self.slots.release()
 
     def handle_error(self, request: object, client_address: object) -> None:

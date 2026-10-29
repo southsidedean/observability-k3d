@@ -316,6 +316,77 @@ def test_connections_beyond_the_limit_are_closed(dash: Dashboard, monkeypatch: p
         pytest.fail("it didn't serve again after the idle connections closed")
 
 
+@pytest.mark.parametrize("where", ["handshake", "headers"])
+def test_a_slow_request_doesnt_keep_its_thread(dash: Dashboard, monkeypatch: pytest.MonkeyPatch,
+                                               capsys: pytest.CaptureFixture[str], where: str) -> None:  # fmt: skip
+    # A byte at a time, each well within the limit on one read, but never finishing.
+    import ok3d.dashboard.server as server_module
+
+    monkeypatch.setattr(server_module, "REQUEST_TIME", 1)
+    raw = socket.create_connection(("127.0.0.1", dash.port))
+    conn: socket.socket = raw
+    if where == "headers":
+        context = ssl.create_default_context()
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+        context.minimum_version = ssl.TLSVersion.TLSv1_2
+        conn = context.wrap_socket(raw)
+    # A TLS record that says 16 KB is coming, or a request line, then a byte at a time.
+    drip = b"\x16\x03\x01\x40\x00" + b"\x00" * 500 if where == "handshake" else b"GET / HTTP/1.0\r\nX-Slow: " + b"x" * 500
+    started = time.monotonic()
+    closed = False
+    try:
+        for byte in drip:
+            conn.sendall(bytes([byte]))
+            conn.settimeout(0.3)
+            try:
+                if conn.recv(1) == b"":
+                    closed = True
+                    break
+            except TimeoutError:
+                pass
+            if time.monotonic() - started > 8:
+                break
+    except OSError:
+        closed = True
+    try:
+        assert closed
+        assert time.monotonic() - started < 5
+        # The server's thread gave up too, not just the client's end: it says so, while this
+        # end is still open (closing it would end the server's read anyway). The fixture makes
+        # time.sleep do nothing, so this waits another way.
+        printed = ""
+        for _ in range(30):
+            printed += capsys.readouterr().out
+            if "connection dropped" in printed:
+                break
+            threading.Event().wait(0.1)
+        assert "connection dropped" in printed
+    finally:
+        conn.close()
+
+
+def test_a_timer_that_wont_start_doesnt_lose_a_connection(dash: Dashboard, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Short of memory or processes, a thread may not start. Each connection that hit that would
+    # have kept its place among the MAX_CONNECTIONS for good.
+    import ok3d.dashboard.server as server_module
+
+    failures = {"left": server_module.MAX_CONNECTIONS}
+
+    class Unstartable(threading.Timer):
+        def start(self) -> None:
+            if failures["left"] > 0:
+                failures["left"] -= 1
+                raise RuntimeError("can't start new thread")
+            super().start()
+
+    monkeypatch.setattr(threading, "Timer", Unstartable)  # the module the server uses too
+    while failures["left"] > 0:
+        with pytest.raises((http.client.HTTPException, OSError)):
+            dash.get("/sign-in")
+    assert dash.get("/sign-in").status == 200
+
+
 def test_another_apps_odd_cookie_doesnt_sign_you_out(dash: Dashboard) -> None:
     session = dash.sign_in()
     response = dash.request("GET", "/", headers={"Cookie": f'a={{"x":1}}; {COOKIE}={session}; b=2'})

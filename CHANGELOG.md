@@ -73,6 +73,8 @@
 - Grafana's Devices dashboard no longer shows a `namespace` column in its table of checks.
 - Grafana can have 1 GiB of memory, up from 512 MiB. It uses about 400 MiB once started,
   and opening a dashboard took it over 512 MiB, so it was killed and restarted.
+- A client that sends its request to the Dashboard a byte at a time can't keep a connection:
+  each one has 60 seconds in all.
 - When the Dashboard refuses a form, such as a file that's too big or a save after your
   session ran out, the browser shows the refusal or the sign-in page, not a reset connection.
 - `.env.example` no longer says ok3d reads none of its secrets: 0.4 reads all but the agents'
