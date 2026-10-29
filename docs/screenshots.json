@@ -1,0 +1,18 @@
+{
+  "about": "The docs' screenshots, which scripts/screenshots.sh takes on the simulated network. Each shot is taken in light and dark. site is dashboard or grafana; path is the page; before is what to do first (click a selector, or wait for one, up to timeout seconds); wait is what must be on the page; crop is the part of the page to keep (the whole page when it's missing).",
+  "viewport": {"width": 1100, "height": 760},
+  "shots": [
+    {"name": "dashboard-sign-in", "site": "dashboard", "path": "/sign-in", "signed_in": false,
+     "wait": "text=Sign in", "crop": "main"},
+    {"name": "dashboard-home", "site": "dashboard", "path": "/",
+     "before": [{"click": "form[action='/check'] button"},
+                {"wait": "text=finished with exit status 0", "timeout": 300}],
+     "wait": "text=What's next", "crop": "main"},
+    {"name": "dashboard-setup", "site": "dashboard", "path": "/setup", "wait": "text=Ready-made setups", "crop": "main"},
+    {"name": "dashboard-settings", "site": "dashboard", "path": "/settings", "wait": "textarea", "crop": "main"},
+    {"name": "dashboard-devices", "site": "dashboard", "path": "/devices", "wait": "textarea", "crop": "main"},
+    {"name": "dashboard-keys", "site": "dashboard", "path": "/keys", "wait": "text=Keys and passwords", "crop": "main"},
+    {"name": "grafana-devices", "site": "grafana", "path": "/d/ok3d-devices?orgId=1&from=now-30m&to=now&kiosk",
+     "wait": "text=Every check"}
+  ]
+}

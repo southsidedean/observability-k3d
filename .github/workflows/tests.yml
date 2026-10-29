@@ -37,7 +37,7 @@ jobs:
           python-version: "3.x"
       - run: python -m pip install -e ".[dev]"
       - name: ruff (bugs and risky code; settings in pyproject.toml)
-        run: python -m ruff check src tests
+        run: python -m ruff check src tests scripts
       - name: bandit (security problems in the package)
         run: python -m bandit -q -c pyproject.toml -r src
       - name: mypy (types, strict)
