@@ -247,9 +247,10 @@ and features, with links to troubleshooting and private security reports.
 
 **Git hooks** (`git config core.hooksPath .githooks`): pre-commit refuses commits on `main`,
 of anyone's own settings files, of secrets, and of private names or addresses outside the
-examples. Private names come from a list kept in `.git/hooks/private-names`, on your own
-machine and never committed: your host names, domains, and addresses, each plain name also
-matched in its other spellings. The same check (`scripts/private-names.sh`) runs on pull
+examples, anywhere in what the commit would hold and in its files' names; commit-msg refuses
+them in the message. Private names come from a list kept in `.git/hooks/private-names`, on
+your own machine and never committed: your host names, domains, and addresses, each plain
+name also matched in its other spellings. The same check (`scripts/private-names.sh`) runs on pull
 request descriptions and release notes before they're posted. A commit that adds or
 changes an image needs `IMAGES_CHECKED=1`, set only after every image was looked at and its
 metadata stripped. Pre-push runs the quick checks.

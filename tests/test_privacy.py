@@ -114,8 +114,9 @@ def test_nothing_from_the_private_names_list() -> None:
                                 capture_output=True, text=True, check=False)  # fmt: skip
     except FileNotFoundError:  # no sh or git: nothing to check against
         return
-    if result.returncode != 0:
+    if result.returncode == 3:
         return  # CI and fresh clones have no list; the generic checks above still ran
+    assert result.returncode == 0, f"scripts/private-names.sh patterns failed: {result.stderr}"
     patterns = [re.compile(line, re.IGNORECASE) for line in result.stdout.splitlines() if line]
     files = tracked_text_files()
     found = sorted(path for path, text in files.items() if any(p.search(text) for p in patterns))

@@ -130,9 +130,10 @@ committed.
 Check pull request bodies and release notes with `scripts/private-names.sh check body.md`
 before posting, and post only when it exits 0. A match, a missing body, or a missing or empty
 list (in a fresh clone, say) all exit non-zero. It says which line matched, never the text,
-and finds the list from a worktree too. The commit hook and `tests/test_privacy.py` use the
-same patterns, so each plain name also matches its other spellings (`media-box` matches
-`media_box` and `MediaBox`, `box9` matches `box-9`).
+and finds the list from a worktree too. The commit hooks (files, file names, and the
+message) and `tests/test_privacy.py` use the same patterns, so each plain name also matches
+its other spellings (`media-box` matches `media_box` and `MediaBox`, `box9` matches `box-9`),
+and any failure of the check stops a commit instead of skipping it.
 
 Never show raw logs or command output from a machine watching a real network: they can hold
 the UniFi key, the ntfy topic, the mail password, or addresses. Redact first, or say what
