@@ -11,9 +11,9 @@ ok3d's latest release, and the rules and steps below are what it follows.
 ## What it does, and what it won't
 
 - It tells you what the server is missing before it installs anything.
-- It never runs `sudo` itself. When something needs `sudo`, it shows you the command and what
-  it does, and you run it in a terminal of your own on the server. So you see every command
-  that changes the system, and the assistant never holds `sudo`.
+- It's told never to run `sudo` itself. When something needs `sudo`, it shows you the
+  command and what it does, and you run it in a terminal of your own on the server. So you
+  see every command that changes the system, and the assistant doesn't hold `sudo`.
 - It's told never to read, print, or ask for a password, API key, or other secret. And when
   the installer's output isn't going to a terminal, as with Claude Code, the installer says
   where the Dashboard's password is instead of printing it. So the password stays out of the
@@ -88,8 +88,9 @@ Follow these in order. Every step is safe to repeat.
 5. **Check it's running.** `docker ps` shows `ok3d-dashboard`, and
    `systemctl --user is-active ok3d-helper` says `active`.
 6. **Check the server is ready**, with `~/ok3d/ok3d check`. It changes nothing. Show the user
-   any line that starts with `FAIL`, and what it says to do. A warning that there's no
-   `devices.yaml` is expected: the user adds devices on the Dashboard.
+   any line that starts with `FAIL`, and what it says to do. Two warnings are expected, that
+   there's no `devices.yaml` and that no alert destination is on: the user sets up both on
+   the Dashboard.
 7. **Tell the user**, and stop:
    - the Dashboard's address, from the installer's last lines;
    - that its password is in `/srv/ok3d/dashboard/password`, and they can see it by running

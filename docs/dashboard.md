@@ -1,7 +1,7 @@
 # Setting up ok3d from the Dashboard
 
 From 0.5, you set ok3d up on a web page, the Dashboard, instead of editing files and running
-commands. The installer starts it, and gives you its address and password.
+commands. The installer starts it, and gives you its address and, on a terminal, its password.
 [Installing with an AI assistant](install-with-ai.md) has a prompt that does all this for you.
 [The Dashboard under the hood](dashboard-under-the-hood.md) says how it works and what keeps
 it safe.
@@ -17,8 +17,9 @@ curl -fsSL https://raw.githubusercontent.com/southsidedean/observability-k3d/mai
 
 The installer puts ok3d in `~/ok3d`, makes your `settings.yaml`, starts the Dashboard, and
 prints its address, `https://dashboard.noc.home.arpa:8444/` with the example settings, and
-its password (when you run it yourself, in a terminal). To open it, point `dashboard.noc.home.arpa` (or every name under your domain)
-at the server, and trust ok3d's certificate authority on your computer:
+its password (when you run it yourself, in a terminal). To open it, point
+`dashboard.noc.home.arpa` (or every name under your domain) at the server, and trust ok3d's
+certificate authority on your computer:
 [Opening ok3d's pages](certificate.md) has the steps for both.
 
 ## Sign in
