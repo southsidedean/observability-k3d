@@ -244,10 +244,12 @@ saves included, since any of them partway through would race it. It counts an up
 running while the `ok3d-upgrade` service is active, or while something holds a lock on
 `local/upgrading` in the ok3d checkout. `./ok3d upgrade` holds that lock (with `flock`) for as
 long as it runs, so an upgrade started on the server counts too (including one waiting on the server for you to type yes),
-and the system lets go of it when the upgrade ends, however it ends. The helper writes that a
-request is running before it asks, and `./ok3d upgrade` takes its lock before it reads that
-answer, so whichever comes second sees the other: an Apply never starts under an upgrade,
-nor an upgrade under an Apply. If `helper/upgrade` says an upgrade is running when
+and the system lets go of it when the upgrade ends, however it ends. The helper writes that
+a request is running before it asks, and `./ok3d upgrade` takes its lock before it reads
+that answer, so whichever comes second sees the other: an Apply never starts under an
+upgrade, nor an upgrade under an Apply. A request the helper is about to refuse says it's
+running for a moment first, so `./ok3d upgrade` reads a running answer again for a few
+seconds before it counts. If `helper/upgrade` says an upgrade is running when
 neither is true (the server restarted partway), the helper rewrites it as stopped, keeping
 the step it stopped at, so Home doesn't show it running forever. It asks whether one is
 running before it reads the file and again after, so an upgrade that finishes or starts in

@@ -847,6 +847,7 @@ def test_a_request_says_its_running_before_it_asks_about_an_upgrade(h: helper.Op
         return False
 
     monkeypatch.setattr(helper, "upgrading", asked)
+    (h.folders.own / "result").write_text("id=0123456789abcdef\naction=check\nstate=finished\nexit=0\n\n")
     send(h, f"id={ID}\naction=apply\n")
     helper.handle_once(h)
     assert seen and {"action": "apply", "state": "running"}.items() <= seen[0].items()

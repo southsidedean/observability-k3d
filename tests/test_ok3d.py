@@ -901,7 +901,7 @@ def test_a_refusal_shows_on_the_dashboard(releases: dict[str, str]) -> None:
 def test_upgrade_waits_for_a_request_the_helper_is_carrying_out(releases: dict[str, str]) -> None:
     result_file = Path(releases["FAKE_DATA_ROOT"]) / "helper" / "result"
     result_file.write_text("id=0123456789abcdef\naction=apply\nstate=running\n\n")
-    result = upgrade(releases, "v0.5.1", "--yes")
+    result = upgrade(releases | {"OK3D_BUSY_WAIT": "1"}, "v0.5.1", "--yes")
     assert result.returncode == 1
     assert "carrying out a request from the Dashboard" in result.stderr
     # The helper's own answer while it starts an upgrade doesn't count.
@@ -987,7 +987,6 @@ def test_a_failed_move_back_says_so(releases: dict[str, str]) -> None:
     assert "Moving back to 0.5.0 failed too" in note(releases, "upgrade")["step"]
 
 
-
 def sign(releases: dict[str, str], tmp_path: Path, name: str, target: str, version: str) -> str:
     """A tag called name, signed with the release key, for a new commit saying version (or,
     with target "tree", for that commit's tree); returns the tag object's id."""
@@ -1031,3 +1030,16 @@ def test_a_failed_check_never_reinstalls_whatever_the_environment_says(releases:
     assert result.returncode == 1
     log = calls(releases)
     assert not any(c.startswith("docker run") for c in log[log.index("new ok3d check"):])
+
+
+def test_a_request_the_helper_refuses_a_moment_later_doesnt_stop_the_upgrade(releases: dict[str, str]) -> None:
+    # A Check that arrived just now says it's running, then the helper sees the upgrade's lock
+    # and refuses it: the upgrade reads the answer again, and goes on.
+    result_file = Path(releases["FAKE_DATA_ROOT"]) / "helper" / "result"
+    result_file.write_text("id=0123456789abcdef\naction=check\nstate=running\n\n")
+    refuser = subprocess.Popen(["sh", "-c", f"sleep 1; printf 'id=0123456789abcdef\\nstate=refused\\n\\n' >{result_file}"])
+    try:
+        result = upgrade(releases, "v0.5.1", "--yes")
+    finally:
+        refuser.wait()
+    assert result.returncode == 0, result.stdout + result.stderr

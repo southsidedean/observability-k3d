@@ -1067,6 +1067,13 @@ verify_release() {
 	git rev-parse --verify --quiet "refs/tags/$target^{commit}" >"$work/commit" || return 1
 }
 
+# helper_busy: whether the helper's last answer says it's carrying out a request other than
+# starting this upgrade. Only the answer's head counts, not what the command printed.
+helper_busy() {
+	busy_head=$(sed -n '1,/^$/p' "$DATA_ROOT/helper/result" 2>/dev/null || true)
+	printf '%s\n' "$busy_head" | grep -qx 'state=running' && ! printf '%s\n' "$busy_head" | grep -qx 'action=upgrade'
+}
+
 # refuse WHY: won't upgrade, before anything has changed. Says so on the screen and, when the
 # helper started it for the Dashboard, on Home, which would otherwise show nothing. Only once
 # the lock is held (notes=yes), so it never writes over a running upgrade's record.
@@ -1159,9 +1166,15 @@ upgrade_to() {
 	[ -f deploy/release-signers ] || refuse "There's no deploy/release-signers to check $target's signature with."
 	# Not under a request the helper is carrying out (an Apply from the Dashboard, say): the
 	# upgrade would delete the cluster under it, and the new release's install restarts the
-	# helper. Only the answer's head counts, not what the command printed.
-	head=$(sed -n '1,/^$/p' "$DATA_ROOT/helper/result" 2>/dev/null || true)
-	if printf '%s\n' "$head" | grep -qx 'state=running' && ! printf '%s\n' "$head" | grep -qx 'action=upgrade'; then
+	# helper. A request that arrived just now says it's running for a moment before the helper
+	# sees this lock and refuses it, so a running answer is read again for a few seconds
+	# before it counts.
+	waited=0
+	while helper_busy && [ "$waited" -lt "${OK3D_BUSY_WAIT:-5}" ]; do
+		sleep 1
+		waited=$((waited + 1))
+	done
+	if helper_busy; then
 		refuse "The helper is carrying out a request from the Dashboard. Wait for Home to show its answer, then upgrade."
 	fi
 	if [ "${2:-}" != --yes ]; then
