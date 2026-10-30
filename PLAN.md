@@ -458,7 +458,12 @@ turn up. Production moves to ok3d at 0.4.0.
   install fails, and backs up `certs/`, `grafana/`, and `alertmanager/` while the cluster is
   down. Looking for a release happens only when you ask (`./ok3d upgrade`, or the button on
   Home), so ok3d still sends nothing on its own.
-- Maintenance windows.
+- Maintenance windows (decided 2026-10-30): Alertmanager silences made by ok3d, for all of
+  ok3d (every alert but Watchdog, so the dead man's switch keeps running) or the devices
+  chosen from `devices.yaml`, from now for a length or between two times in the server's own
+  time, at most 30 days. On a Maintenance page and with `./ok3d maintenance`; the helper runs
+  it with checked lines. One-off only: repeating windows need Alertmanager's time intervals
+  in the routing, later.
 - Apply asks first when it would stop something (decided 2026-10-29): Check compares a
   server-side dry run of Apply (`helm upgrade --dry-run=server`, with Apply's own arguments)
   with the deployed release, and lists the workloads that would restart, stop, or start.

@@ -64,6 +64,7 @@ in this repository.
 ./ok3d delete --yes   # delete the cluster; the data root stays
 ./ok3d upgrade [vX.Y.Z] [--yes]   # is a newer release out? / move to it and make the cluster again
 ./ok3d demo up        # the simulated network (also down, status, fail <device>, fix <device>)
+./ok3d maintenance [add WHAT WHEN [REASON] | end ID]   # windows when alerts don't notify you
 ./ok3d test-alert     # check that alerts reach you
 ./ok3d validate settings FILE [--from-dashboard]   # what the helper runs before a save
 ./ok3d validate devices FILE

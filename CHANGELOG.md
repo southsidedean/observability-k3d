@@ -26,6 +26,10 @@
   server-side dry run compared with what's deployed, and Home shows it under Apply. If
   anything would restart or stop, Apply opens a page naming those parts, with **Apply
   anyway**. `./ok3d apply` asks the same on a terminal; `--yes` skips the question.
+- Maintenance windows: times when alerts don't notify you, for all of ok3d or the devices you
+  choose, from now for a length or between two times. Alerts still fire and show in Grafana,
+  and the dead man's switch is never silenced. On the Dashboard's new Maintenance page, and
+  with `./ok3d maintenance` on the server. Home says while one is on.
 - Each Dashboard page shows what its buttons do on the server: `./ok3d check` and `./ok3d
   apply` on Home, the file to edit on Settings and Devices, the `settings.yaml` lines each
   ready-made setup writes on Setup, and the `.env` line each key goes into on Keys.

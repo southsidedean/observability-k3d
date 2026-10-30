@@ -1,8 +1,9 @@
 """The Dashboard's web server: HTTPS only, behind its own sign-in.
 
-It has the sign-in and five pages: Home (what's left to do, Check and Apply, releases and
+It has the sign-in and six pages: Home (what's left to do, Check and Apply, releases and
 upgrades, and What's next), Setup (ready-made setups and switches, switches.py), Settings,
-Devices, and Keys, plus the Upgrade page that Home leads to. Each page reads what the helper
+Devices, Keys, and Maintenance (times when alerts don't notify you), plus the Upgrade page
+that Home leads to. Each page reads what the helper
 publishes, and each button leaves a request for it (helper_link.py).
 
 Every page is made here, with every value escaped, and carries headers that keep it out of
@@ -27,10 +28,12 @@ import time
 import urllib.parse
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from ok3d import __version__
+from ok3d import maintenance as rules
 from ok3d.dashboard import helper_link, switches
 from ok3d.dashboard.auth import SESSION_TTL, Auth, Paused
 
@@ -133,7 +136,7 @@ def page(title: str, body: str, signed_in: bool = False) -> bytes:
 
 NAV = (
     '<nav><a href="/">Home</a> <a href="/setup">Setup</a> <a href="/settings">Settings</a> '
-    '<a href="/devices">Devices</a> <a href="/keys">Keys</a></nav>'
+    '<a href="/devices">Devices</a> <a href="/keys">Keys</a> <a href="/maintenance">Maintenance</a></nav>'
 )
 
 # What each page says about saving: the helper checks first, and keeps your old file.
@@ -189,7 +192,7 @@ def home(config: Config, message: str = "") -> str:
     )
     disabled = "" if helper_link.can_apply(config.state, config.helper) else " disabled"
     return (
-        f"<section><h2>ok3d {html.escape(__version__)}</h2>{note}{helper}"
+        f"<section><h2>ok3d {html.escape(__version__)}</h2>{note}{maintenance_note(config)}{helper}"
         "<p>Check that the server and your settings are ready, then Apply to make the cluster and "
         "deploy, or bring it up to date with your settings.</p>"
         '<form class="inline" method="post" action="/check"><button>Check</button></form> '
@@ -246,6 +249,76 @@ def apply_asks_page(config: Config, message: str = "") -> str:
         f'<form class="inline" method="post" action="/apply"><input type="hidden" name="confirm" value="yes">'
         '<button>Apply anyway</button></form> <a href="/">Back to Home</a>'
         "<p class=muted>The same on the server: <code>./ok3d apply</code>, which asks too.</p></section>"
+    )
+
+
+def who(what: str) -> str:
+    """What a maintenance window covers, in words, escaped."""
+    return "all of ok3d" if what == "all" else html.escape(what.replace(",", ", "))
+
+
+def maintenance_note(config: Config) -> str:
+    """On Home, while a maintenance window is on: what's silenced, and until when."""
+    found = helper_link.maintenance(config.helper)
+    now = datetime.now(UTC)
+    on = [w for w in (found[1] if found else []) if w.on(now)]
+    return "".join(f'<p class=bad>Maintenance: alerts for {who(w.what)} don\'t notify you until '
+                   f'{html.escape(w.end_here)} (<a href="/maintenance">Maintenance</a>).</p>' for w in on)  # fmt: skip
+
+
+# The lengths offered for a window that starts now, as (value, words).
+LENGTHS = (("30m", "30 minutes"), ("1h", "1 hour"), ("2h", "2 hours"), ("4h", "4 hours"), ("8h", "8 hours"),
+           ("1d", "1 day"))  # fmt: skip
+# A device's name in devices.yaml.
+DEVICE_NAMES = re.compile(rf"^\s*(?:-\s+)?name:\s*['\"]?({rules.DEVICE})['\"]?\s*$", re.MULTILINE)
+
+
+def maintenance_page(config: Config, message: str = "") -> str:
+    """Maintenance: the windows, and the form that adds one."""
+    note = f"<p class=bad>{html.escape(message)}</p>" if message else ""
+    found = helper_link.maintenance(config.helper)
+    now = datetime.now(UTC)
+    rows = []
+    for w in found[1] if found else []:
+        if w.end <= now:
+            continue
+        state = "<span class=bad>on now</span>" if w.on(now) else "<span class=muted>starts later</span>"
+        rows.append(
+            f"<li>{who(w.what)}, {html.escape(w.start_here)} to {html.escape(w.end_here)}: {state}"
+            + (f" ({html.escape(w.reason)})" if w.reason else "")
+            + f' <form class="inline" method="post" action="/maintenance/end"><input type="hidden" name="window" '
+            f'value="{w.id}"><button class="plain">End now</button></form></li>'
+        )
+    listed = f"<ul class=todo>{''.join(rows)}</ul>" if rows else "<p class=muted>No maintenance windows.</p>"
+    checked = (f"Read from Alertmanager at {html.escape(found[0])}." if found
+               else "Not read from Alertmanager yet.")  # fmt: skip
+    devices = DEVICE_NAMES.findall(helper_link.current(config.helper, "devices.yaml") or "")
+    boxes = "".join(f'<label><input type="checkbox" name="device-{d}" value="on"> {d}</label> ' for d in devices)
+    lengths = "".join(f'<option value="{v}"{" selected" if v == "2h" else ""}>{w}</option>' for v, w in LENGTHS)
+    return (
+        f"<section><h2>Maintenance windows</h2>{note}"
+        "<p>While a window is on, the alerts it covers don't notify you: for all of ok3d, or for the devices "
+        "you choose. They still fire and show in Grafana, and the dead man's switch keeps running.</p>"
+        f"{listed}<p class=muted>{checked}</p>"
+        '<form method="post" action="/maintenance/refresh"><button class="plain">Read them again</button></form>'
+        "<p class=muted>On the server: <code>./ok3d maintenance</code></p></section>"
+        '<section><h2>Add a window</h2><form method="post" action="/maintenance">'
+        '<h3>For</h3><p><label><input type="radio" name="scope" value="all" checked> All of ok3d</label></p>'
+        '<p><label><input type="radio" name="scope" value="devices"> These devices:</label> '
+        + (boxes or "<span class=muted>none in devices.yaml yet</span>") + "</p>"
+        '<h3>When</h3><p><label><input type="radio" name="timing" value="now" checked> From now, for</label> '
+        f'<select name="length" aria-label="How long">{lengths}</select></p>'
+        '<p><label><input type="radio" name="timing" value="later"> From</label> '
+        '<input type="datetime-local" name="start" aria-label="From"> to '
+        '<input type="datetime-local" name="end" aria-label="To"> '
+        "<span class=muted>(the server's own time)</span></p>"
+        '<h3>Why</h3><p><input type="text" name="reason" maxlength="100" aria-label="Why" '
+        'placeholder="Router firmware update"></p>'
+        "<p><button>Add window</button></p></form>"
+        '<p class=muted>On the server: <code>./ok3d maintenance add all 2h "Router firmware update"</code>, or '
+        "devices joined by commas instead of all, and START/END such as "
+        "<code>2026-11-03T02:00/2026-11-03T04:00</code> instead of a length.</p></section>"
+        + answer_section(config)
     )
 
 
@@ -670,7 +743,7 @@ class Handler(BaseHTTPRequestHandler):
         if 0 < length <= MAX_DISCARD:
             self.read_body(length)
 
-    def read_form(self, limit: int = 0) -> dict[str, str] | None:
+    def read_form(self, limit: int = 0, fields: int = 10) -> dict[str, str] | None:
         try:
             length = int(self.headers.get("Content-Length", ""))
         except ValueError:
@@ -685,10 +758,10 @@ class Handler(BaseHTTPRequestHandler):
         if body is None:
             return None
         try:
-            fields = urllib.parse.parse_qs(body.decode("ascii"), max_num_fields=10, errors="strict")
+            found = urllib.parse.parse_qs(body.decode("ascii"), max_num_fields=fields, errors="strict")
         except (ValueError, UnicodeDecodeError):
             return None
-        return {k: v[0] for k, v in fields.items()}
+        return {k: v[0] for k, v in found.items()}
 
     def do_GET(self) -> None:
         path = urllib.parse.urlsplit(self.path).path
@@ -751,7 +824,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def ask_helper(self, back: str, render: Callable[[Config, str], str], title: str, action: str,
                    name: str | None = None, body: bytes | None = None, base: str | None = None,
-                   version: str | None = None) -> None:  # fmt: skip
+                   version: str | None = None, extra: dict[str, str] | None = None) -> None:  # fmt: skip
         """Leaves a request for the helper, then sends you Home to watch for the answer, or
         back to the page with what went wrong."""
         if not helper_link.alive(self.config.helper):
@@ -762,7 +835,7 @@ class Handler(BaseHTTPRequestHandler):
                                               "Home shows how it's going."), True))  # fmt: skip
             return
         try:
-            helper_link.send(self.config.state, self.config.helper, action, name, body, base, version)
+            helper_link.send(self.config.state, self.config.helper, action, name, body, base, version, extra)
         except helper_link.Unavailable:
             self.send(503, page(title, render(self.config, "The Dashboard can't write its outbox, so nothing "
                                               "was sent. Check the Dashboard's folder on the server."), True))  # fmt: skip
@@ -805,6 +878,51 @@ class Handler(BaseHTTPRequestHandler):
                                                         "Here's what is."), True))  # fmt: skip
             return
         self.ask_helper("/", upgrade_page, "Upgrade", "upgrade", version=version)
+
+    def post_maintenance(self) -> None:
+        """Adds a window: all of ok3d or the devices ticked, from now for a length or between two
+        times, checked as ./ok3d maintenance will check them before anything is sent."""
+        form = self.read_form(fields=60)
+
+        def refuse(message: str) -> None:
+            self.send(400, page("Maintenance", maintenance_page(self.config, message), True))
+
+        if form is None:
+            refuse("That didn't arrive in one piece. Try again.")
+            return
+        if form.get("scope") == "devices":
+            what = ",".join(sorted(k.removeprefix("device-") for k in form if k.startswith("device-")))
+            if not what:
+                refuse("Tick at least one device, or choose all of ok3d.")
+                return
+        else:
+            what = "all"
+        if form.get("timing") == "later":
+            when = f"{form.get('start', '')}/{form.get('end', '')}"
+        else:
+            when = form.get("length", "")
+        reason = form.get("reason", "").strip()
+        if not rules.WHAT.fullmatch(what):
+            refuse("Those aren't devices from devices.yaml.")
+        elif when not in {v for v, _ in LENGTHS} and not rules.RANGE.fullmatch(when):
+            refuse("Choose how long, or both a start and an end.")
+        elif not rules.REASON.fullmatch(reason):
+            refuse("The reason may have letters, digits, spaces, and , . ' ( ) / : _ -, up to 100 of them.")
+        else:
+            extra = {"what": what, "when": when} | ({"reason": reason} if reason else {})
+            self.ask_helper("/maintenance", maintenance_page, "Maintenance", "maintenance-add", extra=extra)
+
+    def post_maintenance_end(self) -> None:
+        form = self.read_form()
+        window = (form or {}).get("window", "")
+        if not rules.SILENCE_ID.fullmatch(window):
+            self.send(400, page("Maintenance", maintenance_page(self.config, "That isn't a window's id."), True))
+            return
+        self.ask_helper("/maintenance", maintenance_page, "Maintenance", "maintenance-end", extra={"window": window})
+
+    def post_maintenance_refresh(self) -> None:
+        self.discard_body()
+        self.ask_helper("/maintenance", maintenance_page, "Maintenance", "maintenance-list")
 
     def post_file(self, name: str, action: str, title: str) -> None:
         def render(config: Config, message: str) -> str:
@@ -903,6 +1021,7 @@ PAGES: dict[str, tuple[str, Callable[[Config, str], str]]] = {
     "/devices": ("Devices", lambda c, m: file_page(c, "devices.yaml", m)),
     "/keys": ("Keys", keys_page),
     "/upgrade": ("Upgrade", upgrade_page),
+    "/maintenance": ("Maintenance", maintenance_page),
 }
 
 # What each form does, by path. Every one needs a session and the Dashboard's own Origin.
@@ -915,6 +1034,9 @@ ACTIONS: dict[str, Callable[[Handler], None]] = {
     "/keys": Handler.post_keys,
     "/look-for-release": Handler.post_look_for_release,
     "/upgrade": Handler.post_upgrade,
+    "/maintenance": Handler.post_maintenance,
+    "/maintenance/end": Handler.post_maintenance_end,
+    "/maintenance/refresh": Handler.post_maintenance_refresh,
 }
 
 

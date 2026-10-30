@@ -124,6 +124,7 @@ when the cluster is down.
 | Settings | Your `settings.yaml`, as the helper last copied it | Save a changed one |
 | Devices | Your `devices.yaml` (or an empty list) | Save a changed one |
 | Keys | Which lines of `.env` are set, never their values | Set or clear `UNIFI_API_KEY`, `NTFY_TOPIC`, `NTFY_TOKEN`, or `SMTP_PASSWORD` |
+| Maintenance | The maintenance windows ok3d made that haven't ended, and when they were last read from Alertmanager | Add a window (all of ok3d or ticked devices, a length or a start and an end, a reason), end one, read them again |
 
 Every page also shows, in a muted line, what you'd do on the server instead: `./ok3d check`
 and `./ok3d apply` on Home, the file to edit and `./ok3d check` on Settings and Devices, the
@@ -182,6 +183,12 @@ with a note to wait. If the outbox can't be written, the page says so and sends 
   that would send a request is refused, as the helper refuses them too. Partway through, the
   new release's `./ok3d install` replaces the Dashboard's container, and since sessions live
   in memory, you sign in again.
+- **A maintenance window** is checked the way `./ok3d maintenance` will check it
+  (`src/ok3d/maintenance.py`, which the Dashboard imports): all or device names, a length
+  from the list or a start and an end, and a reason of plain text. One that wouldn't pass is
+  never sent. The windows come from `helper/maintenance`, which `./ok3d maintenance` writes
+  each time it adds, ends, or reads them: a line the Dashboard can't read whole is left out.
+  The page knows a window is on, or has ended, from its times, without asking again.
 - **Keys** checks a value the way the helper will (one line of letters, digits, and symbols,
   with no spaces, quotes, backslashes, `$`, or backticks), so a value the helper would
   refuse is never sent. A value is never shown back, not even in an error.

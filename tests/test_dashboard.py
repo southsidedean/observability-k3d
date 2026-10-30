@@ -1133,3 +1133,81 @@ def test_each_ready_made_setup_shows_the_settings_it_writes() -> None:
     html_text = server.card_html(card, "modules:\n  unifi: false\n", "none")
     for setting, on in card.changes().items():
         assert f"<code>{setting}: {'true' if on else 'false'}</code>" in html_text
+
+
+# Maintenance: the windows ./ok3d wrote, and requests to add and end them.
+
+WINDOW_ID = "54c2bf37-5a0a-45d7-91a0-30e0c9b716b6"
+
+
+def windows(dash: Dashboard, *lines: str) -> None:
+    (dash.helper / "maintenance").write_text("checked=2026-10-30T09:00:00Z\n" + "".join(f"{x}\n" for x in lines))
+
+
+def window(start: str, end: str, what: str = "all", reason: str = "router firmware") -> str:
+    return f"window={WINDOW_ID};{what};{start};{end};2026-11-03 02:00 CET;2026-11-03 04:00 CET;{reason}"
+
+
+def test_the_maintenance_page_lists_the_windows(ready: Dashboard) -> None:
+    windows(ready, window("2099-11-03T01:00:00Z", "2099-11-03T03:00:00Z", "router,nas"))
+    page = body(ready.get("/maintenance", ready.sign_in()))
+    assert "router, nas, 2026-11-03 02:00 CET to 2026-11-03 04:00 CET" in page and "starts later" in page
+    assert f'name="window" value="{WINDOW_ID}"' in page
+    assert "Read from Alertmanager at 2026-10-30T09:00:00Z." in page
+
+
+def test_home_says_while_a_window_is_on(ready: Dashboard) -> None:
+    windows(ready, window("2020-01-01T00:00:00Z", "2099-01-01T00:00:00Z"))
+    page = body(ready.get("/", ready.sign_in()))
+    assert "Maintenance: alerts for all of ok3d don't notify you until 2026-11-03 04:00 CET" in page
+
+
+def test_a_window_that_has_ended_isnt_shown(ready: Dashboard) -> None:
+    windows(ready, window("2020-01-01T00:00:00Z", "2020-01-02T00:00:00Z"))
+    session = ready.sign_in()
+    assert "No maintenance windows." in body(ready.get("/maintenance", session))
+    assert "Maintenance:" not in body(ready.get("/", session))
+
+
+def test_a_line_that_isnt_ok3ds_is_left_out(ready: Dashboard) -> None:
+    windows(ready, window("2099-11-03T01:00:00Z", "2099-11-03T03:00:00Z", reason="<script>x</script>"),
+            "window=not-an-id;all;x;y;z;w;r")  # fmt: skip
+    page = body(ready.get("/maintenance", ready.sign_in()))
+    assert "<script>" not in page and "No maintenance windows." in page
+
+
+@pytest.mark.parametrize(("form", "fields"), [
+    ("scope=all&timing=now&length=2h&reason=Router+firmware", {"what": "all", "when": "2h", "reason": "Router firmware"}),
+    ("scope=devices&device-router=on&device-nas=on&timing=now&length=30m", {"what": "nas,router", "when": "30m"}),
+    ("scope=all&timing=later&start=2026-11-03T02%3A00&end=2026-11-03T04%3A00&length=2h",
+     {"what": "all", "when": "2026-11-03T02:00/2026-11-03T04:00"}),
+])  # fmt: skip
+def test_adding_a_window_sends_its_lines(ready: Dashboard, form: str, fields: dict[str, str]) -> None:
+    assert ready.post("/maintenance", form, session=ready.sign_in()).status == 303
+    sent = head(outbox(ready))
+    assert sent["action"] == "maintenance-add"
+    assert {k: v for k, v in sent.items() if k not in ("id", "action")} == fields
+
+
+@pytest.mark.parametrize(("form", "says"), [
+    ("scope=devices&timing=now&length=2h", "Tick at least one device"),
+    ("scope=devices&device-Router%3Bx=on&timing=now&length=2h", "aren&#x27;t devices"),
+    ("scope=all&timing=now&length=3w", "Choose how long"),
+    ("scope=all&timing=later&start=2026-11-03T02%3A00&end=", "Choose how long"),
+    ("scope=all&timing=now&length=2h&reason=a%0Aaction%3Dapply", "The reason"),
+])  # fmt: skip
+def test_a_window_the_helper_would_refuse_isnt_sent(ready: Dashboard, form: str, says: str) -> None:
+    response = ready.post("/maintenance", form, session=ready.sign_in())
+    assert response.status == 400 and says in body(response)
+    assert not (ready.state / "outbox" / "request").exists()
+
+
+def test_ending_and_reading_again_send_their_requests(ready: Dashboard) -> None:
+    session = ready.sign_in()
+    assert ready.post("/maintenance/end", f"window={WINDOW_ID}", session=session).status == 303
+    assert head(outbox(ready)) | {"id": ""} == {"id": "", "action": "maintenance-end", "window": WINDOW_ID}
+    (ready.state / "outbox" / "request").unlink()
+    (ready.state / "last-sent").unlink()
+    assert ready.post("/maintenance/end", "window=--all", session=session).status == 400
+    assert ready.post("/maintenance/refresh", session=session).status == 303
+    assert head(outbox(ready))["action"] == "maintenance-list"

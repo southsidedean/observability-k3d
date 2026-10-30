@@ -115,6 +115,14 @@ kept in `local/backups/` on the server. Some settings decide where ok3d keeps it
 where it sends your keys; a save that changes those is refused, and you change them in the
 file on the server.
 
+## Maintenance
+
+**Maintenance** lists the maintenance windows: times when alerts don't notify you, for all of
+ok3d or for the devices you choose. Add one from now for a length, or between two times in
+the server's own time, with a reason if you like; **End now** ends one early. Home says while
+one is on. [Alerts](alerts.md#maintenance-windows-keeping-alerts-quiet-while-you-work) has the
+details.
+
 ## Keys
 
 <picture>

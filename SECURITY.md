@@ -65,8 +65,11 @@ Dashboard's container has been taken over:
   `./ok3d check`, `./ok3d apply`, `./ok3d validate` on a file in its own folder, and
   `./ok3d upgrade`, either with nothing after it (to look for a release) or, started with
   `systemd-run` as a service of its own, with the one argument a request may carry: a
-  release, checked to be `v` and three numbers. It also asks `systemctl` whether an
-  upgrade is running.
+  release, checked to be `v` and three numbers. It also runs `./ok3d maintenance` with a
+  window's lines, each checked whole (all or device names, a length or two times, a short
+  plain reason, or a window's id), and asks `systemctl` whether an upgrade is running.
+- A maintenance window never silences the dead man's switch, so even a window for all of
+  ok3d, set from a Dashboard someone has taken over, can't hide ok3d stopping.
 - It saves a settings or devices file only after `./ok3d validate` passes it, keeping a
   copy of the old one. A file from the Dashboard may hold only your own settings or devices,
   never the chart's own sections, and may not change where ok3d keeps its data or where it

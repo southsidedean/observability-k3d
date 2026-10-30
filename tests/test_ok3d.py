@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import contextlib
 import fcntl
+import json
 import os
 import pty
 import re
@@ -79,6 +80,9 @@ EOF
 esac""",
     "kubectl": r"""echo "kubectl $*" >>"$FAKE_LOG"
 case "$*" in
+# amtool in Alertmanager's pod: a new silence's id, and the silences from FAKE_SILENCES.
+*"amtool"*"silence add"*) echo 54c2bf37-5a0a-45d7-91a0-30e0c9b716b6 ;;
+*"amtool"*"silence query"*) if [ -n "${FAKE_SILENCES:-}" ]; then cat "$FAKE_SILENCES"; else echo "[]"; fi ;;
 *"--filename -"*) cat >>"$FAKE_LOG.stdin" ;;
 *"--from-file=api-key=/dev/stdin"*) echo "stdin: $(cat)" >>"$FAKE_LOG.stdin"; echo "kind: Secret" ;;
 *"--from-env-file=/dev/stdin"*)
@@ -1264,3 +1268,59 @@ exec "{tmp_path}/bin/helm" "$@"
         with contextlib.suppress(ProcessLookupError):
             os.killpg(proc.pid, signal.SIGKILL)  # the stand-in's sleep too, if the test failed early
     assert list(temp.iterdir()) == []
+
+
+
+# ./ok3d maintenance: windows as Alertmanager silences, through amtool in Alertmanager's pod.
+
+def with_devices(env: dict[str, str], tmp_path: Path) -> dict[str, str]:
+    devices = tmp_path / "devices.yaml"
+    devices.write_text("devices:\n  - name: router\n    address: 192.168.1.1\n")
+    (Path(env["FAKE_DATA_ROOT"]) / "helper").mkdir(exist_ok=True)
+    return env | {"OK3D_DEVICES": str(devices)}
+
+
+def test_maintenance_adds_a_window_through_amtool(env: dict[str, str], tmp_path: Path) -> None:
+    running = with_devices(env, tmp_path)
+    result = ok3d(running, "maintenance", "add", "all", "2h", "Router firmware update")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Added maintenance window 54c2bf37-5a0a-45d7-91a0-30e0c9b716b6." in result.stdout
+    add = next(c for c in calls(running) if "silence add" in c)
+    assert "--container alertmanager -- amtool --alertmanager.url=http://localhost:9093 silence add" in add
+    for part in ('alertname=~".+"', "alertname!=Watchdog", "--author=ok3d", "--comment=ok3d: Router firmware update"):
+        assert part in add, part
+    note = (Path(env["FAKE_DATA_ROOT"]) / "helper" / "maintenance").read_text()
+    assert note.startswith("checked=")
+
+
+def test_maintenance_refuses_a_device_it_doesnt_know_before_amtool(env: dict[str, str], tmp_path: Path) -> None:
+    running = with_devices(env, tmp_path)
+    result = ok3d(running, "maintenance", "add", "printer", "1h")
+    assert result.returncode == 2 and "Not in devices.yaml: printer." in result.stderr
+    assert not any("amtool" in c for c in calls(running))
+
+
+def test_maintenance_lists_ok3ds_windows(env: dict[str, str], tmp_path: Path) -> None:
+    running = with_devices(env, tmp_path)
+    silences = tmp_path / "silences.json"
+    silences.write_text(json.dumps([{"id": "54c2bf37-5a0a-45d7-91a0-30e0c9b716b6", "createdBy": "ok3d",
+        "comment": "ok3d: router firmware", "startsAt": "2026-01-01T00:00:00Z", "endsAt": "2099-01-01T00:00:00Z",
+        "matchers": [{"isEqual": True, "isRegex": True, "name": "device", "value": "router"}]}]))  # fmt: skip
+    result = ok3d(running | {"FAKE_SILENCES": str(silences)}, "maintenance")
+    assert "54c2bf37-5a0a-45d7-91a0-30e0c9b716b6" in result.stdout and "router  (router firmware)" in result.stdout
+    note = (Path(env["FAKE_DATA_ROOT"]) / "helper" / "maintenance").read_text()
+    assert "\nwindow=54c2bf37-5a0a-45d7-91a0-30e0c9b716b6;router;" in note
+
+
+def test_maintenance_ends_a_window_and_refuses_anything_but_an_id(env: dict[str, str], tmp_path: Path) -> None:
+    running = with_devices(env, tmp_path)
+    assert ok3d(running, "maintenance", "end", "54c2bf37-5a0a-45d7-91a0-30e0c9b716b6").returncode == 0
+    assert any("silence expire 54c2bf37-5a0a-45d7-91a0-30e0c9b716b6" in c for c in calls(running))
+    result = ok3d(running, "maintenance", "end", "--all")
+    assert result.returncode == 2 and "isn't a maintenance window's id" in result.stderr
+
+
+@pytest.mark.parametrize("args", [["add"], ["add", "all"], ["add", "all", "2h", "why", "more"], ["end"], ["nosuch"]])
+def test_maintenance_takes_only_what_it_says(env: dict[str, str], args: list[str]) -> None:
+    result = ok3d(env, "maintenance", *args)
+    assert result.returncode == 2 and "Usage: ./ok3d maintenance" in result.stderr

@@ -58,7 +58,11 @@ MAX_SKEW = 60
 #   set-env           set one line of .env (name=, one of ENV_NAMES) to the value that follows
 #   look-for-release  run ./ok3d upgrade, which says whether a newer release is out
 #   upgrade           start ./ok3d upgrade <version=> --yes, in a service of its own (see start_upgrade)
-ACTIONS = ("check", "apply", "save-settings", "save-devices", "set-env", "look-for-release", "upgrade")
+#   maintenance-add   run ./ok3d maintenance add <what=> <when=> <reason=>: a maintenance window
+#   maintenance-end   run ./ok3d maintenance end <window=>
+#   maintenance-list  run ./ok3d maintenance, which writes the windows for the Dashboard
+ACTIONS = ("check", "apply", "save-settings", "save-devices", "set-env", "look-for-release", "upgrade",
+           "maintenance-add", "maintenance-end", "maintenance-list")  # fmt: skip
 # The files the two save actions write, in the ok3d checkout, and what ./ok3d validate calls them.
 SAVES = {"save-settings": ("settings.yaml", "settings"), "save-devices": ("devices.yaml", "devices")}
 # The .env lines set-env may set. Not OK3D_ADMIN_PASSWORD, ANTHROPIC_API_KEY, or DEADMAN_URL:
@@ -79,11 +83,24 @@ VERSION = re.compile(r"v[0-9]{1,6}\.[0-9]{1,6}\.[0-9]{1,6}")
 # The lines a request's head may have, each at most once: id and action always, name only
 # with set-env, version only with upgrade, and base (optional) only with a save: the SHA-256
 # of the file the page showed, so a save doesn't overwrite a change made on the server since.
-FIELDS = ("id", "action", "name", "base", "version")
+FIELDS = ("id", "action", "name", "base", "version", "what", "when", "reason", "window")
+# A maintenance window's lines, as src/ok3d/maintenance.py checks them (a test keeps the two
+# the same): what (all, or device names joined by commas), when (a length from now, or
+# START/END), an optional reason (plain text), and window (a silence's id, to end it).
+DEVICE = r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?"
+LOCAL = r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}"
+MAINTENANCE_PATTERNS = {
+    "what": re.compile(rf"all|{DEVICE}(?:,{DEVICE}){{0,49}}"),
+    "when": re.compile(rf"[1-9][0-9]{{0,3}}[mhd]|{LOCAL}/{LOCAL}"),
+    "reason": re.compile(r"(?:[A-Za-z0-9][A-Za-z0-9 ,.'()/:_-]{0,99})?"),
+    "window": re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"),
+}
+# Which of those lines each maintenance action needs, and which it may have.
+MAINTENANCE_FIELDS = {"maintenance-add": (("what", "when"), ("reason",)), "maintenance-end": (("window",), ())}
 # How long each action may run before it's stopped. A first apply downloads images. An
 # upgrade only has to start here: it runs in a service of its own.
 TIMEOUTS = {"check": 300, "apply": 3600, "save-settings": 120, "save-devices": 120, "look-for-release": 120,
-            "upgrade": 60}  # fmt: skip
+            "upgrade": 60, "maintenance-add": 120, "maintenance-end": 120, "maintenance-list": 120}  # fmt: skip
 # Why a request is refused while an upgrade holds its lock, which includes one from a terminal
 # waiting for you to type yes.
 UPGRADE_RUNNING = "an upgrade is running, or waiting on the server for a yes: wait for it to finish"
@@ -120,6 +137,7 @@ class Request:
     body: bytes = b""  # the file, or the .env value
     base: str | None = None  # for a save: the SHA-256 of the file as the page showed it
     version: str | None = None  # for an upgrade: the release, vX.Y.Z
+    window: tuple[str, ...] = ()  # for a maintenance action: ./ok3d maintenance's arguments
 
 
 @dataclass(frozen=True)
@@ -235,6 +253,19 @@ def parse_request(data: bytes, mtime: float, now: float) -> Request:
                       else "the request is missing a line")  # fmt: skip
     if action == "upgrade" and not VERSION.fullmatch(fields["version"]):
         raise Refused("the request's version isn't a release")
+    required, optional = MAINTENANCE_FIELDS.get(action, ((), ()))
+    for key, pattern in MAINTENANCE_PATTERNS.items():
+        if key in fields and key not in required + optional:
+            raise Refused("the request has a line the helper doesn't know")
+        if key in required and key not in fields:
+            raise Refused("the request is missing a line")
+        if key in fields and not pattern.fullmatch(fields[key]):
+            raise Refused(f"the request's {key} isn't valid")
+    window: tuple[str, ...] = ()
+    if action == "maintenance-add":
+        window = ("add", fields["what"], fields["when"], fields.get("reason", ""))
+    elif action == "maintenance-end":
+        window = ("end", fields["window"])
     has_body = action in SAVES or action == "set-env"
     if bool(blank) != has_body:
         raise Refused("the request has something after it" if blank else "the request isn't finished")
@@ -246,7 +277,7 @@ def parse_request(data: bytes, mtime: float, now: float) -> Request:
         body = body.removesuffix(b"\n")
         if not ENV_VALUE.fullmatch(body.decode("ascii", errors="replace")):
             raise Refused("the value has characters .env can't hold safely")
-    return Request(fields["id"], action, fields.get("name"), body, fields.get("base"), fields.get("version"))
+    return Request(fields["id"], action, fields.get("name"), body, fields.get("base"), fields.get("version"), window)
 
 
 def check_file(body: bytes) -> None:
@@ -538,6 +569,8 @@ def carry_out(opened: Opened, request: Request) -> tuple[int, str]:
         return set_env_value(opened, request)
     if request.action == "upgrade":
         return start_upgrade(opened, request)
+    if request.action.startswith("maintenance-"):
+        return run_ok3d(opened, ["maintenance", *request.window], TIMEOUTS[request.action])
     if request.action == "look-for-release":
         return run_ok3d(opened, ["upgrade"], TIMEOUTS[request.action])
     return run_ok3d(opened, [request.action], TIMEOUTS[request.action])
@@ -580,7 +613,9 @@ def handle_once(opened: Opened, now: float | None = None) -> str | None:
 def describe(request: Request) -> str:
     """What a request was, for the log: its action and id, both checked already, never its body."""
     what = {"check": "./ok3d check", "apply": "./ok3d apply", "look-for-release": "./ok3d upgrade",
-            "upgrade": f"./ok3d upgrade {request.version}"}.get(request.action, request.action)  # fmt: skip
+            "upgrade": f"./ok3d upgrade {request.version}",
+            "maintenance-add": "./ok3d maintenance add", "maintenance-end": "./ok3d maintenance end",
+            "maintenance-list": "./ok3d maintenance"}.get(request.action, request.action)  # fmt: skip
     return f"{what} for {request.id}"
 
 
