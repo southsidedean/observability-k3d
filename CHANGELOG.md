@@ -2,6 +2,26 @@
 
 ## 0.5.1 (unreleased)
 
+### Upgrading
+
+- From 0.5.0 or 0.4, run the installer again, as for 0.5.0 ([docs/upgrading.md](docs/upgrading.md#to-051-from-050-or-04)).
+  From 0.5.1 on, the Dashboard upgrades ok3d itself.
+
+### Changes
+
+- Upgrades from the Dashboard: **Look for a new release** on Home asks GitHub for ok3d's
+  releases (ok3d never does on its own), and offers a newer one with a link to its notes and
+  its command. **Upgrade now** backs up your settings, moves ok3d to the release, checks and
+  installs it, then deletes the cluster, backs up the certificate authority, Grafana, and
+  Alertmanager, and makes the cluster again. If the new release's check or install fails, it
+  moves back and the cluster isn't touched. Home shows each step as it happens.
+- `./ok3d upgrade` does the same on the server: with nothing after it, it says whether a newer
+  release is out; `./ok3d upgrade vX.Y.Z` moves to it.
+- An upgrade takes only a release whose tag is signed with ok3d's release key, checked against
+  `deploy/release-signers` as your copy has it. Releases are signed from 0.5.0.
+- While an upgrade runs, the helper refuses everything else, and the Dashboard's Check,
+  Apply, and saves are off.
+
 ## 0.5.0 (2026-10-29)
 
 ### Upgrading

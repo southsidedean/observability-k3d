@@ -1,5 +1,6 @@
 # The ok3d-helper service: runs ./ok3d check and ./ok3d apply when you press Check or Apply on
-# the Dashboard (src/ok3d/helper.py, docs/helper-under-the-hood.md). It's a systemd user
+# the Dashboard, saves what you change there, and starts an upgrade (src/ok3d/helper.py,
+# docs/helper-under-the-hood.md). It's a systemd user
 # service, running as you, because the Dashboard's container can't run anything on the host.
 # The installer fills in the paths:
 #   @DIR@        the ok3d checkout, with the ok3d command in it (the installer refuses a path
@@ -10,7 +11,7 @@
 #   systemctl --user status ok3d-helper      is it running?
 #   journalctl --user -u ok3d-helper -f      what it has done
 [Unit]
-Description=ok3d-helper: runs ok3d check and apply when you ask on the Dashboard
+Description=ok3d-helper: carries out what you ask for on the Dashboard
 
 [Service]
 Type=simple

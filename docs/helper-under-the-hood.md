@@ -1,8 +1,9 @@
 # The helper under the hood
 
 How a click on the Dashboard's **Check** or **Apply** becomes `./ok3d check` or `./ok3d apply`
-on the server, and how a change you save on the Dashboard reaches `settings.yaml`,
-`devices.yaml`, or `.env`. This page describes the code as it is, in `src/ok3d/helper.py`.
+on the server, how a change you save on the Dashboard reaches `settings.yaml`,
+`devices.yaml`, or `.env`, and how an upgrade starts. This page describes the code as it is,
+in `src/ok3d/helper.py`.
 
 ## Why there's a helper
 
@@ -13,7 +14,8 @@ running on the server as you, carries it out.
 
 The helper assumes someone may have taken over the Dashboard's container. The most they can
 do through it is run `./ok3d check` or `./ok3d apply`, change the settings the Dashboard is
-allowed to change, change your devices, or set four lines of `.env`. They can't change where
+allowed to change, change your devices, set four lines of `.env`, or move ok3d to a newer
+release that's signed with ok3d's release key. They can't change where
 ok3d keeps its data, where it sends your keys, tokens, and passwords, or how far it's open to
 the outside; can't reach the chart's own sections (which choose images and how pods run);
 can't choose the admin password; and can't read a secret back.
@@ -63,12 +65,14 @@ The helper's checks hold only with the right mounts, which the installer sets up
    - It was written in the last 5 minutes (or up to a minute ahead, for a clock that's off).
    - Its head is plain ASCII text, with each line ending in a newline.
    - Its head has exactly the lines its action needs, each once, and nothing else: `id` and
-     `action`, `name` with `set-env`, and optionally `base` with a save.
+     `action`, `name` with `set-env`, `version` with `upgrade`, and optionally `base` with a
+     save.
    - The id is 16 to 64 lowercase hex digits.
-   - The action is one of `check`, `apply`, `save-settings`, `save-devices`, or `set-env`,
-     exactly. `check` and `apply` have nothing after their head; the others have a blank line
-     and then a body (below).
+   - The action is one of `check`, `apply`, `save-settings`, `save-devices`, `set-env`,
+     `look-for-release`, or `upgrade`, exactly. A save and `set-env` have a blank line and
+     then a body (below); the others have nothing after their head.
    - The id isn't one of the last 100 the helper carried out, so a request can't be replayed.
+   - No upgrade is running (below): while one is, every request is refused.
 
    It removes a file, link, or pipe once it's checked it. A folder is left in `helper/taken/`
    unread and untouched: removing a tree someone else built could make the helper fail, and
@@ -182,6 +186,49 @@ ok3d-7f3k9q2m8x
 `local/backups/` is in the ok3d checkout, which the Dashboard's container never sees, so a
 copy of `.env` there stays out of its reach.
 
+## Looking for a release, and upgrading
+
+`look-for-release` runs `./ok3d upgrade` with nothing after it, which asks GitHub for the list
+of ok3d's releases (`git ls-remote`), and nothing else. It writes what it found to
+`helper/newest-release`, which Home reads:
+
+```ini
+checked=2026-10-30T09:00:00Z
+newest=v0.5.2
+```
+
+`newest=none` when no release is newer. Nothing looks for a release on its own: only this
+request, or `./ok3d upgrade` on the server.
+
+`upgrade` names the release:
+
+```ini
+id=2d7e4a9c6b1f8053
+action=upgrade
+version=v0.5.2
+```
+
+The version must be `v` and three numbers of up to six digits, exactly. The helper doesn't run
+the upgrade itself: partway through, the new release's `./ok3d install` restarts the helper's
+service, which stops everything the helper started. So it starts `./ok3d upgrade v0.5.2 --yes`
+as a systemd user service of its own, `ok3d-upgrade` (with `systemd-run --user`), with the
+helper's `PATH` and none of its `OK3D_` variables, and answers once that has started. The
+answer says the upgrade started, not that it worked; Home follows the upgrade itself.
+
+`./ok3d upgrade` checks everything again, whoever asked: the version is a release tag, newer
+than the checkout's, and its tag is signed by a key in `deploy/release-signers` (the copy in
+the checkout as it is before the upgrade, so a release can't vouch for itself). Then it backs
+up, moves, checks, installs, and makes the cluster again, as docs/upgrading.md describes. It
+writes how it's going to the helper's folder (below) as it goes.
+
+While an upgrade runs, the helper refuses every request, the Dashboard's Check, Apply, and
+saves included, since any of them partway through would race it. It counts an upgrade as
+running while the `ok3d-upgrade` service is active, or while `local/upgrading/pid` in the ok3d
+checkout names a process that's running: that's the lock `./ok3d upgrade` holds, so an upgrade
+started on the server counts too. If `helper/upgrade` says an upgrade is running when neither
+is true (the server restarted partway), the helper rewrites it as stopped, so Home doesn't
+show it running forever. The next `./ok3d upgrade` takes over a lock whose process has gone.
+
 ## What the helper writes
 
 In `<data root>/helper/`, readable only by you. `result` and `seen` are written to a
@@ -197,11 +244,15 @@ temporary file first and renamed into place, so the page never reads half of one
 | `current-settings.yaml`, `current-devices.yaml` | Copies of yours, for the Dashboard to show; missing when you have none, and never copied through a link. Everything in them, comments too, is visible to the Dashboard, which is one more reason secrets belong in `.env` |
 | `env-set` | The names of the lines in `.env` that have a value, one per line. Never a value |
 | `applied` | When the last `./ok3d apply` that worked finished, for the Dashboard's What's next. `./ok3d apply` writes it, not the helper, so an Apply on the server counts too, and `./ok3d delete` removes it |
+| `newest-release` | When `./ok3d upgrade` last looked for a release, and the newer one it found. `./ok3d` writes it |
+| `upgrade` | How the last upgrade went: `from`, `to`, `state` (`running`, `finished`, or `failed`), `step`, `started`, and `finished`. `./ok3d upgrade` writes it; the helper rewrites it only to mark an upgrade that stopped partway |
+| `upgrade-output` | Everything the last upgrade printed, written as it runs |
 | `alive` | When it last wrote these: every 30 seconds, after every request, and every 30 seconds while a command runs |
 | `lock` | Held while the helper runs, so a second one on the same data root won't start |
 
 In the ok3d checkout: `settings.yaml`, `devices.yaml`, and `.env` when you save them, and
-`local/backups/`, which keeps the last 10 copies of each from before a save.
+`local/backups/`, which keeps the last 10 copies of each from before a save, and a folder of
+all three from before each upgrade.
 
 ## Running it
 
@@ -213,4 +264,5 @@ python3 -I src/ok3d/helper.py once --ok3d-dir . --data-root /srv/ok3d    # handl
 python3 -I src/ok3d/helper.py watch --ok3d-dir . --data-root /srv/ok3d   # keep watching
 ```
 
-As a service, it logs one line for each request: `journalctl --user -u ok3d-helper -f`.
+As a service, it logs one line for each request: `journalctl --user -u ok3d-helper -f`. An
+upgrade it started logs to its own service: `journalctl --user -u ok3d-upgrade`.

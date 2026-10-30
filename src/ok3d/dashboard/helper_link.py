@@ -3,7 +3,8 @@
 The Dashboard writes one request at a time to `<state>/outbox/request` (docs/helper-under-the-
 hood.md has the format), and reads what the helper writes to `/helper`, which it can't write:
 the answer to the last request, copies of your settings and devices, which lines of .env are
-set (names only), and a heartbeat.
+set (names only), and a heartbeat. `./ok3d` writes there too: when the last Apply worked,
+the newest release it found, and how an upgrade is going.
 """
 
 from __future__ import annotations
@@ -28,6 +29,10 @@ ALIVE_FOR = 90
 MAX_FILE = 64 * 1024
 ENV_NAMES = ("UNIFI_API_KEY", "NTFY_TOPIC", "NTFY_TOKEN", "SMTP_PASSWORD")
 ENV_VALUE = re.compile(r"[!#%&()*+,\-./0-9:;<=>?@A-Z\[\]^_a-z{|}~]{0,1024}")
+VERSION = re.compile(r"v[0-9]{1,6}\.[0-9]{1,6}\.[0-9]{1,6}")
+# How much of the end of an upgrade's output is shown.
+UPGRADE_TAIL = 16 * 1024
+TIME = re.compile(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ")
 
 
 # How long the Dashboard waits for an answer to the request it last sent before it stops
@@ -90,7 +95,80 @@ def current(helper: Path, name: str) -> str | None:
 def applied(helper: Path) -> str | None:
     """When the last Apply that worked finished, as the helper wrote it; None before one has."""
     text = (read(helper / "applied") or "").strip()
-    return text if re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", text) else None
+    return text if TIME.fullmatch(text) else None
+
+
+def fields_of(text: str | None) -> dict[str, str]:
+    return dict(line.split("=", 1) for line in (text or "").splitlines() if "=" in line)
+
+
+@dataclass(frozen=True)
+class Newest:
+    """What the last look for a release found: when, and the newer release (None if none was)."""
+
+    checked: str
+    release: str | None
+
+
+def newest_release(helper: Path) -> Newest | None:
+    """The answer ./ok3d upgrade left when it last looked for a release; None before it has, or
+    when the file isn't one it wrote."""
+    fields = fields_of(read(helper / "newest-release"))
+    checked, newest = fields.get("checked", ""), fields.get("newest", "")
+    if not TIME.fullmatch(checked) or not (newest == "none" or VERSION.fullmatch(newest)):
+        return None
+    return Newest(checked, None if newest == "none" else newest)
+
+
+def is_newer(tag: str, version: str) -> bool:
+    """Whether release tag vX.Y.Z is newer than version (such as 0.5.0 or 0.5.1.dev0). A
+    development version comes before its release, as in ./ok3d's is_newer."""
+    match = re.match(r"(\d+)\.(\d+)\.(\d+)", version)
+    if not VERSION.fullmatch(tag) or match is None:
+        return False
+    want = tuple(int(n) for n in tag[1:].split("."))
+    have = tuple(int(n) for n in match.groups())
+    return want > have or (want == have and "dev" in version)
+
+
+@dataclass(frozen=True)
+class Upgrade:
+    """How the last upgrade went, as ./ok3d upgrade wrote it, and the end of its output."""
+
+    fields: dict[str, str]
+    output: str
+
+    @property
+    def state(self) -> str:
+        return self.fields.get("state", "")
+
+
+def upgrade(helper: Path) -> Upgrade | None:
+    """The last upgrade, if there has been one."""
+    fields = fields_of(read(helper / "upgrade"))
+    if fields.get("state") not in ("running", "finished", "failed"):
+        return None
+    return Upgrade(fields, read_tail(helper / "upgrade-output", UPGRADE_TAIL))
+
+
+def read_tail(path: Path, limit: int) -> str:
+    """The last limit bytes of a file, from the start of a line, or "" when it can't be read."""
+    try:
+        with path.open("rb") as f:
+            size = f.seek(0, os.SEEK_END)
+            f.seek(max(0, size - limit))
+            data = f.read(limit)
+    except OSError:
+        return ""
+    if len(data) == limit and b"\n" in data:
+        data = data.split(b"\n", 1)[1]
+    return data.decode("utf-8", errors="replace")
+
+
+def upgrading(helper: Path) -> bool:
+    """Whether an upgrade says it's running. The helper also refuses every request while one is."""
+    last = upgrade(helper)
+    return last is not None and last.state == "running"
 
 
 def env_set(helper: Path) -> set[str]:
@@ -152,7 +230,7 @@ def write_private(path: Path, data: bytes) -> None:
 
 
 def send(state: Path, helper: Path, action: str, name: str | None = None, body: bytes | None = None,
-         base: str | None = None) -> str:  # fmt: skip
+         base: str | None = None, version: str | None = None) -> str:  # fmt: skip
     """Leaves a request for the helper and returns its id. Raises Busy when one of ours is
     waiting or running, and Unavailable when the outbox can't be written. The request is
     written to a temporary file and renamed into place, so the helper never reads half of
@@ -162,7 +240,7 @@ def send(state: Path, helper: Path, action: str, name: str | None = None, body: 
             raise Busy
         request_id = secrets.token_hex(16)
         head = (f"id={request_id}\naction={action}\n" + (f"name={name}\n" if name else "")
-                + (f"base={base}\n" if base else ""))  # fmt: skip
+                + (f"base={base}\n" if base else "") + (f"version={version}\n" if version else ""))  # fmt: skip
         data = head.encode() + (b"\n" + body if body is not None else b"")
         try:
             write_private(state / "last-sent", f"{request_id} {time.time()}\n".encode())

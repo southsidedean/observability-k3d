@@ -45,6 +45,25 @@ def make_ok3d(tmp_path: Path) -> Path:
     return ok3d_dir
 
 
+@pytest.fixture(autouse=True)
+def systemd(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Stand-ins for systemctl and systemd-run, so no test asks the machine's own systemd. An
+    upgrade counts as running while the folder's "upgrading" file is there; systemd-run
+    records its arguments in "started", and fails when there's a "fail-start" file."""
+    fake = tmp_path / "systemd"
+    fake.mkdir()
+    for name, body in {
+        "systemctl": f'[ -e "{fake}/upgrading" ]',
+        "systemd-run": f'[ ! -e "{fake}/fail-start" ] || {{ echo "Unit ok3d-upgrade.service was already loaded"; exit 1; }}\n'
+                       f'printf "%s\\n" "$@" >"{fake}/started"',
+    }.items():  # fmt: skip
+        (fake / name).write_text(f"#!/bin/sh\n{body}\n")
+        (fake / name).chmod(0o755)
+    monkeypatch.setattr(helper, "SYSTEMCTL", str(fake / "systemctl"))
+    monkeypatch.setattr(helper, "SYSTEMD_RUN", str(fake / "systemd-run"))
+    return fake
+
+
 @pytest.fixture
 def h(tmp_path: Path) -> helper.Opened:
     """The helper's folders, opened, in a new data root."""
@@ -714,3 +733,77 @@ def test_env_lines_are_read_as_ok3d_reads_them(h: helper.Opened) -> None:
     (h.folders.ok3d_dir / ".env").write_text("NTFY_TOKEN= \nNTFY_TOPIC=\"\"\nSMTP_PASSWORD='x'\n")
     helper.publish(h)
     assert (h.folders.own / "env-set").read_text().split() == ["NTFY_TOKEN", "SMTP_PASSWORD"]
+
+
+UPGRADE = f"id={ID}\naction=upgrade\nversion=v0.5.1\n"
+
+
+def test_look_for_release_runs_ok3d_upgrade(h: helper.Opened) -> None:
+    send(h, f"id={ID}\naction=look-for-release\n")
+    assert helper.handle_once(h) == f"ran ./ok3d upgrade for {ID}: exit 0"
+    assert ran(h) == ["upgrade"]
+
+
+def test_an_upgrade_starts_in_a_service_of_its_own(h: helper.Opened, systemd: Path) -> None:
+    send(h, UPGRADE)
+    assert helper.handle_once(h) == f"ran ./ok3d upgrade v0.5.1 for {ID}: exit 0"
+    started = (systemd / "started").read_text().splitlines()
+    assert started[:4] == ["--user", "--unit=ok3d-upgrade", "--collect", "--quiet"]
+    assert started[-4:] == [str(h.folders.ok3d_dir / "ok3d"), "upgrade", "v0.5.1", "--yes"]
+    assert f"--working-directory={h.folders.ok3d_dir}" in started
+    assert ran(h) == []  # not run under the helper, whose service the new release restarts
+    assert {"action": "upgrade", "state": "finished", "exit": "0"}.items() <= result(h).items()
+    assert "Started the upgrade to v0.5.1" in (h.folders.own / "result").read_text()
+
+
+def test_an_upgrade_that_cant_start_says_so(h: helper.Opened, systemd: Path) -> None:
+    (systemd / "fail-start").touch()
+    send(h, UPGRADE)
+    helper.handle_once(h)
+    assert result(h)["exit"] == "1"
+    assert "The upgrade didn't start." in (h.folders.own / "result").read_text()
+
+
+@pytest.mark.parametrize("version", ["0.5.1", "v0.5", "v0.5.1.1", "v0.5.1 ", "v0.5.1;reboot", "--help",
+                                     "v1234567.0.0", ""])  # fmt: skip
+def test_an_upgrade_takes_only_a_release(h: helper.Opened, version: str, systemd: Path) -> None:
+    send(h, f"id={ID}\naction=upgrade\nversion={version}\n")
+    assert helper.handle_once(h) == "refused a request: the request's version isn't a release"
+    assert not (systemd / "started").exists()
+
+
+@pytest.mark.parametrize("text", [f"id={ID}\naction=upgrade\n", f"id={ID}\naction=check\nversion=v0.5.1\n"])
+def test_version_goes_with_upgrade_and_nothing_else(h: helper.Opened, text: str, systemd: Path) -> None:
+    send(h, text)
+    assert (helper.handle_once(h) or "").startswith("refused a request")
+    assert ran(h) == [] and not (systemd / "started").exists()
+
+
+@pytest.mark.parametrize("text", [GOOD, f"id={ID}\naction=apply\n", UPGRADE, f"id={ID}\naction=look-for-release\n"])
+def test_nothing_else_runs_while_an_upgrade_does(h: helper.Opened, text: str, systemd: Path) -> None:
+    (systemd / "upgrading").touch()
+    send(h, text)
+    assert helper.handle_once(h) == "refused a request: an upgrade is running: wait for it to finish"
+    assert ran(h) == [] and not (systemd / "started").exists()
+
+
+def test_an_upgrade_from_a_terminal_counts_too(h: helper.Opened) -> None:
+    lock = h.folders.ok3d_dir / "local" / "upgrading"
+    lock.mkdir(parents=True)
+    (lock / "pid").write_text(f"{os.getpid()}\n")
+    send(h)
+    assert helper.handle_once(h) == "refused a request: an upgrade is running: wait for it to finish"
+    (lock / "pid").write_text(subprocess.run(["sh", "-c", "echo $$"], capture_output=True, text=True, check=True).stdout)
+    send(h, GOOD.replace(ID, "4" * 16))
+    assert helper.handle_once(h) == f"ran ./ok3d check for {'4' * 16}: exit 0"
+
+
+def test_an_upgrade_that_stopped_partway_is_marked_stopped(h: helper.Opened, systemd: Path) -> None:
+    (h.folders.own / "upgrade").write_text("from=0.5.1\nto=v0.5.2\nstate=running\nstep=Deleting the cluster\n")
+    (systemd / "upgrading").touch()
+    helper.publish(h)
+    assert "state=running" in (h.folders.own / "upgrade").read_text()  # still running: left alone
+    (systemd / "upgrading").unlink()
+    helper.publish(h)
+    text = (h.folders.own / "upgrade").read_text()
+    assert "state=failed" in text and "to=v0.5.2" in text and "stopped partway" in text

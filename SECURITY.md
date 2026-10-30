@@ -21,7 +21,9 @@ it in 0.4, and its known problems are listed in its release notes and in [PLAN.m
 ## Your data stays home
 
 ok3d has no telemetry. It sends nothing anywhere except what you set up yourself: alerts to
-ntfy or email, the dead man's switch, calls to the AI model, and backups.
+ntfy or email, the dead man's switch, calls to the AI model, and backups. It looks for a new
+release (asking GitHub for the list) only when you ask it to, with **Look for a new release**
+on the Dashboard or `./ok3d upgrade` on the server.
 
 ## How ok3d limits the damage
 

@@ -56,9 +56,9 @@ release and the reasons behind it.
 
 | Part | Status |
 |---|---|
-| Upgrades from the Dashboard: back up, move to the new release, recreate, and check | Planned |
+| Upgrades from the Dashboard: back up, move to the new release, recreate, and check (`./ok3d upgrade`, signed releases only) | Done ([#42](https://github.com/southsidedean/observability-k3d/pull/42)) |
 | Maintenance windows | Planned |
 | Apply asks first when it would stop something | Planned |
 | Each choice shown as its `ok3d` command | Planned |
 | Home's screenshot retaken, showing a released version | Planned |
-| Release 0.5.1, tested with an upgrade from 0.5.0 from the Dashboard alone | Planned |
+| Release 0.5.1: the installer from 0.5.0, and the Dashboard's upgrade rehearsed with a test tag (0.5.0 has no Upgrade button) | Planned |
