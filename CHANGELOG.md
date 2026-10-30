@@ -4,8 +4,14 @@
 
 ### Upgrading
 
-- From 0.5.0 or 0.4, run the installer again, as for 0.5.0 ([docs/upgrading.md](docs/upgrading.md#to-051-from-050-or-04)).
-  From 0.5.1 on, the Dashboard upgrades ok3d itself.
+- From 0.5.0 or 0.4, run the installer again, as for 0.5.0
+  ([docs/upgrading.md](docs/upgrading.md#to-051-from-050-or-04)). If ok3d isn't in `~/ok3d`,
+  put `OK3D_DIR=/path/to/ok3d` before `sh`. Then **Check** and **Apply** on the Dashboard.
+  Apply now asks first: from 0.5.0 it restarts the gateway, so ok3d's pages are unavailable
+  for a moment, and the rest changes without stopping anything.
+- From 0.5.1 on, the Dashboard upgrades ok3d itself: **Look for a new release** on Home.
+- Apply's question needs Helm 3.13 or newer to know what would change; with an older Helm,
+  Check warns, and Apply always asks.
 
 ### Changes
 
