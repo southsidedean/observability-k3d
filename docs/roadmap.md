@@ -4,7 +4,7 @@ Where ok3d is, release by release. Every pull request updates this page when it 
 starts, or changes something here. [PLAN.md](../PLAN.md#roadmap) has the detail of each
 release and the reasons behind it.
 
-**Now:** 0.5.0 is released. 0.5.1 is in progress: the Dashboard's second step.
+**Now:** 0.5.1 is being released: the Dashboard's second step. 0.6.0, logs and changes, comes next.
 
 | Release | What it brings | Status |
 |---|---|---|
@@ -61,4 +61,4 @@ release and the reasons behind it.
 | Apply asks first when it would stop something | Done ([#43](https://github.com/southsidedean/observability-k3d/pull/43)) |
 | Each choice shown as its `ok3d` command | Done ([#44](https://github.com/southsidedean/observability-k3d/pull/44)) |
 | The Dashboard's screenshots retaken, showing a released version and each page's new text | Planned |
-| Release 0.5.1: the installer from 0.5.0, and the Dashboard's upgrade rehearsed with a test tag (0.5.0 has no Upgrade button) | Planned |
+| Release 0.5.1: the installer from 0.5.0, and the Dashboard's upgrade rehearsed with a test tag (0.5.0 has no Upgrade button) | In progress |
