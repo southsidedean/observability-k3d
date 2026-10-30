@@ -2,24 +2,45 @@
 
 ## To a new release
 
-ok3d's cluster is made again on every upgrade, and everything worth keeping stays in the
-data root, so a new cluster picks up where the old one left off.
+Everything worth keeping stays in the data root, so a new release picks up where the old one
+left off.
 
 1. Read the release's notes in [CHANGELOG.md](../CHANGELOG.md), especially anything under
    "Upgrading".
 2. Back up the data root's small, precious parts: `grafana/`, `certs/`, and your
    `settings.yaml`, `devices.yaml`, and `.env`. (From 0.7, `./ok3d backup` does this.)
-3. Move to the release and make the cluster again:
+3. Run the installer again, on the server, as yourself. If you cloned ok3d somewhere other
+   than `~/ok3d`, put `OK3D_DIR=/path/to/ok3d` before `sh`, or it makes a fresh copy there:
 
    ```sh
-   git fetch --tags && git switch --detach v0.4.0   # the release you're moving to
-   ./ok3d check
-   ./ok3d delete --yes
-   ./ok3d apply
+   curl -fsSL https://raw.githubusercontent.com/southsidedean/observability-k3d/main/install.sh | sh
    ```
 
-Prometheus's history, Alertmanager's silences, Grafana's database, and the certificate
-authority come through unchanged, so your devices keep trusting the pages.
+   It brings `~/ok3d` to the latest release, keeps your settings, devices, `.env`, and the
+   certificate authority, and starts the new release's Dashboard. From 0.4, this is also
+   what first sets up the Dashboard. It stops if you changed ok3d's own files (your settings
+   are safe: they're not ok3d's).
+4. On the Dashboard, **Check**, then **Apply**, which brings the cluster up to date with the
+   new release. If a release changes the cluster itself (its Kubernetes version, say), its
+   Upgrading notes say to make the cluster again instead, with the commands below.
+
+From 0.5.1, an Upgrade button on the Dashboard does steps 2 to 4.
+
+### With commands instead
+
+To move to a release yourself and make the cluster again from scratch:
+
+```sh
+cd ~/ok3d
+git fetch --tags && git switch --detach v0.5.0   # the release you're moving to
+./ok3d install   # the new release's helper and Dashboard (Linux with systemd)
+./ok3d check
+./ok3d delete --yes
+./ok3d apply
+```
+
+Either way, Prometheus's history, Alertmanager's silences, Grafana's database, and the
+certificate authority come through unchanged, so your devices keep trusting the pages.
 
 ## From the old stack (v0.2.0 and before)
 

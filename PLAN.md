@@ -420,12 +420,12 @@ turn up. Production moves to ok3d at 0.4.0.
 ### 0.5: The Dashboard (from here, setup starts on a web page)
 
 - The installer (`curl ... | sh`): the host check, the certificate authority, the helper,
-  and the Dashboard container. It prints the Dashboard's address and its password.
+  and the Dashboard container. It prints the Dashboard's address, and its password on a
+  terminal.
 - The Dashboard: the setup cards and choosing parts yourself, settings, write-only secrets,
-  the module and action switches, the Devices page, maintenance windows, Check and Apply
-  (Apply stays off until Check finds no problems, asks first when it would stop something,
-  and keeps the settings from before), What's next, and upgrades (back up, recreate from the
-  new release, check). Each choice shown as its `ok3d` command.
+  the module switches, the Devices page, Check and Apply (Apply stays off until Check finds
+  no problems, and keeps the settings from before), and What's next. The action switches
+  come with the actions, in 0.9.
 - `scripts/screenshots.sh` (moved from 0.4, decided 2026-10-28), with Grafana's dashboards
   and the Dashboard's pages as its first shots, so one script covers both.
 - The helper, and its tests for every request it must refuse.
@@ -444,8 +444,17 @@ turn up. Production moves to ok3d at 0.4.0.
   reports it and stops. Tested with Claude Code on a bare test VM as part of the release test; the docs
   say which assistants it's been tested with.
 - Test: from a bare test VM, the installer and the Dashboard alone give the 0.4 stack, with
-  no terminal after the installer, and the upgrade from 0.4 works from the Dashboard. The
-  AI prompt does the same on another bare VM.
+  no terminal after the installer, and the upgrade from 0.4 works with the installer and the
+  Dashboard. The AI prompt does the same on a bare VM (it can be the same install the
+  Dashboard-alone run then continues from).
+
+### 0.5.1: The Dashboard's second step (moved from 0.5.0, decided 2026-10-29)
+
+- Upgrades from the Dashboard: back up, move to the new release, recreate, and check.
+- Maintenance windows.
+- Apply asks first when it would stop something.
+- Each choice shown as its `ok3d` command.
+- Test: an upgrade from 0.5.0 from the Dashboard alone, with no terminal.
 
 ### 0.6: Logs and changes
 

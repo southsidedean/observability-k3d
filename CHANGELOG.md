@@ -1,9 +1,18 @@
 # Changelog
 
-## 0.5.0 (unreleased)
+## 0.5.0 (2026-10-29)
 
 ### Upgrading
 
+- From 0.4: if you cloned ok3d somewhere other than `~/ok3d`, note where. Then run the
+  installer, which brings that copy to 0.5.0, keeps your settings and certificate authority,
+  and starts the Dashboard (`OK3D_DIR` says where your copy is; leave it out for `~/ok3d`):
+  `curl -fsSL https://raw.githubusercontent.com/southsidedean/observability-k3d/main/install.sh | OK3D_DIR=/path/to/ok3d sh`.
+  Then Check and Apply on the Dashboard. The installer stops if you changed ok3d's own files
+  (your settings are safe: they're not ok3d's). [docs/upgrading.md](docs/upgrading.md) has
+  the steps.
+- If you run the simulated network, run `./ok3d demo down` and `./ok3d demo up` once after
+  upgrading: its devices from 0.4 don't come back after a restart, and new ones do.
 - `settings.yaml` may hold only your own settings, and `devices.yaml` only `devices`.
   `./ok3d check` now refuses either one if it sets the chart's own sections
   (`kube-prometheus-stack`, `prometheus-blackbox-exporter`, `gateway`, `global`), which
@@ -20,12 +29,10 @@
 
 - The helper, which runs `./ok3d check` and `./ok3d apply` when the Dashboard asks. It's a
   small service on the server, running as you, and it refuses any request that isn't
-  exactly one of those two. The Dashboard that uses it comes later in 0.5.
-  [docs/helper-under-the-hood.md](docs/helper-under-the-hood.md) says how it works.
+  exactly one of those two. [docs/helper-under-the-hood.md](docs/helper-under-the-hood.md) says how it works.
 - The Dashboard's first part: its image, `ghcr.io/southsidedean/ok3d-dashboard`, for amd64 and
-  arm64, and a first page behind a sign-in of its own, over HTTPS only. It shows ok3d's
-  version and the helper's last answer; the pages for settings, devices, and Check and Apply
-  come next. [docs/dashboard-under-the-hood.md](docs/dashboard-under-the-hood.md) says how
+  arm64, behind a sign-in of its own, over HTTPS only.
+  [docs/dashboard-under-the-hood.md](docs/dashboard-under-the-hood.md) says how
   it's built.
 - The helper can now save `settings.yaml` and `devices.yaml` for the Dashboard, after
   `./ok3d validate` checks them, and set one line of `.env` at a time, never sending a value
