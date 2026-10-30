@@ -1168,15 +1168,15 @@ upgrade_to() {
 	# upgrade would delete the cluster under it, and the new release's install restarts the
 	# helper. A request that arrived just now says it's running for a moment before the helper
 	# sees this lock and refuses it, so a running answer is read again for a few seconds
-	# before it counts.
+	# before it counts, and it refuses only on a read that showed running with no time left.
+	# OK3D_BUSY_WAIT (seconds, 5 when unset) is for the tests.
 	waited=0
-	while helper_busy && [ "$waited" -lt "${OK3D_BUSY_WAIT:-5}" ]; do
+	while helper_busy; do
+		[ "$waited" -lt "${OK3D_BUSY_WAIT:-5}" ] ||
+			refuse "The helper is carrying out a request from the Dashboard. Wait for Home to show its answer, then upgrade."
 		sleep 1
 		waited=$((waited + 1))
 	done
-	if helper_busy; then
-		refuse "The helper is carrying out a request from the Dashboard. Wait for Home to show its answer, then upgrade."
-	fi
 	if [ "${2:-}" != --yes ]; then
 		if [ ! -t 0 ]; then
 			echo "Upgrading needs a yes: run ./ok3d upgrade $target --yes, or run it in a terminal to be asked." >&2

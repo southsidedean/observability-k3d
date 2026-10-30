@@ -901,7 +901,7 @@ def test_a_refusal_shows_on_the_dashboard(releases: dict[str, str]) -> None:
 def test_upgrade_waits_for_a_request_the_helper_is_carrying_out(releases: dict[str, str]) -> None:
     result_file = Path(releases["FAKE_DATA_ROOT"]) / "helper" / "result"
     result_file.write_text("id=0123456789abcdef\naction=apply\nstate=running\n\n")
-    result = upgrade(releases | {"OK3D_BUSY_WAIT": "1"}, "v0.5.1", "--yes")
+    result = upgrade(releases | {"OK3D_BUSY_WAIT": "0"}, "v0.5.1", "--yes")  # a real Apply: still running
     assert result.returncode == 1
     assert "carrying out a request from the Dashboard" in result.stderr
     # The helper's own answer while it starts an upgrade doesn't count.
@@ -1032,14 +1032,19 @@ def test_a_failed_check_never_reinstalls_whatever_the_environment_says(releases:
     assert not any(c.startswith("docker run") for c in log[log.index("new ok3d check"):])
 
 
-def test_a_request_the_helper_refuses_a_moment_later_doesnt_stop_the_upgrade(releases: dict[str, str]) -> None:
+def test_a_request_the_helper_refuses_a_moment_later_doesnt_stop_the_upgrade(releases: dict[str, str],
+                                                                             tmp_path: Path) -> None:  # fmt: skip
     # A Check that arrived just now says it's running, then the helper sees the upgrade's lock
-    # and refuses it: the upgrade reads the answer again, and goes on.
+    # and refuses it: the upgrade reads the answer again, and goes on. The stand-in sleep is
+    # where the helper refuses it, so the test doesn't depend on timing.
     result_file = Path(releases["FAKE_DATA_ROOT"]) / "helper" / "result"
     result_file.write_text("id=0123456789abcdef\naction=check\nstate=running\n\n")
-    refuser = subprocess.Popen(["sh", "-c", f"sleep 1; printf 'id=0123456789abcdef\\nstate=refused\\n\\n' >{result_file}"])
-    try:
-        result = upgrade(releases, "v0.5.1", "--yes")
-    finally:
-        refuser.wait()
+    waits = tmp_path / "waits"
+    waits.mkdir()
+    (waits / "sleep").write_text('#!/bin/sh\necho "sleep $*" >>"$FAKE_LOG"\n'
+                                 'printf \'id=0123456789abcdef\\nstate=refused\\n\\n\' >"$FAKE_RESULT"\n')  # fmt: skip
+    (waits / "sleep").chmod(0o755)
+    env = releases | {"PATH": f"{waits}:{releases['PATH']}", "FAKE_RESULT": str(result_file), "OK3D_BUSY_WAIT": "5"}
+    result = upgrade(env, "v0.5.1", "--yes")
     assert result.returncode == 0, result.stdout + result.stderr
+    assert "sleep 1" in calls(releases)  # it waited, and read the answer again
