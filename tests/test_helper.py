@@ -788,12 +788,14 @@ def test_nothing_else_runs_while_an_upgrade_does(h: helper.Opened, text: str, sy
 
 
 def test_an_upgrade_from_a_terminal_counts_too(h: helper.Opened) -> None:
+    # ./ok3d upgrade holds a lock on local/upgrading while it runs, here held by the test.
+    (h.folders.ok3d_dir / "local").mkdir()
     lock = h.folders.ok3d_dir / "local" / "upgrading"
-    lock.mkdir(parents=True)
-    (lock / "pid").write_text(f"{os.getpid()}\n")
-    send(h)
-    assert helper.handle_once(h) == "refused a request: an upgrade is running: wait for it to finish"
-    (lock / "pid").write_text(subprocess.run(["sh", "-c", "echo $$"], capture_output=True, text=True, check=True).stdout)
+    with lock.open("w") as held:
+        fcntl.flock(held, fcntl.LOCK_EX)
+        send(h)
+        assert helper.handle_once(h) == "refused a request: an upgrade is running: wait for it to finish"
+    # Let go of (as when the upgrade ends, however it ends), the file left behind counts for nothing.
     send(h, GOOD.replace(ID, "4" * 16))
     assert helper.handle_once(h) == f"ran ./ok3d check for {'4' * 16}: exit 0"
 
@@ -807,3 +809,18 @@ def test_an_upgrade_that_stopped_partway_is_marked_stopped(h: helper.Opened, sys
     helper.publish(h)
     text = (h.folders.own / "upgrade").read_text()
     assert "state=failed" in text and "to=v0.5.2" in text and "stopped partway" in text
+
+
+def test_an_upgrade_that_finishes_while_its_checked_isnt_marked_stopped(h: helper.Opened, monkeypatch: pytest.MonkeyPatch) -> None:
+    # The upgrade finishes just as the helper asks whether one is running: it writes its last
+    # state, then ends. The helper must not mark that finished upgrade as stopped.
+    upgrade = h.folders.own / "upgrade"
+    upgrade.write_text("from=0.5.1\nto=v0.5.2\nstate=running\nstep=Making the cluster again\n")
+
+    def finishes_meanwhile(_ok3d_dir: Path) -> bool:
+        upgrade.write_text("from=0.5.1\nto=v0.5.2\nstate=finished\nstep=done\n")
+        return False
+
+    monkeypatch.setattr(helper, "upgrading", finishes_meanwhile)
+    helper.clear_stopped_upgrade(h)
+    assert "state=finished" in upgrade.read_text()

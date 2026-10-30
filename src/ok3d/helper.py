@@ -485,18 +485,20 @@ def ok3d_env() -> dict[str, str]:
 
 def upgrading(ok3d_dir: Path) -> bool:
     """Whether an upgrade is running: one from the Dashboard (its service is active), or one
-    from a terminal (./ok3d upgrade's lock, local/upgrading, names a process that's running).
-    While one is, the helper takes no other request: an Apply or a save partway through
-    would race it."""
-    pid = read_own_file(ok3d_dir / "local" / "upgrading" / "pid", 32) or b""
-    if pid.strip().isdigit():
+    from a terminal (./ok3d upgrade holds a lock on local/upgrading, which the system lets go
+    of when it ends, however it ends). While one is, the helper takes no other request: an
+    Apply or a save partway through would race it."""
+    try:
+        fd = os.open(ok3d_dir / "local" / "upgrading", os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except OSError:
+        pass  # no lock file: no upgrade has run from here
+    else:
         try:
-            os.kill(int(pid), 0)
+            fcntl.flock(fd, fcntl.LOCK_SH | fcntl.LOCK_NB)
+        except BlockingIOError:
             return True
-        except PermissionError:
-            return True  # someone's process: running
-        except (ProcessLookupError, OverflowError):
-            pass  # gone: a lock left by an upgrade that stopped partway
+        finally:
+            os.close(fd)  # which lets go of the lock, if it was taken here
     try:
         return subprocess.run([SYSTEMCTL, "--user", "is-active", "--quiet", UPGRADE_UNIT], check=False, env=ok3d_env(),
                               stdin=subprocess.DEVNULL, capture_output=True, timeout=30).returncode == 0  # fmt: skip
@@ -624,7 +626,13 @@ def publish(opened: Opened) -> None:
 def clear_stopped_upgrade(opened: Opened) -> None:
     """An upgrade that says it's running when none is (the machine restarted partway) is
     marked as stopped, so Home doesn't show it running forever. ./ok3d upgrade writes the
-    file, in the helper's folder, as you."""
+    file, in the helper's folder, as you.
+
+    It asks whether one is running first, and reads the file only if none is: ./ok3d upgrade
+    writes its last state before it ends, so a file read after it ended is never one it will
+    change again. Read first, a running one could finish in between, and be marked stopped."""
+    if upgrading(opened.folders.ok3d_dir):
+        return
     try:
         fd = os.open("upgrade", os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=opened.own)
     except OSError:
@@ -632,7 +640,7 @@ def clear_stopped_upgrade(opened: Opened) -> None:
     with os.fdopen(fd, "rb") as f:
         text = f.read(4096).decode("utf-8", errors="replace")
     fields = dict(line.split("=", 1) for line in text.splitlines() if "=" in line)
-    if fields.get("state") != "running" or upgrading(opened.folders.ok3d_dir):
+    if fields.get("state") != "running":
         return
     fields |= {"state": "failed", "step": "it stopped partway (the server restarted, say): "
                "docs/upgrading.md says how to carry on", "finished": now_utc()}  # fmt: skip

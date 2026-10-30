@@ -463,8 +463,10 @@ turn up. Production moves to ok3d at 0.4.0.
 - Each choice shown as its `ok3d` command.
 - Home's screenshot retaken from a release: 0.5.0's shows `0.5.0.dev0`.
 - Test: 0.5.0 has no upgrade button, so the Dashboard's upgrade is rehearsed on the test VM
-  instead: a checkout of this release moves to a test tag signed with a test key, from the
-  Dashboard alone. The upgrade from 0.5.0 to 0.5.1 uses the installer, as before. From 0.5.2,
+  instead, from the Dashboard alone: two local commits of the branch, each with a Dashboard
+  image built on the VM and releases fetched from a repository on the VM, the first adding a
+  test key to `deploy/release-signers` and the second tagged and signed with it. The
+  installer sets up the first, and the Dashboard upgrades it to the second. The upgrade from 0.5.0 to 0.5.1 uses the installer, as before. From 0.5.2,
   each release test is an upgrade from the release before, from the Dashboard alone.
 
 ### 0.6: Logs and changes

@@ -1009,7 +1009,7 @@ step() {
 	echo "== $what" | tee -a "$log"
 	{
 		s=0
-		"$@" 2>&1 || s=$?
+		"$@" 2>&1 9>&- || s=$?
 		echo "$s" >"$work/status"
 	} | tee -a "$log"
 	[ "$(cat "$work/status")" = 0 ]
@@ -1023,10 +1023,56 @@ stopped() {
 	exit 1
 }
 
-# Moves the checkout back to where it was before the upgrade.
+# go_back WHY: moves the checkout back to where it was before the upgrade, then stops,
+# saying why, and whether the move back worked.
 go_back() {
 	echo "Moving back to ok3d $from." | tee -a "$log"
-	git -c advice.detachedHead=false checkout --quiet "$old" 2>&1 | tee -a "$log"
+	if ! git -c advice.detachedHead=false checkout --quiet "$old" >>"$log" 2>&1; then
+		stopped "$1 Moving back to $from failed too (see the log), so this checkout is on $target: git -C $root checkout $old moves it back."
+	fi
+	if [ -n "${reinstall:-}" ]; then
+		./ok3d install 2>&1 | tee -a "$log" || true
+	fi
+	stopped "$1"
+}
+
+# verify_release: whether the fetched tag is the release it's named for: an annotated tag
+# object whose own name is $target (so a signed tag of an older release, pushed under a newer
+# name, isn't taken for it), for a commit, signed with an SSH key in the copy of
+# deploy/release-signers made before anything moved. Only SSH: git would check an OpenPGP or
+# X.509 signature against your own keyring instead, so those programs are set to fail. Writes
+# the release's commit to $work/commit, so that commit is what's checked out, whatever else
+# has the same name (a branch, say).
+verify_release() {
+	if [ "$(git cat-file -t "refs/tags/$target")" != tag ]; then
+		echo "$target is a plain tag, with nothing to sign."
+		return 1
+	fi
+	git cat-file tag "refs/tags/$target" >"$work/tag" || return 1
+	sed -n '1,/^$/p' "$work/tag" >"$work/tag-head"
+	if ! grep -qx "tag $target" "$work/tag-head" || ! grep -qx 'type commit' "$work/tag-head"; then
+		echo "The tag called $target is really $(sed -n 's/^tag //p' "$work/tag-head" | head -n 1)."
+		return 1
+	fi
+	if ! grep -qx -e '-----BEGIN SSH SIGNATURE-----' "$work/tag"; then
+		echo "$target has no SSH signature."
+		return 1
+	fi
+	git -c gpg.ssh.program=ssh-keygen -c gpg.ssh.allowedSignersFile="$work/release-signers" \
+		-c gpg.openpgp.program=false -c gpg.x509.program=false verify-tag "refs/tags/$target" || return 1
+	git rev-parse --verify --quiet "refs/tags/$target^{commit}" >"$work/commit" || return 1
+}
+
+# refuse WHY: won't upgrade, before anything has changed. Says so on the screen and, when the
+# helper started it, on the Dashboard's Home, which would otherwise show nothing.
+refuse() {
+	echo "$1" >&2
+	if [ -n "${from:-}" ]; then
+		helper_note upgrade-output "$1
+"
+		upgrade_note failed "$1"
+	fi
+	exit 1
 }
 
 back_up_settings() {
@@ -1036,6 +1082,11 @@ back_up_settings() {
 		[ ! -f "$file" ] || cp -p "$file" "$saved/" || return 1
 	done
 	echo "Copied your settings, devices, and .env to $saved."
+	# The last three are kept.
+	# shellcheck disable=SC2012 # names ok3d made itself: before-vX.Y.Z-<time>
+	ls -1dt "$root"/local/backups/before-v*/ | tail -n +4 | while read -r old_saved; do
+		rm -rf "$old_saved"
+	done
 }
 
 # The data root's small, precious parts, while the cluster is down so nothing is writing to
@@ -1073,29 +1124,28 @@ upgrade_to() {
 		echo "Usage: ./ok3d upgrade [vX.Y.Z] [--yes]: a release tag such as v0.5.1." >&2
 		exit 2
 	fi
-	if ! is_newer "$target"; then
-		echo "$target isn't newer than this ok3d ($(this_version)): ./ok3d upgrade only moves forward." >&2
-		exit 1
-	fi
+	from=$(this_version)
+	started=$(now)
+	is_newer "$target" || refuse "$target isn't newer than this ok3d ($from): ./ok3d upgrade only moves forward."
 	if [ "$(uname -s)" != Linux ] || ! command -v systemctl >/dev/null 2>&1; then
-		echo "./ok3d upgrade needs Linux with systemd, for the helper's service." >&2
-		exit 1
+		refuse "./ok3d upgrade needs Linux with systemd, for the helper's service."
 	fi
-	if [ "$(id -u)" = 0 ]; then
-		echo "Run ok3d as yourself, not as root." >&2
-		exit 1
-	fi
-	if [ ! -d .git ]; then
-		echo "$root isn't a git checkout, so it can't move to another release. Use the installer (docs/upgrading.md)." >&2
-		exit 1
-	fi
+	[ "$(id -u)" != 0 ] || refuse "Run ok3d as yourself, not as root."
+	[ -d .git ] || refuse "$root isn't a git checkout, so it can't move to another release. Use the installer (docs/upgrading.md)."
 	if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
-		echo "$root has changes of yours to ok3d's own files. Commit or stash them first (your settings are safe: they're not ok3d's)." >&2
-		exit 1
+		refuse "$root has changes of yours to ok3d's own files. Commit or stash them first (your settings are safe: they're not ok3d's)."
 	fi
-	if [ ! -f deploy/release-signers ] || ! command -v ssh-keygen >/dev/null 2>&1; then
-		echo "Checking a release's signature needs deploy/release-signers and ssh-keygen (openssh-client)." >&2
-		exit 1
+	for tool in ssh-keygen flock; do
+		command -v "$tool" >/dev/null 2>&1 ||
+			refuse "./ok3d upgrade needs $tool (ssh-keygen is in openssh-client, flock in util-linux)."
+	done
+	[ -f deploy/release-signers ] || refuse "There's no deploy/release-signers to check $target's signature with."
+	# Not under a request the helper is carrying out (an Apply from the Dashboard, say): the
+	# upgrade would delete the cluster under it, and the new release's install restarts the
+	# helper. The helper itself takes no request while an upgrade runs (helper.py).
+	if grep -qx 'state=running' "$DATA_ROOT/helper/result" 2>/dev/null &&
+		! grep -qx 'action=upgrade' "$DATA_ROOT/helper/result"; then
+		refuse "The helper is carrying out a request from the Dashboard. Wait for Home to show its answer, then upgrade."
 	fi
 	if [ "${2:-}" != --yes ]; then
 		if [ ! -t 0 ]; then
@@ -1111,28 +1161,22 @@ upgrade_to() {
 			exit 1
 		fi
 	fi
-	# One upgrade at a time, whether from here or from the Dashboard. The lock holds the
-	# upgrade's process, so one left by an upgrade that stopped partway (the machine
-	# restarted) is taken over, and the helper can tell it isn't running (helper.py).
+	# One upgrade at a time, whether from here or from the Dashboard: a lock on local/upgrading
+	# for as long as this runs, which the system lets go of when it ends, however it ends. The
+	# helper checks the same lock (helper.py). Each step runs without it (9>&-), so nothing
+	# a step leaves running holds it.
 	install -d -m 0700 "$root/local"
-	lock="$root/local/upgrading"
-	if ! mkdir "$lock" 2>/dev/null; then
-		pid=$(head -c 16 "$lock/pid" 2>/dev/null | tr -cd 0-9)
-		if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
-			echo "An upgrade is running already (process $pid)." >&2
-			exit 1
-		fi
-		echo "An earlier upgrade stopped partway; this one carries on from where ok3d is now."
+	exec 9>"$root/local/upgrading"
+	if ! flock -n 9; then
+		echo "An upgrade is running already." >&2
+		exit 1
 	fi
-	echo "$$" >"$lock/pid"
 	work=$(mktemp -d)
-	trap 'rm -rf "$work" "$lock"' EXIT
+	trap 'rm -rf "$work"' EXIT
 	install -d -m 0700 "$DATA_ROOT/helper"
 	log="$DATA_ROOT/helper/upgrade-output"
 	rm -f "$log"
 	(umask 077 && : >"$log")
-	from=$(this_version)
-	started=$(now)
 	stamp=$(date -u +%Y%m%dT%H%M%SZ)
 	# Where to go back to: the branch you were on, or the commit.
 	old=$(git symbolic-ref --quiet --short HEAD || git rev-parse HEAD)
@@ -1141,22 +1185,20 @@ upgrade_to() {
 
 	step "Getting $target" git fetch --quiet "$releases_repo" "refs/tags/$target:refs/tags/$target" ||
 		stopped "couldn't get $target from $releases_repo."
-	step "Checking $target's signature" git -c gpg.ssh.program=ssh-keygen \
-		-c gpg.ssh.allowedSignersFile="$work/release-signers" verify-tag "$target" ||
+	step "Checking $target's signature" verify_release ||
 		stopped "$target isn't signed by a key in deploy/release-signers, so it wasn't used."
 	step "Backing up your settings" back_up_settings || stopped "couldn't back up your settings."
 	# git writes each changed file as a new one, so this script, already open, runs on as it
 	# was; every ./ok3d after this is the new release's.
-	step "Moving to $target" git -c advice.detachedHead=false checkout --quiet "$target" ||
+	step "Moving to $target" git -c advice.detachedHead=false checkout --quiet "$(cat "$work/commit")" ||
 		stopped "couldn't move this checkout to $target."
-	if ! step "Checking with $target" ./ok3d check; then
-		go_back
-		stopped "$target's check found problems (above). Nothing else changed: read $target's Upgrading notes, fix what it says, and try again."
-	fi
+	[ "$(this_version)" = "${target#v}" ] ||
+		go_back "$target says it's ok3d $(this_version), not ${target#v}, so it wasn't used."
+	step "Checking with $target" ./ok3d check ||
+		go_back "$target's check found problems (above). Nothing else changed: read $target's Upgrading notes, fix what it says, and try again."
 	if ! step "Installing $target's helper and Dashboard" ./ok3d install; then
-		go_back
-		./ok3d install 2>&1 | tee -a "$log" || true
-		stopped "$target's install failed (above). This checkout, the helper, and the Dashboard are back on $from; the cluster wasn't touched."
+		reinstall=yes
+		go_back "$target's install failed (above). This checkout, the helper, and the Dashboard are back on $from; the cluster wasn't touched."
 	fi
 	step "Deleting the cluster" ./ok3d delete --yes ||
 		stopped "couldn't delete the cluster (above). ./ok3d apply brings it up to date with $target."

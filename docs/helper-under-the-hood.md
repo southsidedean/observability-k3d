@@ -189,7 +189,8 @@ copy of `.env` there stays out of its reach.
 ## Looking for a release, and upgrading
 
 `look-for-release` runs `./ok3d upgrade` with nothing after it, which asks GitHub for the list
-of ok3d's releases (`git ls-remote`), and nothing else. It writes what it found to
+of ok3d's releases (`git ls-remote`). That's all it asks for, except that, like every `./ok3d`
+command, it first fetches the charts' dependencies if any are missing. It writes what it found to
 `helper/newest-release`, which Home reads:
 
 ```ini
@@ -212,22 +213,37 @@ The version must be `v` and three numbers of up to six digits, exactly. The help
 the upgrade itself: partway through, the new release's `./ok3d install` restarts the helper's
 service, which stops everything the helper started. So it starts `./ok3d upgrade v0.5.2 --yes`
 as a systemd user service of its own, `ok3d-upgrade` (with `systemd-run --user`), with the
-helper's `PATH` and none of its `OK3D_` variables, and answers once that has started. The
+helper's `PATH` (the service gets the rest of its environment from your systemd user
+session, not from the helper), and answers once that has started. The
 answer says the upgrade started, not that it worked; Home follows the upgrade itself.
 
-`./ok3d upgrade` checks everything again, whoever asked: the version is a release tag, newer
-than the checkout's, and its tag is signed by a key in `deploy/release-signers` (the copy in
-the checkout as it is before the upgrade, so a release can't vouch for itself). Then it backs
-up, moves, checks, installs, and makes the cluster again, as docs/upgrading.md describes. It
-writes how it's going to the helper's folder (below) as it goes.
+`./ok3d upgrade` checks everything again, whoever asked:
+
+- The version is a release tag, newer than the checkout's.
+- The tag is an annotated tag whose own name is that version, for a commit. A signed tag of
+  an older release, pushed again under a newer name, is refused.
+- It's signed with an SSH key in `deploy/release-signers`: the copy in the checkout as it is
+  before the upgrade, so a release can't vouch for itself. Only SSH signatures count; git
+  is told not to check an OpenPGP or X.509 one, which it would check against your own keys.
+- The commit it checks out is the one the tag is for, not anything else with the same name,
+  and once it's there, its `src/ok3d/__init__.py` must say that version, or it moves back.
+
+Then it backs up, moves, checks, installs, and makes the cluster again, as docs/upgrading.md
+describes. It writes how it's going to the helper's folder (below) as it goes. If it won't
+upgrade at all (a release that isn't newer, changes of yours to ok3d's own files, a request
+the helper is still carrying out), it says why there too, so Home shows it.
+It won't start while the helper is carrying out another request (an Apply, say), since it
+would delete the cluster under it.
 
 While an upgrade runs, the helper refuses every request, the Dashboard's Check, Apply, and
 saves included, since any of them partway through would race it. It counts an upgrade as
-running while the `ok3d-upgrade` service is active, or while `local/upgrading/pid` in the ok3d
-checkout names a process that's running: that's the lock `./ok3d upgrade` holds, so an upgrade
-started on the server counts too. If `helper/upgrade` says an upgrade is running when neither
-is true (the server restarted partway), the helper rewrites it as stopped, so Home doesn't
-show it running forever. The next `./ok3d upgrade` takes over a lock whose process has gone.
+running while the `ok3d-upgrade` service is active, or while something holds a lock on
+`local/upgrading` in the ok3d checkout. `./ok3d upgrade` holds that lock (with `flock`) for as
+long as it runs, so an upgrade started on the server counts too, and the system lets go of it
+when the upgrade ends, however it ends. If `helper/upgrade` says an upgrade is running when
+neither is true (the server restarted partway), the helper rewrites it as stopped, so Home
+doesn't show it running forever. It asks whether one is running before it reads the file,
+so an upgrade that finishes in between is never marked stopped.
 
 ## What the helper writes
 

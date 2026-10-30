@@ -29,8 +29,9 @@ Either way, the upgrade:
    `local/backups/before-<release>-<time>/` in the ok3d folder.
 3. Moves the ok3d folder to the release and runs its `./ok3d check`, then its `./ok3d install`,
    which brings the helper and the Dashboard up to the release. If either fails, it moves
-   back (and installs the old helper and Dashboard again) and stops: nothing else changed.
-   Read what the check said, and the release's Upgrading notes, then try again.
+   back and stops (after a failed install, it installs the old helper and Dashboard again):
+   nothing else changed. Read what the check said, and the release's Upgrading notes, then
+   try again.
 4. Deletes the cluster, and backs up the certificate authority (`certs/`), Grafana's database
    (`grafana/`), and Alertmanager's silences (`alertmanager/`) while nothing is writing to
    them, to `backups/before-<release>-<time>.tar.gz` in the data root. The last three are
@@ -41,7 +42,8 @@ Either way, the upgrade:
 
 It moves only forward, one upgrade at a time, and needs Linux with systemd, like the helper.
 The ok3d folder mustn't have changes of yours to ok3d's own files (your settings are safe:
-they're not ok3d's).
+they're not ok3d's), and it waits for anything the helper is doing for the Dashboard (an
+Apply, say) to finish first.
 
 ### If an upgrade stops partway
 
@@ -49,11 +51,18 @@ The Dashboard's Home, or what `./ok3d upgrade` printed, says which step it stopp
 
 - **The check or the install**: ok3d is back on the release you had, and the cluster wasn't
   touched. Fix what the check said, then upgrade again.
-- **Deleting the cluster, the backup, or Apply**: the ok3d folder is on the new release. Fix
-  what Apply said, then run `./ok3d apply` on the server, or **Check** and **Apply** on the
-  Dashboard.
-- **The server restarted partway**: Home says the upgrade stopped. Run `./ok3d upgrade` with
-  the same release again: it takes over where ok3d is now.
+- **Deleting the cluster, the backup, or Apply**: the ok3d folder, the helper, and the
+  Dashboard are on the new release. Fix what Apply said, then **Check** and **Apply** on the
+  Dashboard, or `./ok3d apply` on the server.
+- **The server restarted partway**: Home says the upgrade stopped, and at which step. If it
+  stopped before "Moving to", nothing changed: upgrade again. If it stopped later, the ok3d
+  folder is already on the new release, so finish by hand on the server:
+
+  ```sh
+  cd ~/ok3d
+  ./ok3d install       # the new release's helper and Dashboard, if that step hadn't finished
+  ./ok3d apply         # makes the cluster again with the new release
+  ```
 
 To go back to the release you had instead, put the backups back where they were and make
 the cluster again from it:
@@ -61,12 +70,15 @@ the cluster again from it:
 ```sh
 cd ~/ok3d
 git switch --detach v0.5.1                   # the release you had
+cp local/backups/before-v0.5.2-<time>/* .    # your settings, devices, and .env from before
+cp local/backups/before-v0.5.2-<time>/.env .
 ./ok3d install
 ./ok3d delete --yes
 tar -C /srv/ok3d -xzf /srv/ok3d/backups/before-v0.5.2-<time>.tar.gz   # your data root
 ./ok3d apply
 ```
 
+Your settings go back to how they were, in case you changed them for the new release, and
 Grafana's database goes back to how it was before the upgrade, which matters if the new
 release's Grafana changed it.
 
