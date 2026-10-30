@@ -12,6 +12,7 @@
     {"name": "dashboard-settings", "site": "dashboard", "path": "/settings", "wait": "textarea", "crop": "main"},
     {"name": "dashboard-devices", "site": "dashboard", "path": "/devices", "wait": "textarea", "crop": "main"},
     {"name": "dashboard-keys", "site": "dashboard", "path": "/keys", "wait": "text=Keys and passwords", "crop": "main"},
+    {"name": "dashboard-maintenance", "site": "dashboard", "path": "/maintenance", "wait": "text=Maintenance windows", "crop": "main"},
     {"name": "grafana-devices", "site": "grafana", "path": "/d/ok3d-devices?orgId=1&from=now-30m&to=now&kiosk",
      "viewport": {"width": 1600, "height": 900}, "wait": "text=Every check"}
   ]

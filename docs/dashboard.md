@@ -39,7 +39,7 @@ minute.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../images/screenshots/dashboard-home-dark.png">
-  <img src="../images/screenshots/dashboard-home-light.png" alt="The Dashboard's Home page: ok3d's version, the helper running, the Check and Apply buttons, a Before you Apply list saying alerts go nowhere yet, What's next with five steps and links to the certificate authority and Grafana, and the helper's last answer, a Check that finished with exit status 0, with what ok3d check printed." width="700">
+  <img src="../images/screenshots/dashboard-home-light.png" alt="The Dashboard's Home page: ok3d 0.5.1, the helper running, the Check and Apply buttons with a note that Apply will change nothing that's running and the same commands on the server, a Before you Apply list saying alerts go nowhere yet, What's next with five steps and links to the certificate authority and Grafana, the helper's last answer, a Check that finished with exit status 0, with what ok3d check printed, and Releases, with a Look for a new release button." width="700">
 </picture>
 
 Each page also says what its buttons do on the server, as the command or the line in a file
@@ -86,7 +86,7 @@ backups it makes, and what to do if an upgrade stops partway.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../images/screenshots/dashboard-setup-dark.png">
-  <img src="../images/screenshots/dashboard-setup-light.png" alt="The Dashboard's Setup page: four ready-made setups as cards (Basic NOC, marked as the setup now; Network NOC, which needs the UniFi controller's address first; NOC with logs, coming in 0.6; and NOC with agents, coming in 0.9), then each part (UniFi, off until its controller's address is set, and the rest coming in later releases), then where alerts go: ntfy, email, and the dead man's switch, each off, with a Turn on button." width="700">
+  <img src="../images/screenshots/dashboard-setup-light.png" alt="The Dashboard's Setup page, each choice with the settings.yaml line it writes: four ready-made setups as cards (Basic NOC, marked as the setup now; Network NOC, which needs the UniFi controller's address first; NOC with logs, coming in 0.6; and NOC with agents, coming in 0.9), then each part (UniFi, off until its controller's address is set, and the rest coming in later releases), then where alerts go: ntfy, email, and the dead man's switch, each off; ntfy and the dead man's switch with a Turn on button, and email saying who gets and sends its alerts must be set first." width="700">
 </picture>
 
 Choose a ready-made setup, or switch the parts on and off yourself:
@@ -105,7 +105,7 @@ a later release says which one.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../images/screenshots/dashboard-devices-dark.png">
-  <img src="../images/screenshots/dashboard-devices-light.png" alt="The Dashboard's Devices page: devices.yaml in a text box, listing the simulated network's router, switch, access points, NAS, printer, and UniFi controller, with a Save button." width="700">
+  <img src="../images/screenshots/dashboard-devices-light.png" alt="The Dashboard's Devices page: devices.yaml in a text box, starting with the simulated network's router, switch, and an access point, with the same edit on the server and a Save button." width="700">
 </picture>
 
 These show `settings.yaml` and `devices.yaml` as they are on the server, to change and save.
@@ -117,6 +117,11 @@ file on the server.
 
 ## Maintenance
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../images/screenshots/dashboard-maintenance-dark.png">
+  <img src="../images/screenshots/dashboard-maintenance-light.png" alt="The Dashboard's Maintenance page: no maintenance windows, not yet read from Alertmanager, a button to read them again, and a form to add one: for all of ok3d or ticked devices from the simulated network, from now for a length or between two times in the server's own time, and why, with the same command on the server." width="700">
+</picture>
+
 **Maintenance** lists the maintenance windows: times when alerts don't notify you, for all of
 ok3d or for the devices you choose. Add one from now for a length, or between two times in
 the server's own time, with a reason if you like; **End now** ends one early. Home says while
@@ -127,7 +132,7 @@ details.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../images/screenshots/dashboard-keys-dark.png">
-  <img src="../images/screenshots/dashboard-keys-light.png" alt="The Dashboard's Keys page: the UniFi API key, the ntfy topic and token, and the mail password, each saying whether it's set, with a box to type a new one and a Save button." width="700">
+  <img src="../images/screenshots/dashboard-keys-light.png" alt="The Dashboard's Keys page: the UniFi API key, the ntfy topic and token, and the mail password, each saying whether it's set and which line of .env it goes into on the server, with a box to type a new one and a Save button." width="700">
 </picture>
 
 Keys and passwords go into `.env` on the server. The Dashboard shows only whether each one is
