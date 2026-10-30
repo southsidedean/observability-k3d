@@ -783,7 +783,7 @@ def test_version_goes_with_upgrade_and_nothing_else(h: helper.Opened, text: str,
 def test_nothing_else_runs_while_an_upgrade_does(h: helper.Opened, text: str, systemd: Path) -> None:
     (systemd / "upgrading").touch()
     send(h, text)
-    assert helper.handle_once(h) == "refused a request: an upgrade is running: wait for it to finish"
+    assert helper.handle_once(h) == f"refused a request: {helper.UPGRADE_RUNNING}"
     assert ran(h) == [] and not (systemd / "started").exists()
 
 
@@ -794,7 +794,7 @@ def test_an_upgrade_from_a_terminal_counts_too(h: helper.Opened) -> None:
     with lock.open("w") as held:
         fcntl.flock(held, fcntl.LOCK_EX)
         send(h)
-        assert helper.handle_once(h) == "refused a request: an upgrade is running: wait for it to finish"
+        assert helper.handle_once(h) == f"refused a request: {helper.UPGRADE_RUNNING}"
     # Let go of (as when the upgrade ends, however it ends), the file left behind counts for nothing.
     send(h, GOOD.replace(ID, "4" * 16))
     assert helper.handle_once(h) == f"ran ./ok3d check for {'4' * 16}: exit 0"
@@ -808,7 +808,7 @@ def test_an_upgrade_that_stopped_partway_is_marked_stopped(h: helper.Opened, sys
     (systemd / "upgrading").unlink()
     helper.publish(h)
     text = (h.folders.own / "upgrade").read_text()
-    assert "state=failed" in text and "to=v0.5.2" in text and "stopped partway" in text
+    assert "state=failed" in text and "to=v0.5.2" in text and "stopped partway, at Deleting the cluster" in text
 
 
 def test_an_upgrade_that_finishes_while_its_checked_isnt_marked_stopped(h: helper.Opened, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -824,3 +824,29 @@ def test_an_upgrade_that_finishes_while_its_checked_isnt_marked_stopped(h: helpe
     monkeypatch.setattr(helper, "upgrading", finishes_meanwhile)
     helper.clear_stopped_upgrade(h)
     assert "state=finished" in upgrade.read_text()
+
+
+def test_an_upgrade_that_starts_while_its_checked_isnt_marked_stopped(h: helper.Opened, monkeypatch: pytest.MonkeyPatch) -> None:
+    # None is running when the helper first asks; a terminal upgrade then takes the lock and
+    # writes its first state before the helper reads the file. Asked again, it's running.
+    upgrade = h.folders.own / "upgrade"
+    upgrade.write_text("from=0.5.1\nto=v0.5.2\nstate=running\nstep=Getting v0.5.2\n")
+    answers = iter([False, True])
+    monkeypatch.setattr(helper, "upgrading", lambda _ok3d_dir: next(answers))
+    helper.clear_stopped_upgrade(h)
+    assert "state=running" in upgrade.read_text()
+
+
+def test_a_request_says_its_running_before_it_asks_about_an_upgrade(h: helper.Opened, monkeypatch: pytest.MonkeyPatch) -> None:
+    # ./ok3d upgrade takes its lock, then reads the answer: had it taken it just as the helper
+    # asked, it must find this request running, and wait for it.
+    seen: list[dict[str, str]] = []
+
+    def asked(_ok3d_dir: Path) -> bool:
+        seen.append(result(h))  # the answer as an upgrade taking its lock just then would read it
+        return False
+
+    monkeypatch.setattr(helper, "upgrading", asked)
+    send(h, f"id={ID}\naction=apply\n")
+    helper.handle_once(h)
+    assert seen and {"action": "apply", "state": "running"}.items() <= seen[0].items()

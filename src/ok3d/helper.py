@@ -84,6 +84,9 @@ FIELDS = ("id", "action", "name", "base", "version")
 # upgrade only has to start here: it runs in a service of its own.
 TIMEOUTS = {"check": 300, "apply": 3600, "save-settings": 120, "save-devices": 120, "look-for-release": 120,
             "upgrade": 60}  # fmt: skip
+# Why a request is refused while an upgrade holds its lock, which includes one from a terminal
+# waiting for you to type yes.
+UPGRADE_RUNNING = "an upgrade is running, or waiting on the server for a yes: wait for it to finish"
 # The service an upgrade runs in, and the commands that start it and ask about it.
 UPGRADE_UNIT = "ok3d-upgrade"
 SYSTEMD_RUN = "systemd-run"
@@ -553,14 +556,17 @@ def handle_once(opened: Opened, now: float | None = None) -> str | None:
         request = parse_request(*taken, now=time.time() if now is None else now)
         if seen_before(opened, request.id):
             raise Refused("the request was carried out already")
+        answer = {"id": request.id, "action": request.action} | ({"name": request.name} if request.name else {})
+        # Running first, then whether an upgrade is: ./ok3d upgrade takes its lock first, then
+        # reads this answer, so whichever comes second sees the other, and an upgrade never
+        # starts under an Apply, nor an Apply under an upgrade.
+        write_result(opened, answer | {"state": "running"})
         if upgrading(opened.folders.ok3d_dir):
-            raise Refused("an upgrade is running: wait for it to finish")
+            raise Refused(UPGRADE_RUNNING)
     except Refused as e:
         fields = {"id": request_id} if request_id else {}
         write_result(opened, fields | {"state": "refused", "reason": str(e), "finished": now_utc()})
         return f"refused a request: {e}"
-    answer = {"id": request.id, "action": request.action} | ({"name": request.name} if request.name else {})
-    write_result(opened, answer | {"state": "running"})
     try:
         status, output = carry_out(opened, request)
     except (OSError, subprocess.TimeoutExpired):

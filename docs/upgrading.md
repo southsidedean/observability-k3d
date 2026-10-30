@@ -57,17 +57,23 @@ The Dashboard's Home, or what `./ok3d upgrade` printed, says which step it stopp
 - **The server restarted partway**: Home says the upgrade stopped, and at which step. If it
   stopped before "Moving to", nothing changed: upgrade again. If it stopped during "Moving
   to", `git -C ~/ok3d status` may show ok3d's files half moved; put them back with
-  `git -C ~/ok3d checkout --force` and the release you had (such as `v0.5.1`), then upgrade
-  again. If it stopped later, the ok3d folder is already on the new release, so finish by
-  hand on the server, with the same steps the upgrade would have taken:
+  `git -C ~/ok3d checkout --force` and the release (or branch) you had, such as `v0.5.1`,
+  then upgrade again. If it stopped later, the ok3d folder is already on the new release, so
+  finish by hand on the server, with the steps the upgrade would have taken (with your data
+  root for `/srv/ok3d`):
 
   ```sh
   cd ~/ok3d
+  ./ok3d check            # your settings, with the new release
   ./ok3d install          # the new release's helper and Dashboard
   ./ok3d delete --yes     # the data root stays
-  tar -C /srv/ok3d -czf ~/before-upgrade.tar.gz certs grafana alertmanager   # your data root
+  install -d -m 0700 /srv/ok3d/backups
+  (umask 077 && tar -C /srv/ok3d -czf /srv/ok3d/backups/before-v0.5.2-by-hand.tar.gz certs grafana alertmanager)
   ./ok3d apply            # makes the cluster again with the new release
   ```
+
+  The backup holds the certificate authority's private key, so `umask 077` keeps it yours
+  alone. Leave out of the `tar` line any of the three folders your data root doesn't have.
 
 To go back to the release you had instead, put the backups back where they were and make
 the cluster again from it:

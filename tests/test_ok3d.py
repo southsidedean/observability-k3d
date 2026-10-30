@@ -985,3 +985,49 @@ def test_a_failed_move_back_says_so(releases: dict[str, str]) -> None:
     assert result.returncode == 1
     assert "Moving back to 0.5.0 failed too" in result.stderr
     assert "Moving back to 0.5.0 failed too" in note(releases, "upgrade")["step"]
+
+
+
+def sign(releases: dict[str, str], tmp_path: Path, name: str, target: str, version: str) -> str:
+    """A tag called name, signed with the release key, for a new commit saying version (or,
+    with target "tree", for that commit's tree); returns the tag object's id."""
+    repo = Path(releases["OK3D_REPO"])
+    git(repo, "checkout", "--quiet", "v0.5.1", env=releases)
+    (repo / "src" / "ok3d" / "__init__.py").write_text(f'__version__ = "{version}"\n')
+    git(repo, "commit", "--quiet", "-am", version, env=releases)
+    git(repo, "-c", "gpg.format=ssh", "-c", f"user.signingkey={tmp_path / 'release-key'}", "tag", "-s", name,
+        "-m", name, "HEAD^{tree}" if target == "tree" else "HEAD", env=releases)  # fmt: skip
+    return git(repo, "rev-parse", f"refs/tags/{name}", env=releases).strip()
+
+
+def test_the_tag_name_is_matched_exactly(releases: dict[str, str], tmp_path: Path) -> None:
+    # A signed tag called v0a5a6 (whose name would match v0.5.6 as a pattern), published as v0.5.6.
+    made = sign(releases, tmp_path, "v0a5a6", "commit", "0.5.6")
+    git(Path(releases["OK3D_REPO"]), "update-ref", "refs/tags/v0.5.6", made, env=releases)
+    result = upgrade(releases, "v0.5.6", "--yes")
+    assert result.returncode == 1
+    assert "The tag called v0.5.6 is really v0a5a6." in result.stdout
+    assert '"0.5.0"' in at(releases)
+
+
+def test_a_signed_tag_of_something_other_than_a_commit_is_refused(releases: dict[str, str], tmp_path: Path) -> None:
+    sign(releases, tmp_path, "v0.5.7", "tree", "0.5.7")
+    result = upgrade(releases, "v0.5.7", "--yes")
+    assert result.returncode == 1
+    assert "v0.5.7 is a tag for something other than a commit." in result.stdout
+
+
+def test_a_tag_here_that_isnt_the_one_there_is_refused_and_says_why(releases: dict[str, str]) -> None:
+    checkout = Path(releases["CHECKOUT"])
+    git(checkout, "tag", "v0.5.1", env=releases)  # a different v0.5.1, already here
+    result = upgrade(releases, "v0.5.1", "--yes")
+    assert result.returncode == 1
+    assert "would clobber existing tag" in result.stdout
+    assert "would clobber existing tag" in (Path(releases["FAKE_DATA_ROOT"]) / "helper" / "upgrade-output").read_text()
+
+
+def test_a_failed_check_never_reinstalls_whatever_the_environment_says(releases: dict[str, str]) -> None:
+    result = upgrade(releases | {"FAKE_NEW_FAIL": "check", "reinstall": "yes"}, "v0.5.1", "--yes")
+    assert result.returncode == 1
+    log = calls(releases)
+    assert not any(c.startswith("docker run") for c in log[log.index("new ok3d check"):])

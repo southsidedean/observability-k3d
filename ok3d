@@ -1190,7 +1190,9 @@ upgrade_to() {
 	# The signature is checked with this release's copy of the keys, made before anything moves.
 	cp deploy/release-signers "$work/release-signers"
 
-	step "Getting $target" git fetch --quiet "$releases_repo" "refs/tags/$target:refs/tags/$target" ||
+	# Not --quiet, which would hide why a fetch was refused (a tag here already that isn't the
+	# one there, say: git never replaces a tag with another).
+	step "Getting $target" git fetch --no-progress "$releases_repo" "refs/tags/$target:refs/tags/$target" ||
 		stopped "couldn't get $target from $releases_repo."
 	step "Checking $target's signature" verify_release ||
 		stopped "$target isn't signed by a key in deploy/release-signers, so it wasn't used."
