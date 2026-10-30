@@ -86,7 +86,7 @@ backups it makes, and what to do if an upgrade stops partway.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../images/screenshots/dashboard-setup-dark.png">
-  <img src="../images/screenshots/dashboard-setup-light.png" alt="The Dashboard's Setup page, each choice with the settings.yaml line it writes: four ready-made setups as cards (Basic NOC, marked as the setup now; Network NOC, which needs the UniFi controller's address first; NOC with logs, coming in 0.6; and NOC with agents, coming in 0.9), then each part (UniFi, off until its controller's address is set, and the rest coming in later releases), then where alerts go: ntfy, email, and the dead man's switch, each off, with a Turn on button." width="700">
+  <img src="../images/screenshots/dashboard-setup-light.png" alt="The Dashboard's Setup page, each choice with the settings.yaml line it writes: four ready-made setups as cards (Basic NOC, marked as the setup now; Network NOC, which needs the UniFi controller's address first; NOC with logs, coming in 0.6; and NOC with agents, coming in 0.9), then each part (UniFi, off until its controller's address is set, and the rest coming in later releases), then where alerts go: ntfy, email, and the dead man's switch, each off; ntfy and the dead man's switch with a Turn on button, and email saying who gets and sends its alerts must be set first." width="700">
 </picture>
 
 Choose a ready-made setup, or switch the parts on and off yourself:
@@ -105,7 +105,7 @@ a later release says which one.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../images/screenshots/dashboard-devices-dark.png">
-  <img src="../images/screenshots/dashboard-devices-light.png" alt="The Dashboard's Devices page: devices.yaml in a text box, listing the simulated network's router, switch, access points, NAS, printer, and UniFi controller, with the same edit on the server and a Save button." width="700">
+  <img src="../images/screenshots/dashboard-devices-light.png" alt="The Dashboard's Devices page: devices.yaml in a text box, starting with the simulated network's router, switch, and an access point, with the same edit on the server and a Save button." width="700">
 </picture>
 
 These show `settings.yaml` and `devices.yaml` as they are on the server, to change and save.
@@ -119,7 +119,7 @@ file on the server.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../images/screenshots/dashboard-maintenance-dark.png">
-  <img src="../images/screenshots/dashboard-maintenance-light.png" alt="The Dashboard's Maintenance page: no maintenance windows yet, a button to read them again from Alertmanager, and a form to add one: for all of ok3d or ticked devices from the simulated network, from now for a length or between two times in the server's own time, and why, with the same command on the server." width="700">
+  <img src="../images/screenshots/dashboard-maintenance-light.png" alt="The Dashboard's Maintenance page: no maintenance windows, not yet read from Alertmanager, a button to read them again, and a form to add one: for all of ok3d or ticked devices from the simulated network, from now for a length or between two times in the server's own time, and why, with the same command on the server." width="700">
 </picture>
 
 **Maintenance** lists the maintenance windows: times when alerts don't notify you, for all of
