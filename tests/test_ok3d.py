@@ -652,6 +652,8 @@ def test_install_needs_a_data_root(linux: dict[str, str]) -> None:
 
 NEW_OK3D = r"""#!/bin/sh
 echo "new ok3d $*" >>"$FAKE_LOG"
+# A change to one of ok3d's own files, so moving back fails.
+[ -z "${FAKE_NEW_DIRTY:-}" ] || echo "# changed" >>src/ok3d/__init__.py
 [ "$1" != "${FAKE_NEW_FAIL:-}" ] || { echo "the new $1 failed"; exit 1; }
 """
 
@@ -888,7 +890,7 @@ def test_the_signed_commit_is_checked_out_even_with_a_branch_of_the_same_name(re
 def test_a_refusal_shows_on_the_dashboard(releases: dict[str, str]) -> None:
     script = Path(releases["CHECKOUT"]) / "ok3d"
     script.write_text(script.read_text() + "\n# mine\n")
-    result = upgrade(releases, "v0.5.1", "--yes")
+    result = upgrade(releases | {"OK3D_UPGRADE_FROM_DASHBOARD": "yes"}, "v0.5.1", "--yes")
     assert result.returncode == 1
     told = note(releases, "upgrade")
     assert {"from": "0.5.0", "to": "v0.5.1", "state": "failed"}.items() <= told.items()
@@ -934,3 +936,52 @@ def test_a_development_version_comes_before_its_release(releases: dict[str, str]
     result = upgrade(releases, "v0.5.1", "--yes")
     assert result.returncode == 0, result.stdout + result.stderr
     assert '"0.5.1"' in at(releases)
+
+
+def test_a_refusal_on_the_server_leaves_homes_record_alone(releases: dict[str, str]) -> None:
+    record = Path(releases["FAKE_DATA_ROOT"]) / "helper" / "upgrade"
+    record.write_text("from=0.4.0\nto=v0.5.0\nstate=finished\n")
+    assert upgrade(releases, "v0.4.0", "--yes").returncode == 1  # a typo, from a terminal
+    assert record.read_text() == "from=0.4.0\nto=v0.5.0\nstate=finished\n"
+
+
+def test_a_refusal_never_writes_over_a_running_upgrades_record(releases: dict[str, str]) -> None:
+    helper_dir = Path(releases["FAKE_DATA_ROOT"]) / "helper"
+    (helper_dir / "upgrade").write_text("from=0.5.0\nto=v0.5.1\nstate=running\nstep=Making the cluster again\n")
+    (helper_dir / "upgrade-output").write_text("== Moving to v0.5.1\n")
+    lock = Path(releases["CHECKOUT"]) / "local" / "upgrading"
+    lock.parent.mkdir(parents=True)
+    with lock.open("w") as held:
+        fcntl.flock(held, fcntl.LOCK_EX)  # that upgrade, running
+        result = upgrade(releases | {"OK3D_UPGRADE_FROM_DASHBOARD": "yes"}, "v0.4.0", "--yes")
+    assert "An upgrade is running already" in result.stderr
+    assert "state=running" in (helper_dir / "upgrade").read_text()
+    assert (helper_dir / "upgrade-output").read_text() == "== Moving to v0.5.1\n"
+
+
+def test_the_lock_is_held_while_it_asks(releases: dict[str, str]) -> None:
+    # Held from before the check for a request the helper is carrying out until the end, so
+    # the helper can't start an Apply while you're deciding.
+    main, side = pty.openpty()
+    proc = subprocess.Popen([str(Path(releases["CHECKOUT"]) / "ok3d"), "upgrade", "v0.5.1"], stdin=side,
+                            stdout=side, stderr=subprocess.PIPE, env=releases)  # fmt: skip
+    try:
+        out = b""
+        while b"Type v0.5.1" not in out:
+            out += os.read(main, 4096)
+        with (Path(releases["CHECKOUT"]) / "local" / "upgrading").open() as lock, pytest.raises(BlockingIOError):
+            fcntl.flock(lock, fcntl.LOCK_SH | fcntl.LOCK_NB)
+        os.write(main, b"no\n")
+        assert proc.wait(timeout=30) == 1
+    finally:
+        proc.kill()
+        os.close(main)
+        os.close(side)
+    assert '"0.5.0"' in at(releases)
+
+
+def test_a_failed_move_back_says_so(releases: dict[str, str]) -> None:
+    result = upgrade(releases | {"FAKE_NEW_FAIL": "check", "FAKE_NEW_DIRTY": "yes"}, "v0.5.1", "--yes")
+    assert result.returncode == 1
+    assert "Moving back to 0.5.0 failed too" in result.stderr
+    assert "Moving back to 0.5.0 failed too" in note(releases, "upgrade")["step"]

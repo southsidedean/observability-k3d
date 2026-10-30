@@ -1030,8 +1030,8 @@ go_back() {
 	if ! git -c advice.detachedHead=false checkout --quiet "$old" >>"$log" 2>&1; then
 		stopped "$1 Moving back to $from failed too (see the log), so this checkout is on $target: git -C $root checkout $old moves it back."
 	fi
-	if [ -n "${reinstall:-}" ]; then
-		./ok3d install 2>&1 | tee -a "$log" || true
+	if [ "$reinstall" = yes ]; then
+		./ok3d install 2>&1 9>&- | tee -a "$log" || true
 	fi
 	stopped "$1"
 }
@@ -1050,8 +1050,12 @@ verify_release() {
 	fi
 	git cat-file tag "refs/tags/$target" >"$work/tag" || return 1
 	sed -n '1,/^$/p' "$work/tag" >"$work/tag-head"
-	if ! grep -qx "tag $target" "$work/tag-head" || ! grep -qx 'type commit' "$work/tag-head"; then
+	if ! grep -Fqx "tag $target" "$work/tag-head"; then
 		echo "The tag called $target is really $(sed -n 's/^tag //p' "$work/tag-head" | head -n 1)."
+		return 1
+	fi
+	if ! grep -qx 'type commit' "$work/tag-head"; then
+		echo "$target is a tag for something other than a commit."
 		return 1
 	fi
 	if ! grep -qx -e '-----BEGIN SSH SIGNATURE-----' "$work/tag"; then
@@ -1064,10 +1068,11 @@ verify_release() {
 }
 
 # refuse WHY: won't upgrade, before anything has changed. Says so on the screen and, when the
-# helper started it, on the Dashboard's Home, which would otherwise show nothing.
+# helper started it for the Dashboard, on Home, which would otherwise show nothing. Only once
+# the lock is held (notes=yes), so it never writes over a running upgrade's record.
 refuse() {
 	echo "$1" >&2
-	if [ -n "${from:-}" ]; then
+	if [ "$notes" = yes ] && [ "${OK3D_UPGRADE_FROM_DASHBOARD:-}" = yes ]; then
 		helper_note upgrade-output "$1
 "
 		upgrade_note failed "$1"
@@ -1124,27 +1129,39 @@ upgrade_to() {
 		echo "Usage: ./ok3d upgrade [vX.Y.Z] [--yes]: a release tag such as v0.5.1." >&2
 		exit 2
 	fi
-	from=$(this_version)
-	started=$(now)
-	is_newer "$target" || refuse "$target isn't newer than this ok3d ($from): ./ok3d upgrade only moves forward."
+	notes=""
+	reinstall=""
+	[ "$(id -u)" != 0 ] || refuse "Run ok3d as yourself, not as root."
 	if [ "$(uname -s)" != Linux ] || ! command -v systemctl >/dev/null 2>&1; then
 		refuse "./ok3d upgrade needs Linux with systemd, for the helper's service."
 	fi
-	[ "$(id -u)" != 0 ] || refuse "Run ok3d as yourself, not as root."
+	command -v flock >/dev/null 2>&1 || refuse "./ok3d upgrade needs flock (in util-linux)."
+	# One upgrade at a time, whether from here or from the Dashboard: a lock on local/upgrading
+	# for as long as this runs, which the system lets go of when it ends, however it ends. The
+	# helper checks the same lock, and takes no request while it's held (helper.py), so the
+	# checks below can't race an Apply it starts. Each step runs without it (9>&-), so nothing
+	# a step leaves running holds it.
+	install -d -m 0700 "$root/local"
+	exec 9>"$root/local/upgrading"
+	if ! flock -n 9; then
+		echo "An upgrade is running already." >&2
+		exit 1
+	fi
+	notes=yes
+	from=$(this_version)
+	started=$(now)
+	is_newer "$target" || refuse "$target isn't newer than this ok3d ($from): ./ok3d upgrade only moves forward."
 	[ -d .git ] || refuse "$root isn't a git checkout, so it can't move to another release. Use the installer (docs/upgrading.md)."
 	if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
 		refuse "$root has changes of yours to ok3d's own files. Commit or stash them first (your settings are safe: they're not ok3d's)."
 	fi
-	for tool in ssh-keygen flock; do
-		command -v "$tool" >/dev/null 2>&1 ||
-			refuse "./ok3d upgrade needs $tool (ssh-keygen is in openssh-client, flock in util-linux)."
-	done
+	command -v ssh-keygen >/dev/null 2>&1 || refuse "./ok3d upgrade needs ssh-keygen (in openssh-client)."
 	[ -f deploy/release-signers ] || refuse "There's no deploy/release-signers to check $target's signature with."
 	# Not under a request the helper is carrying out (an Apply from the Dashboard, say): the
 	# upgrade would delete the cluster under it, and the new release's install restarts the
-	# helper. The helper itself takes no request while an upgrade runs (helper.py).
-	if grep -qx 'state=running' "$DATA_ROOT/helper/result" 2>/dev/null &&
-		! grep -qx 'action=upgrade' "$DATA_ROOT/helper/result"; then
+	# helper. Only the answer's head counts, not what the command printed.
+	head=$(sed -n '1,/^$/p' "$DATA_ROOT/helper/result" 2>/dev/null || true)
+	if printf '%s\n' "$head" | grep -qx 'state=running' && ! printf '%s\n' "$head" | grep -qx 'action=upgrade'; then
 		refuse "The helper is carrying out a request from the Dashboard. Wait for Home to show its answer, then upgrade."
 	fi
 	if [ "${2:-}" != --yes ]; then
@@ -1160,16 +1177,6 @@ upgrade_to() {
 			echo "Not upgraded."
 			exit 1
 		fi
-	fi
-	# One upgrade at a time, whether from here or from the Dashboard: a lock on local/upgrading
-	# for as long as this runs, which the system lets go of when it ends, however it ends. The
-	# helper checks the same lock (helper.py). Each step runs without it (9>&-), so nothing
-	# a step leaves running holds it.
-	install -d -m 0700 "$root/local"
-	exec 9>"$root/local/upgrading"
-	if ! flock -n 9; then
-		echo "An upgrade is running already." >&2
-		exit 1
 	fi
 	work=$(mktemp -d)
 	trap 'rm -rf "$work"' EXIT

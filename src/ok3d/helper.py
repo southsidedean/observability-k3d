@@ -516,6 +516,8 @@ def start_upgrade(opened: Opened, request: Request) -> tuple[int, str]:
     process = subprocess.run(
         [SYSTEMD_RUN, "--user", f"--unit={UPGRADE_UNIT}", "--collect", "--quiet",
          f"--working-directory={ok3d_dir}", f"--setenv=PATH={os.environ.get('PATH', '/usr/bin:/bin')}",
+         # So ./ok3d upgrade also writes a refusal for Home, which would otherwise show nothing.
+         "--setenv=OK3D_UPGRADE_FROM_DASHBOARD=yes",
          "--", str(ok3d_dir / "ok3d"), "upgrade", str(request.version), "--yes"],
         check=False, env=ok3d_env(), stdin=subprocess.DEVNULL, capture_output=True, text=True, errors="replace",
         timeout=TIMEOUTS["upgrade"],
@@ -640,10 +642,12 @@ def clear_stopped_upgrade(opened: Opened) -> None:
     with os.fdopen(fd, "rb") as f:
         text = f.read(4096).decode("utf-8", errors="replace")
     fields = dict(line.split("=", 1) for line in text.splitlines() if "=" in line)
-    if fields.get("state") != "running":
+    # Asked again: an upgrade from a terminal may have taken the lock and written its first
+    # state since the first ask.
+    if fields.get("state") != "running" or upgrading(opened.folders.ok3d_dir):
         return
-    fields |= {"state": "failed", "step": "it stopped partway (the server restarted, say): "
-               "docs/upgrading.md says how to carry on", "finished": now_utc()}  # fmt: skip
+    fields |= {"state": "failed", "step": f"it stopped partway, at {fields.get('step', 'a step')} (the server "
+               "restarted, say): docs/upgrading.md says how to carry on", "finished": now_utc()}  # fmt: skip
     write_file(opened, "upgrade", "".join(f"{k}={v}\n" for k, v in fields.items()))
 
 

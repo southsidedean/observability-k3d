@@ -55,13 +55,18 @@ The Dashboard's Home, or what `./ok3d upgrade` printed, says which step it stopp
   Dashboard are on the new release. Fix what Apply said, then **Check** and **Apply** on the
   Dashboard, or `./ok3d apply` on the server.
 - **The server restarted partway**: Home says the upgrade stopped, and at which step. If it
-  stopped before "Moving to", nothing changed: upgrade again. If it stopped later, the ok3d
-  folder is already on the new release, so finish by hand on the server:
+  stopped before "Moving to", nothing changed: upgrade again. If it stopped during "Moving
+  to", `git -C ~/ok3d status` may show ok3d's files half moved; put them back with
+  `git -C ~/ok3d checkout --force` and the release you had (such as `v0.5.1`), then upgrade
+  again. If it stopped later, the ok3d folder is already on the new release, so finish by
+  hand on the server, with the same steps the upgrade would have taken:
 
   ```sh
   cd ~/ok3d
-  ./ok3d install       # the new release's helper and Dashboard, if that step hadn't finished
-  ./ok3d apply         # makes the cluster again with the new release
+  ./ok3d install          # the new release's helper and Dashboard
+  ./ok3d delete --yes     # the data root stays
+  tar -C /srv/ok3d -czf ~/before-upgrade.tar.gz certs grafana alertmanager   # your data root
+  ./ok3d apply            # makes the cluster again with the new release
   ```
 
 To go back to the release you had instead, put the backups back where they were and make

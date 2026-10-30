@@ -231,9 +231,13 @@ answer says the upgrade started, not that it worked; Home follows the upgrade it
 Then it backs up, moves, checks, installs, and makes the cluster again, as docs/upgrading.md
 describes. It writes how it's going to the helper's folder (below) as it goes. If it won't
 upgrade at all (a release that isn't newer, changes of yours to ok3d's own files, a request
-the helper is still carrying out), it says why there too, so Home shows it.
-It won't start while the helper is carrying out another request (an Apply, say), since it
-would delete the cluster under it.
+the helper is still carrying out), it says why there too when the helper started it (the
+helper sets `OK3D_UPGRADE_FROM_DASHBOARD=yes` for it), so Home shows it; a refusal on the
+server is shown on the server only. It takes its lock before any of these checks, and writes
+a refusal only while it holds the lock, so it never writes over the record of an upgrade
+that's running. It won't start while the helper is carrying out another request (an Apply,
+say), since it would delete the cluster under it; and once it holds the lock, the helper
+starts none.
 
 While an upgrade runs, the helper refuses every request, the Dashboard's Check, Apply, and
 saves included, since any of them partway through would race it. It counts an upgrade as
@@ -241,9 +245,10 @@ running while the `ok3d-upgrade` service is active, or while something holds a l
 `local/upgrading` in the ok3d checkout. `./ok3d upgrade` holds that lock (with `flock`) for as
 long as it runs, so an upgrade started on the server counts too, and the system lets go of it
 when the upgrade ends, however it ends. If `helper/upgrade` says an upgrade is running when
-neither is true (the server restarted partway), the helper rewrites it as stopped, so Home
-doesn't show it running forever. It asks whether one is running before it reads the file,
-so an upgrade that finishes in between is never marked stopped.
+neither is true (the server restarted partway), the helper rewrites it as stopped, keeping
+the step it stopped at, so Home doesn't show it running forever. It asks whether one is
+running before it reads the file and again after, so an upgrade that finishes or starts in
+between is never marked stopped.
 
 ## What the helper writes
 
