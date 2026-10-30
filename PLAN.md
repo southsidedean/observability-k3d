@@ -483,6 +483,18 @@ turn up. Production moves to ok3d at 0.4.0.
   installer sets up the first, and the Dashboard upgrades it to the second. The upgrade from 0.5.0 to 0.5.1 uses the installer, as before. From 0.5.2,
   each release test is an upgrade from the release before, from the Dashboard alone.
 
+### 0.5.2: Small fixes
+
+A small release between 0.5.1 and 0.6, so the first upgrade from the Dashboard alone moves
+little. The Dashboard offers each module from the version it comes in, so the version moves
+on to 0.6.0.dev0 only in the pull request that brings 0.6's first part.
+
+- The Maintenance page says it hasn't read Alertmanager yet, instead of "No maintenance
+  windows", until the helper has.
+- The upgrade from 0.5.0 restarted the gateway. Check whether the upgrade from 0.5.1 does
+  too, or whether that was a one-off change to how its admin checksum is worked out.
+- Test: an upgrade from 0.5.1 from the Dashboard alone, with no terminal.
+
 ### 0.6: Logs and changes
 
 - Loki with retention, and Alloy's pod logs and syslog (both formats, UDP and TCP), with

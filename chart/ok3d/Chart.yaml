@@ -7,8 +7,8 @@ name: ok3d
 description: A home network operations center on k3d, with AI agents.
 type: application
 # The chart's version follows ok3d's own.
-version: 0.5.1
-appVersion: 0.5.1
+version: 0.5.2-dev0
+appVersion: 0.5.2.dev0
 home: https://github.com/southsidedean/observability-k3d
 # Pinned, and fetched by `helm dependency build chart/ok3d` (into charts/, which isn't
 # committed) at the versions in Chart.lock. `ok3d apply` does that for you. Renovate proposes
