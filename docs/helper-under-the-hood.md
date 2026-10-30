@@ -269,6 +269,7 @@ temporary file first and renamed into place, so the page never reads half of one
 | `staged-settings.yaml`, `staged-devices.yaml` | A file the Dashboard sent, only while `./ok3d validate` checks it |
 | `current-settings.yaml`, `current-devices.yaml` | Copies of yours, for the Dashboard to show; missing when you have none, and never copied through a link. Everything in them, comments too, is visible to the Dashboard, which is one more reason secrets belong in `.env` |
 | `env-set` | The names of the lines in `.env` that have a value, one per line. Never a value |
+| `apply-plan` | What the last Check found Apply would restart, stop, or start in the running cluster (docs/dashboard-under-the-hood.md). `./ok3d check` writes it |
 | `applied` | When the last `./ok3d apply` that worked finished, for the Dashboard's What's next. `./ok3d apply` writes it, not the helper, so an Apply on the server counts too, and `./ok3d delete` removes it |
 | `newest-release` | When `./ok3d upgrade` last looked for a release, and the newer one it found. `./ok3d` writes it |
 | `upgrade` | How the last upgrade went: `from`, `to`, `state` (`running`, `finished`, or `failed`), `step`, `started`, and `finished`. `./ok3d upgrade` writes it; the helper rewrites it only to mark an upgrade that stopped partway |

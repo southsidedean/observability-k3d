@@ -6,6 +6,7 @@ tested on the test VM: PLAN.md, "The test VM".)
 
 from __future__ import annotations
 
+import contextlib
 import fcntl
 import os
 import pty
@@ -13,7 +14,9 @@ import re
 import shutil
 import stat
 import subprocess
+import signal
 import tarfile
+import time
 from pathlib import Path
 
 import pytest
@@ -36,9 +39,16 @@ case "$1 ${2:-}" in
 esac""",
     "helm": r"""echo "helm $*" >>"$FAKE_LOG"
 case "$*" in
-"version --short") echo "v4.3.1+g0" ;;
+"version --short") echo "v${FAKE_HELM_VERSION:-4.3.1}+g0" ;;
 "dependency list"*) ;;
 "status ok3d"*) exit "${FAKE_OLD_RELEASE:-1}" ;;
+# The release as it's deployed, and what Apply would deploy: from FAKE_MANIFEST and
+# FAKE_DRY_RUN. Without FAKE_MANIFEST, helm says FAKE_MANIFEST_ERROR (there's no release).
+"get manifest ok3d"*)
+	if [ -n "${FAKE_MANIFEST:-}" ]; then cat "$FAKE_MANIFEST"; else echo "${FAKE_MANIFEST_ERROR:-Error: release: not found}" >&2; exit 1; fi ;;
+*--dry-run=server*)
+	cat "${FAKE_DRY_RUN:-/dev/null}"
+	[ -z "${FAKE_DRY_RUN_ERROR:-}" ] || { echo "WARNING: Kubernetes configuration file is group-readable." >&2; echo "$FAKE_DRY_RUN_ERROR" >&2; exit 1; } ;;
 *cluster-settings.yaml*)
 	cat <<EOF
 ---
@@ -1064,3 +1074,193 @@ def test_a_request_that_stays_running_is_refused_after_the_wait(releases: dict[s
     assert "carrying out a request from the Dashboard" in result.stderr
     assert [c for c in calls(releases) if c.startswith("sleep")] == ["sleep 1", "sleep 1"]
     assert '"0.5.0"' in at(releases)
+
+
+
+# Check says what Apply would change in a running cluster, and Apply asks first on a terminal.
+
+def deployed(env: dict[str, str], tmp_path: Path, replicas: int) -> dict[str, str]:
+    """A running cluster with Grafana deployed, and a dry run with replicas Grafanas."""
+    grafana = "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: ok3d-grafana\n  namespace: monitoring\nspec:\n  replicas: {}\n"
+    (tmp_path / "manifest").write_text("---\n" + grafana.format(1))
+    (tmp_path / "dry-run").write_text("NAME: ok3d\nMANIFEST:\n---\n" + grafana.format(replicas))
+    (Path(env["FAKE_DATA_ROOT"]) / "admin-password").write_text("made-up-admin-password")
+    (Path(env["FAKE_DATA_ROOT"]) / "helper").mkdir(exist_ok=True)
+    return env | {"FAKE_CLUSTER_GET": "0", "FAKE_MANIFEST": str(tmp_path / "manifest"),
+                  "FAKE_DRY_RUN": str(tmp_path / "dry-run")}  # fmt: skip
+
+
+def test_check_says_what_apply_would_restart(env: dict[str, str], tmp_path: Path) -> None:
+    running = deployed(env, tmp_path, 2)
+    result = ok3d(running, "check")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "What Apply will change:\n  restart  Grafana" in result.stdout
+    plan = (Path(env["FAKE_DATA_ROOT"]) / "helper" / "apply-plan").read_text()
+    assert "state=changes\nrestart=Grafana\nother=0\n" in plan
+
+
+def test_check_says_when_apply_would_change_nothing_or_make_the_cluster(env: dict[str, str], tmp_path: Path) -> None:
+    assert "Apply will change nothing that's running." in ok3d(deployed(env, tmp_path, 1), "check").stdout
+    assert "Apply will make what's missing and deploy ok3d." in ok3d(env, "check").stdout
+
+
+def test_the_dry_run_uses_applys_own_arguments(env: dict[str, str], tmp_path: Path) -> None:
+    running = deployed(env, tmp_path, 1)
+    assert ok3d(running, "apply").returncode == 0
+    log = calls(running)
+    dry = next(c for c in log if "--dry-run=server" in c)
+    real = next(c for c in log if c.startswith("helm upgrade --install ok3d chart/ok3d"))
+    assert dry.removeprefix("helm upgrade ok3d chart/ok3d ").split(" --kube-context")[0] == \
+        real.removeprefix("helm upgrade --install ok3d chart/ok3d ").split(" --kube-context")[0]
+
+
+def test_check_changes_nothing_while_it_looks(env: dict[str, str], tmp_path: Path) -> None:
+    running = deployed(env, tmp_path, 2)
+    ok3d(running, "check")
+    log = calls(running)
+    assert not any(c.startswith(("kubectl", "k3d cluster create")) for c in log)
+    upgrades = [c for c in log if c.startswith("helm upgrade")]
+    assert upgrades and all("--dry-run=server" in c for c in upgrades)
+
+
+def test_without_the_admin_password_check_cant_tell(env: dict[str, str], tmp_path: Path) -> None:
+    running = deployed(env, tmp_path, 1)
+    (Path(env["FAKE_DATA_ROOT"]) / "admin-password").unlink()
+    result = ok3d(running, "check")
+    assert "Check couldn't tell what Apply would change" in result.stdout
+    assert not (Path(env["FAKE_DATA_ROOT"]) / "admin-password").exists()  # Check doesn't make it
+
+
+def apply_on_a_terminal(env: dict[str, str], answer: bytes, *args: str) -> tuple[int, str]:
+    main, side = pty.openpty()
+    try:
+        proc = subprocess.Popen([str(ROOT / "ok3d"), "apply", *args], stdin=side, stdout=side, stderr=side, env=env)
+    finally:
+        os.close(side)  # only the program holds it now, so a read ends when the program does
+    out = b""
+    try:
+        while True:
+            try:
+                chunk = os.read(main, 4096)
+            except OSError:  # Linux says EIO once the program has gone
+                break
+            if not chunk:
+                break
+            out += chunk
+            if b"Go ahead?" in out and answer:
+                os.write(main, answer)
+                answer = b""
+        status = proc.wait(timeout=60)
+    finally:
+        proc.kill()
+        os.close(main)
+    return status, out.decode()
+
+
+def test_apply_asks_first_on_a_terminal_and_no_means_no(env: dict[str, str], tmp_path: Path) -> None:
+    running = deployed(env, tmp_path, 2)
+    status, out = apply_on_a_terminal(running, b"n\n")
+    assert status == 1 and "restart  Grafana" in out
+    assert not any(c.startswith("helm upgrade --install ok3d ") for c in calls(running))
+
+
+def test_apply_goes_ahead_on_yes(env: dict[str, str], tmp_path: Path) -> None:
+    running = deployed(env, tmp_path, 2)
+    status, _ = apply_on_a_terminal(running, b"y\n")
+    assert status == 0
+    assert any(c.startswith("helm upgrade --install ok3d ") for c in calls(running))
+
+
+def test_apply_with_yes_or_from_another_program_doesnt_ask(env: dict[str, str], tmp_path: Path) -> None:
+    running = deployed(env, tmp_path, 2)
+    assert ok3d(running, "apply").returncode == 0  # not a terminal: the helper, an upgrade
+    status, out = apply_on_a_terminal(running, b"", "--yes")
+    assert status == 0 and "Go ahead?" not in out
+
+
+
+def test_a_cluster_that_doesnt_answer_isnt_taken_for_a_new_one(env: dict[str, str], tmp_path: Path) -> None:
+    running = deployed(env, tmp_path, 1) | {"FAKE_MANIFEST": "", "FAKE_MANIFEST_ERROR": "Error: connection refused"}
+    result = ok3d(running, "check")
+    assert "Check couldn't tell what Apply would change in the running cluster: Error: connection refused." in result.stdout
+    assert "state=unknown" in (Path(env["FAKE_DATA_ROOT"]) / "helper" / "apply-plan").read_text()
+
+
+def test_a_cluster_without_the_release_is_new(env: dict[str, str], tmp_path: Path) -> None:
+    running = deployed(env, tmp_path, 1) | {"FAKE_MANIFEST": ""}
+    assert "Apply will make what's missing and deploy ok3d." in ok3d(running, "check").stdout
+
+
+def test_a_dry_run_that_fails_says_why(env: dict[str, str], tmp_path: Path) -> None:
+    running = deployed(env, tmp_path, 1) | {"FAKE_DRY_RUN_ERROR": "Error: unknown flag: --dry-run=server"}
+    result = ok3d(running, "check")
+    assert "couldn't tell what Apply would change in the running cluster: Error: unknown flag" in result.stdout
+
+
+def test_a_failed_check_leaves_no_plan(env: dict[str, str], tmp_path: Path) -> None:
+    running = deployed(env, tmp_path, 2)
+    plan = Path(env["FAKE_DATA_ROOT"]) / "helper" / "apply-plan"
+    ok3d(running, "check")
+    assert "restart=Grafana" in plan.read_text()
+    assert ok3d(running | {"FAKE_K3D_VERSION": "5.0.0"}, "check").returncode == 1
+    assert plan.read_text() == ""
+
+
+def test_check_warns_when_helm_cant_tell_what_apply_would_change(env: dict[str, str]) -> None:
+    assert "needs 3.13 or newer" in ok3d(env | {"FAKE_HELM_VERSION": "3.12.3"}, "check").stdout
+    assert "needs 3.13 or newer" not in ok3d(env, "check").stdout
+
+
+def test_apply_takes_only_yes(env: dict[str, str]) -> None:
+    result = ok3d(env, "apply", "--yse")
+    assert result.returncode == 2 and "Usage: ./ok3d apply [--yes]" in result.stderr
+    assert calls(env) == []
+
+
+
+def test_a_0_3_release_makes_apply_ask(env: dict[str, str], tmp_path: Path) -> None:
+    # A release in ok3d-system and none in monitoring: once taken for a new cluster.
+    running = deployed(env, tmp_path, 1) | {"FAKE_OLD_RELEASE": "0", "FAKE_MANIFEST": ""}
+    result = ok3d(running, "check")
+    assert "Apply will move ok3d's 0.3 release, which restarts everything" in result.stdout
+    assert "helm status ok3d --kube-context k3d-ok3d --namespace ok3d-system" in calls(running)
+    assert "state=unknown" in (Path(env["FAKE_DATA_ROOT"]) / "helper" / "apply-plan").read_text()
+
+
+def test_the_reason_is_helms_error_not_a_warning_before_it(env: dict[str, str], tmp_path: Path) -> None:
+    running = deployed(env, tmp_path, 1) | {"FAKE_DRY_RUN_ERROR": "Error: the dry run failed"}
+    result = ok3d(running, "check")
+    assert "running cluster: Error: the dry run failed." in result.stdout
+    assert "group-readable" not in result.stdout
+
+
+def test_the_plans_folder_is_removed_when_check_is_stopped(env: dict[str, str], tmp_path: Path) -> None:
+    # Stopped by a signal partway through the dry run (to its whole process group, as Ctrl-C
+    # does), Check still removes its folder. Under dash, Linux's sh, that needs the signal trap;
+    # bash, macOS's sh, runs the EXIT trap either way.
+    running = deployed(env, tmp_path, 1)
+    hang = tmp_path / "hang"
+    hang.mkdir()
+    (hang / "helm").write_text(f'''#!/bin/sh
+case "$*" in *--dry-run=server*) echo started >"{tmp_path}/started"; exec sleep 30 ;; esac
+exec "{tmp_path}/bin/helm" "$@"
+''')
+    (hang / "helm").chmod(0o755)
+    temp = tmp_path / "temp"
+    temp.mkdir()
+    shell = shutil.which("dash") or "sh"  # dash where there is one, so the signal trap is what's tested
+    proc = subprocess.Popen([shell, str(ROOT / "ok3d"), "check"], env=running | {"PATH": f"{hang}:{running['PATH']}",
+                            "TMPDIR": str(temp)}, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                            start_new_session=True)  # fmt: skip
+    try:
+        for _ in range(300):
+            if (tmp_path / "started").exists():
+                break
+            time.sleep(0.1)
+        assert list(temp.iterdir()), "the plan's folder should be there while the dry run runs"
+        os.killpg(proc.pid, signal.SIGTERM)
+        proc.wait(timeout=10)
+    finally:
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(proc.pid, signal.SIGKILL)  # the stand-in's sleep too, if the test failed early
+    assert list(temp.iterdir()) == []

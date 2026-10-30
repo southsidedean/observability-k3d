@@ -194,8 +194,56 @@ def home(config: Config, message: str = "") -> str:
         "deploy, or bring it up to date with your settings.</p>"
         '<form class="inline" method="post" action="/check"><button>Check</button></form> '
         f'<form class="inline" method="post" action="/apply"><button{disabled}>Apply</button></form>'
-        f"{apply_note}</section>" + todo_section(config) + next_section(config) + answer_section(config)
+        f"{apply_note}{plan_section(config)}</section>" + todo_section(config) + next_section(config)
+        + answer_section(config)
         + release_section(config)
+    )
+
+
+def plan_list(plan: helper_link.ApplyPlan) -> str:
+    """What Apply would change, as a list, each part already escaped."""
+    items = [f"<li>Restart {html.escape(p)}</li>" for p in plan.restart]
+    items += [f"<li>Stop {html.escape(p)}</li>" for p in plan.stop]
+    items += [f"<li>Start {html.escape(p)}</li>" for p in plan.start]
+    if plan.hidden:
+        items.append(f"<li>Restart, stop, or start {plan.hidden} more part(s), whose names can't be shown here: "
+                     "<code>./ok3d check</code> on the server names them</li>")  # fmt: skip
+    if plan.other:
+        items.append(f"<li>{plan.other} other change(s), such as alert rules or dashboards, which stop nothing</li>")
+    return f"<ul class=todo>{''.join(items)}</ul>" if items else ""
+
+
+def plan_section(config: Config) -> str:
+    """Under Apply, once a Check has passed: what Apply would change in the running cluster."""
+    plan = helper_link.apply_plan(config.helper)
+    if plan is None or not helper_link.can_apply(config.state, config.helper):
+        return ""
+    if plan.state == "new":
+        return "<p class=muted>Apply will make what's missing and deploy ok3d.</p>"
+    if plan.state == "none":
+        return "<p class=muted>Apply will change nothing that's running.</p>"
+    if plan.state == "unknown":
+        return "<p class=muted>Check couldn't tell what Apply would change, so Apply asks first.</p>"
+    return "<p>What Apply will change:</p>" + plan_list(plan)
+
+
+def apply_asks_page(config: Config, message: str = "") -> str:
+    """Before an Apply that would restart or stop part of the running cluster: which, and why
+    that matters, with the button that goes ahead."""
+    plan = helper_link.apply_plan(config.helper)
+    note = f"<p class=bad>{html.escape(message)}</p>" if message else ""
+    if plan is None or plan.state == "unknown":
+        what = "<p>Check couldn't tell what Apply would change in the running cluster.</p>"
+    else:
+        what = "<p>Apply will:</p>" + plan_list(plan)
+    return (
+        f"<section><h2>Apply?</h2>{note}{what}"
+        "<p>A part that restarts is unavailable for a minute or so: Grafana's pages, say, or alerts while "
+        "Alertmanager restarts. A part that stops is gone until you turn it on again. Prometheus's "
+        "history and Grafana's dashboards are kept.</p>"
+        f'<form class="inline" method="post" action="/apply"><input type="hidden" name="confirm" value="yes">'
+        '<button>Apply anyway</button></form> <a href="/">Back to Home</a>'
+        "<p class=muted>The same on the server: <code>./ok3d apply</code>, which asks too.</p></section>"
     )
 
 
@@ -719,9 +767,16 @@ class Handler(BaseHTTPRequestHandler):
         self.ask_helper("/", home, "Home", "check")
 
     def post_apply(self) -> None:
+        form = self.read_form()
         if not helper_link.can_apply(self.config.state, self.config.helper):
             self.send(409, page("Home", home(self.config, "") + "<p class=bad>Run a Check that finds "
                                 "no problems first.</p>", True))  # fmt: skip
+            return
+        # Asks first when Apply would restart or stop something, or Check couldn't tell: the
+        # answer is the same form again, with confirm=yes.
+        plan = helper_link.apply_plan(self.config.helper)
+        if (plan is None or plan.asks) and (form or {}).get("confirm") != "yes":
+            self.send(200, page("Apply?", apply_asks_page(self.config), True))
             return
         self.ask_helper("/", home, "Home", "apply")
 

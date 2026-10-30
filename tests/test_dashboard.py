@@ -537,6 +537,7 @@ def test_apply_waits_for_a_check_that_passed(ready: Dashboard) -> None:
     (ready.helper / "result").write_text(f"id={sent}\naction=check\nstate=finished\nexit=1\n\nFAIL  x\n")
     assert ready.post("/apply", session=session).status == 409
     (ready.helper / "result").write_text(f"id={sent}\naction=check\nstate=finished\nexit=0\n\nReady.\n")
+    (ready.helper / "apply-plan").write_text("checked=2026-10-30T09:00:00Z\nstate=none\nother=0\n")
     assert "<button>Apply</button>" in body(ready.get("/", session))
     assert ready.post("/apply", session=session).status == 303
     assert head(outbox(ready))["action"] == "apply"
@@ -1038,3 +1039,71 @@ def test_which_releases_are_newer(tag: str, version: str, newer: bool) -> None:
     from ok3d.dashboard import helper_link
 
     assert helper_link.is_newer(tag, version) is newer
+
+
+
+# Apply asks first: ./ok3d check writes apply-plan, what Apply would change in the running
+# cluster, and Apply asks before it restarts or stops anything.
+
+
+def checked(dash: Dashboard, session: str, plan: str | None) -> None:
+    """A Check this Dashboard sent, which passed, and the plan it wrote (none: no file)."""
+    dash.post("/check", session=session)
+    sent = head(outbox(dash))["id"]
+    (dash.state / "outbox" / "request").unlink()
+    (dash.helper / "result").write_text(f"id={sent}\naction=check\nstate=finished\nexit=0\n\nReady.\n")
+    if plan is not None:
+        (dash.helper / "apply-plan").write_text("checked=2026-10-30T09:00:00Z\n" + plan)
+
+
+@pytest.mark.parametrize("plan", ["state=new\n", "state=none\nother=0\n", "state=changes\nstart=Grafana\nother=4\n"])
+def test_apply_goes_ahead_when_it_stops_nothing(ready: Dashboard, plan: str) -> None:
+    session = ready.sign_in()
+    checked(ready, session, plan)
+    assert ready.post("/apply", session=session).status == 303
+    assert head(outbox(ready))["action"] == "apply"
+
+
+@pytest.mark.parametrize("plan", ["state=changes\nrestart=Grafana\nother=0\n",
+                                  "state=changes\nstop=the UniFi exporter (unpoller)\nother=0\n",
+                                  "state=unknown\n", None])  # fmt: skip
+def test_apply_asks_first_when_it_would_restart_or_stop_something(ready: Dashboard, plan: str | None) -> None:
+    session = ready.sign_in()
+    checked(ready, session, plan)
+    page = body(ready.post("/apply", session=session))
+    assert "<h2>Apply?</h2>" in page and 'name="confirm" value="yes"' in page
+    assert not (ready.state / "outbox" / "request").exists()
+    assert ready.post("/apply", "confirm=yes", session=session).status == 303
+    assert head(outbox(ready))["action"] == "apply"
+
+
+def test_home_and_the_question_name_what_apply_would_change(ready: Dashboard) -> None:
+    session = ready.sign_in()
+    checked(ready, session, "state=changes\nrestart=Grafana\nstop=the UniFi exporter (unpoller)\n"
+                            "start=Prometheus\nother=3\n")  # fmt: skip
+    home_page = body(ready.get("/", session))
+    for line in ("Restart Grafana", "Stop the UniFi exporter (unpoller)", "Start Prometheus", "3 other change(s)"):
+        assert line in home_page, line
+    assert "Restart Grafana" in body(ready.post("/apply", session=session))
+
+
+def test_no_plan_is_shown_before_a_check_has_passed(ready: Dashboard) -> None:
+    (ready.helper / "apply-plan").write_text("checked=2026-10-30T09:00:00Z\nstate=changes\nrestart=Grafana\n")
+    assert "Restart Grafana" not in body(ready.get("/", ready.sign_in()))  # no Check passed yet
+
+
+def test_a_plan_line_that_isnt_a_parts_name_is_left_out(ready: Dashboard) -> None:
+    session = ready.sign_in()
+    checked(ready, session, "state=changes\nrestart=<script>alert(1)</script>\nrestart=Grafana\n")
+    page = body(ready.get("/", session))
+    assert "<script>" not in page and "alert(1)" not in page
+    assert "Restart Grafana" in page
+
+
+
+def test_a_restart_whose_name_cant_be_shown_still_asks(ready: Dashboard) -> None:
+    session = ready.sign_in()
+    checked(ready, session, f"state=changes\nrestart=Deployment/{'x' * 120}\nother=0\n")
+    page = body(ready.post("/apply", session=session))
+    assert "<h2>Apply?</h2>" in page and "1 more part(s), whose names can't be shown here" in page
+    assert not (ready.state / "outbox" / "request").exists()

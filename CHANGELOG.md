@@ -21,6 +21,11 @@
   `deploy/release-signers` as your copy has it. Releases are signed from 0.5.0.
 - While an upgrade runs, the helper refuses everything else, and the Dashboard's Check,
   Apply, and saves are off.
+- Apply asks first when it would restart or stop part of the running cluster. With a
+  cluster running, Check now lists what Apply would restart, stop, or start, from a
+  server-side dry run compared with what's deployed, and Home shows it under Apply. If
+  anything would restart or stop, Apply opens a page naming those parts, with **Apply
+  anyway**. `./ok3d apply` asks the same on a terminal; `--yes` skips the question.
 
 ## 0.5.0 (2026-10-29)
 
