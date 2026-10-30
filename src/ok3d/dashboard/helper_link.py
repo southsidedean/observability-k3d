@@ -108,11 +108,13 @@ class ApplyPlan:
     stop: tuple[str, ...] = ()
     start: tuple[str, ...] = ()
     other: int = 0
+    hidden: int = 0  # restart, stop, or start lines whose names couldn't be shown
 
     @property
     def asks(self) -> bool:
-        """Whether Apply should ask first: it would restart or stop something, or no one knows."""
-        return bool(self.restart or self.stop) or self.state == "unknown"
+        """Whether Apply should ask first: it would restart or stop something (shown or not),
+        or no one knows."""
+        return bool(self.restart or self.stop or self.hidden) or self.state == "unknown"
 
 
 # A part's plain name, as apply_plan.py writes it: letters, digits, spaces, and a little
@@ -128,14 +130,17 @@ def apply_plan(helper: Path) -> ApplyPlan | None:
     if state not in ("new", "none", "changes", "unknown"):
         return None
     parts: dict[str, list[str]] = {"restart": [], "stop": [], "start": []}
-    other = 0
+    other = hidden = 0
     for line in text.splitlines():
         key, _, value = line.partition("=")
-        if key in parts and PART.fullmatch(value):
-            parts[key].append(value)
+        if key in parts:
+            if PART.fullmatch(value):
+                parts[key].append(value)
+            else:
+                hidden += 1
         elif key == "other" and re.fullmatch(r"[0-9]{1,6}", value):
             other = int(value)
-    return ApplyPlan(state, tuple(parts["restart"]), tuple(parts["stop"]), tuple(parts["start"]), other)
+    return ApplyPlan(state, tuple(parts["restart"]), tuple(parts["stop"]), tuple(parts["start"]), other, hidden)
 
 
 def fields_of(text: str | None) -> dict[str, str]:

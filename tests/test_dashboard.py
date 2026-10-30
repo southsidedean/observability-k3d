@@ -1087,7 +1087,7 @@ def test_home_and_the_question_name_what_apply_would_change(ready: Dashboard) ->
     assert "Restart Grafana" in body(ready.post("/apply", session=session))
 
 
-def test_a_plan_from_before_the_last_check_isnt_shown(ready: Dashboard) -> None:
+def test_no_plan_is_shown_before_a_check_has_passed(ready: Dashboard) -> None:
     (ready.helper / "apply-plan").write_text("checked=2026-10-30T09:00:00Z\nstate=changes\nrestart=Grafana\n")
     assert "Restart Grafana" not in body(ready.get("/", ready.sign_in()))  # no Check passed yet
 
@@ -1098,3 +1098,12 @@ def test_a_plan_line_that_isnt_a_parts_name_is_left_out(ready: Dashboard) -> Non
     page = body(ready.get("/", session))
     assert "<script>" not in page and "alert(1)" not in page
     assert "Restart Grafana" in page
+
+
+
+def test_a_restart_whose_name_cant_be_shown_still_asks(ready: Dashboard) -> None:
+    session = ready.sign_in()
+    checked(ready, session, f"state=changes\nrestart=Deployment/{'x' * 120}\nother=0\n")
+    page = body(ready.post("/apply", session=session))
+    assert "<h2>Apply?</h2>" in page and "1 more part(s), whose names can't be shown here" in page
+    assert not (ready.state / "outbox" / "request").exists()

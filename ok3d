@@ -207,6 +207,9 @@ check_tools() {
 		have=$(helm version --short 2>/dev/null | sed -n 's/^v\([0-9.]*\).*/\1/p')
 		if [ -n "$have" ] && version_at_least "$have" "$min_helm"; then
 			pass "Helm $have"
+			# A server-side dry run (apply_plan) needs 3.13; without it, Apply always asks first.
+			version_at_least "$have" 3.13.0 ||
+				warn "Helm $have can't tell what Apply would change (that needs 3.13 or newer), so Apply always asks first"
 		else
 			fail "Helm ${have:-of an unknown version}: ok3d needs $min_helm or newer"
 		fi
@@ -517,12 +520,23 @@ chart_args() {
 # tell. Only the ok3d release is compared; the platform's (cert-manager) rarely changes.
 apply_plan() {
 	plan_asks=""
+	plan_why=""
 	plan_work=$(mktemp -d)
-	if ! k3d cluster get "$CLUSTER_NAME" >/dev/null 2>&1 ||
-		! helm get manifest ok3d --kube-context "$context" --namespace monitoring >"$plan_work/now" 2>/dev/null; then
+	trap 'rm -rf "$plan_work"' EXIT
+	if ! k3d cluster get "$CLUSTER_NAME" >/dev/null 2>&1; then
 		plan="state=new"
+	elif ! helm get manifest ok3d --kube-context "$context" --namespace monitoring >"$plan_work/now" 2>"$plan_work/errors"; then
+		# New only when the cluster answered that there's no release yet. Anything else (a
+		# stopped cluster, an error) can't tell.
+		if grep -q 'release: not found' "$plan_work/errors"; then
+			plan="state=new"
+		else
+			plan="state=unknown"
+			plan_why=$(head -n 1 "$plan_work/errors")
+		fi
 	elif [ ! -s "$DATA_ROOT/admin-password" ] && [ -z "$(env_value_if_any OK3D_ADMIN_PASSWORD)" ]; then
 		plan="state=unknown"  # the password is made by Apply, and the release depends on it
+		plan_why="there's no admin password yet"
 	else
 		# shellcheck disable=SC2046 # chart_args prints one argument per line, on purpose
 		if helm upgrade ok3d chart/ok3d $(chart_args "$(admin_password)") --kube-context "$context" \
@@ -531,9 +545,11 @@ apply_plan() {
 			:
 		else
 			plan="state=unknown"
+			plan_why=$(head -n 1 "$plan_work/errors")
 		fi
 	fi
 	rm -rf "$plan_work"
+	trap - EXIT
 	helper_note apply-plan "checked=$(now)
 $plan
 "
@@ -547,7 +563,7 @@ $plan
 		other=$(printf '%s\n' "$plan" | sed -n 's/^other=//p')
 		[ "${other:-0}" = 0 ] || echo "  and $other other change(s), such as alert rules or dashboards, which stop nothing"
 		;;
-	*) echo "Check couldn't tell what Apply would change in the running cluster." ;;
+	*) echo "Check couldn't tell what Apply would change in the running cluster${plan_why:+: $plan_why}." ;;
 	esac
 	case "$plan" in
 	*restart=* | *stop=* | state=unknown*) plan_asks=yes ;;
@@ -568,13 +584,24 @@ connect_demo() {
 }
 
 cmd_apply() {
+	case "${1:-}" in
+	"" | --yes) ;;
+	*)
+		echo "Usage: ./ok3d apply [--yes]" >&2
+		exit 2
+		;;
+	esac
+	if [ "$(id -u)" = 0 ]; then
+		echo "Run ok3d as yourself, not as root: what it keeps in the data root should be yours." >&2
+		exit 1
+	fi
 	cmd_check
 	# Asks first, on a terminal, when Apply would restart or stop something (apply_plan).
 	# --yes skips the question. Run by another program (the helper, an upgrade), it goes
 	# ahead: the Dashboard asks before it sends an Apply.
 	if [ "$plan_asks" = yes ] && [ "${1:-}" != --yes ] && [ -t 0 ]; then
 		printf 'Go ahead? [y/N] '
-		read -r answer
+		read -r answer || answer=""
 		case "$answer" in
 		y | Y | yes | Yes) ;;
 		*)
@@ -582,10 +609,6 @@ cmd_apply() {
 			exit 1
 			;;
 		esac
-	fi
-	if [ "$(id -u)" = 0 ]; then
-		echo "Run ok3d as yourself, not as root: what it keeps in the data root should be yours." >&2
-		exit 1
 	fi
 	# The data root's folders, owned by you, before anything is deployed that uses them.
 	install -d -m 0755 "$DATA_ROOT/kagent-ate"

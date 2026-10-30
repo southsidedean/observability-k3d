@@ -78,3 +78,12 @@ def test_it_runs_isolated_and_prints_the_lines(tmp_path: Path) -> None:
 def test_it_cant_tell_without_both_manifests(tmp_path: Path) -> None:
     assert run(tmp_path, manifest(GRAFANA), "Error: the dry run failed") == "state=unknown\n"
     assert run(tmp_path, "", f"MANIFEST:\n{manifest(GRAFANA)}") == "state=unknown\n"
+
+
+
+def test_an_object_it_cant_read_makes_the_answer_unknown(tmp_path: Path) -> None:
+    # A Deployment whose name isn't where it's looked for: comparing without it would say
+    # nothing changes while its replicas do.
+    odd = "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n    name: ok3d-grafana\nspec:\n  replicas: {}\n"
+    before, after = manifest(RULES, odd.format(1)), manifest(RULES, odd.format(2))
+    assert run(tmp_path, before, f"MANIFEST:\n{after}") == "state=unknown\n"

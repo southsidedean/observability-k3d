@@ -451,7 +451,7 @@ turn up. Production moves to ok3d at 0.4.0.
 ### 0.5.1: The Dashboard's second step (moved from 0.5.0, decided 2026-10-29)
 
 - Upgrades from the Dashboard: back up, move to the new release, check, install, recreate
-  (decided 2026-10-30). `./ok3d upgrade vX.Y.Z` does it, run by the helper in a systemd unit
+  (decided 2026-10-29). `./ok3d upgrade vX.Y.Z` does it, run by the helper in a systemd unit
   of its own, since the new release's `./ok3d install` restarts the helper. It takes only a
   newer release whose tag is signed by a key in `deploy/release-signers` (the copy from
   before the move), backs up the settings files, moves back if the new release's check or
@@ -459,7 +459,7 @@ turn up. Production moves to ok3d at 0.4.0.
   down. Looking for a release happens only when you ask (`./ok3d upgrade`, or the button on
   Home), so ok3d still sends nothing on its own.
 - Maintenance windows.
-- Apply asks first when it would stop something (decided 2026-10-30): Check compares a
+- Apply asks first when it would stop something (decided 2026-10-29): Check compares a
   server-side dry run of Apply (`helm upgrade --dry-run=server`, with Apply's own arguments)
   with the deployed release, and lists the workloads that would restart, stop, or start.
   The Dashboard asks before an Apply that restarts or stops anything, or when Check couldn't

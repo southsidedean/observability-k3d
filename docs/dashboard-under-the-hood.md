@@ -187,8 +187,10 @@ With a cluster running, `./ok3d check` ends by working out what Apply would chan
 changes nothing to do it:
 
 1. It reads the ok3d release as it's deployed (`helm get manifest ok3d`).
-2. It asks the cluster what Apply would deploy, with Apply's own arguments (the same
-   `chart_args` that Apply uses), as a server-side dry run: `helm upgrade --dry-run=server`.
+2. It renders what Apply would deploy, with Apply's own arguments (the same `chart_args`
+   that Apply uses), as a server-side dry run: `helm upgrade --dry-run=server`. "Server-side"
+   means the chart may read the cluster while it renders; the objects aren't sent through
+   Kubernetes' own checks, so a change the cluster would refuse still shows as a change.
 3. `src/ok3d/apply_plan.py` compares the two, one object at a time (by kind, namespace, and
    name). A workload (a Deployment, StatefulSet, or DaemonSet, or the Prometheus and
    Alertmanager the operator runs) whose object changes would restart; one that's gone would
@@ -205,9 +207,14 @@ other=2
 ```
 
 `state=new` when there's no cluster or release yet (Apply makes them), `none` when nothing
-running would change, and `unknown` when it couldn't tell: the dry run failed (Helm older
-than 3.13 has no server-side dry run), or there's no admin password yet. A Check that finds
-problems leaves the file empty. Only the ok3d release is compared; the platform's
+running would change, and `unknown` when it couldn't tell: the cluster didn't answer, the
+dry run failed (Helm older than 3.13 has no server-side dry run, and Check warns about
+that), an object in either manifest couldn't be read, or there's no admin password yet.
+`new` only when there's no cluster, or the cluster answered that there's no ok3d release.
+A Check that finds problems after reading your settings leaves the file empty; one whose
+settings can't be read leaves it as it was, which doesn't matter, since Home shows it only
+once a Check has passed. Check says why it couldn't tell, and a part whose name the
+Dashboard can't show is counted, and asked about, all the same. Only the ok3d release is compared; the platform's
 (cert-manager) rarely changes. On the server, `./ok3d apply` asks the same question on a
 terminal (`--yes` skips it); run by another program, such as the helper, it goes ahead.
 

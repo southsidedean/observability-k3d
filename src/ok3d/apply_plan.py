@@ -62,18 +62,25 @@ class Plan:
         return "\n".join(out) + "\n"
 
 
+class Unreadable(Exception):
+    """An object whose kind this can read, but not its name: comparing without it could say
+    nothing changes when something does."""
+
+
 def objects(manifest: str) -> dict[tuple[str, str, str], str]:
-    """Each object in a manifest, by (kind, namespace, name), as its text."""
+    """Each object in a manifest, by (kind, namespace, name), as its text. Raises Unreadable
+    for an object with a kind but no name this can find."""
     found = {}
     for doc in re.split(r"^---[ \t]*$", manifest, flags=re.MULTILINE):
         kind = KIND.search(doc)
+        if not kind:
+            continue  # only comments, or nothing
         metadata = METADATA.search(doc)
-        if not kind or not metadata:
-            continue
-        name = re.search(FIELD.format("name"), metadata.group(1), re.MULTILINE)
+        name = metadata and re.search(FIELD.format("name"), metadata.group(1), re.MULTILINE)
+        if not metadata or not name:
+            raise Unreadable(kind.group(1))
         namespace = re.search(FIELD.format("namespace"), metadata.group(1), re.MULTILINE)
-        if name:
-            found[(kind.group(1), namespace.group(1) if namespace else "", name.group(1))] = doc.strip()
+        found[(kind.group(1), namespace.group(1) if namespace else "", name.group(1))] = doc.strip()
     return found
 
 
@@ -114,10 +121,13 @@ def main(argv: list[str]) -> int:
         return 2
     now, dry_run = (Path(a).read_bytes()[:MAX_READ].decode("utf-8", errors="replace") for a in argv)
     after = manifest_of(dry_run)
-    if after is None or not objects(now):
+    try:
+        if after is None or not objects(now):
+            print("state=unknown")
+            return 0
+        print(compare(now, after).lines(), end="")
+    except Unreadable:
         print("state=unknown")
-        return 0
-    print(compare(now, after).lines(), end="")
     return 0
 
 

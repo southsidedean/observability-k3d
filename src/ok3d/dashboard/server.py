@@ -205,6 +205,9 @@ def plan_list(plan: helper_link.ApplyPlan) -> str:
     items = [f"<li>Restart {html.escape(p)}</li>" for p in plan.restart]
     items += [f"<li>Stop {html.escape(p)}</li>" for p in plan.stop]
     items += [f"<li>Start {html.escape(p)}</li>" for p in plan.start]
+    if plan.hidden:
+        items.append(f"<li>Restart, stop, or start {plan.hidden} more part(s), whose names can't be shown here: "
+                     "<code>./ok3d check</code> on the server names them</li>")  # fmt: skip
     if plan.other:
         items.append(f"<li>{plan.other} other change(s), such as alert rules or dashboards, which stop nothing</li>")
     return f"<ul class=todo>{''.join(items)}</ul>" if items else ""

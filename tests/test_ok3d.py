@@ -36,13 +36,16 @@ case "$1 ${2:-}" in
 esac""",
     "helm": r"""echo "helm $*" >>"$FAKE_LOG"
 case "$*" in
-"version --short") echo "v4.3.1+g0" ;;
+"version --short") echo "v${FAKE_HELM_VERSION:-4.3.1}+g0" ;;
 "dependency list"*) ;;
 "status ok3d"*) exit "${FAKE_OLD_RELEASE:-1}" ;;
 # The release as it's deployed, and what Apply would deploy: from FAKE_MANIFEST and
-# FAKE_DRY_RUN. Without FAKE_MANIFEST there's no release.
-"get manifest ok3d"*) [ -n "${FAKE_MANIFEST:-}" ] && cat "$FAKE_MANIFEST" ;;
-*--dry-run=server*) cat "${FAKE_DRY_RUN:-/dev/null}" ;;
+# FAKE_DRY_RUN. Without FAKE_MANIFEST, helm says FAKE_MANIFEST_ERROR (there's no release).
+"get manifest ok3d"*)
+	if [ -n "${FAKE_MANIFEST:-}" ]; then cat "$FAKE_MANIFEST"; else echo "${FAKE_MANIFEST_ERROR:-Error: release: not found}" >&2; exit 1; fi ;;
+*--dry-run=server*)
+	cat "${FAKE_DRY_RUN:-/dev/null}"
+	[ -z "${FAKE_DRY_RUN_ERROR:-}" ] || { echo "$FAKE_DRY_RUN_ERROR" >&2; exit 1; } ;;
 *cluster-settings.yaml*)
 	cat <<EOF
 ---
@@ -1111,7 +1114,10 @@ def test_the_dry_run_uses_applys_own_arguments(env: dict[str, str], tmp_path: Pa
 def test_check_changes_nothing_while_it_looks(env: dict[str, str], tmp_path: Path) -> None:
     running = deployed(env, tmp_path, 2)
     ok3d(running, "check")
-    assert not any(c.startswith(("helm upgrade --install", "kubectl", "k3d cluster create")) for c in calls(running))
+    log = calls(running)
+    assert not any(c.startswith(("kubectl", "k3d cluster create")) for c in log)
+    upgrades = [c for c in log if c.startswith("helm upgrade")]
+    assert upgrades and all("--dry-run=server" in c for c in upgrades)
 
 
 def test_without_the_admin_password_check_cant_tell(env: dict[str, str], tmp_path: Path) -> None:
@@ -1167,3 +1173,42 @@ def test_apply_with_yes_or_from_another_program_doesnt_ask(env: dict[str, str], 
     assert ok3d(running, "apply").returncode == 0  # not a terminal: the helper, an upgrade
     status, out = apply_on_a_terminal(running, b"", "--yes")
     assert status == 0 and "Go ahead?" not in out
+
+
+
+def test_a_cluster_that_doesnt_answer_isnt_taken_for_a_new_one(env: dict[str, str], tmp_path: Path) -> None:
+    running = deployed(env, tmp_path, 1) | {"FAKE_MANIFEST": "", "FAKE_MANIFEST_ERROR": "Error: connection refused"}
+    result = ok3d(running, "check")
+    assert "Check couldn't tell what Apply would change in the running cluster: Error: connection refused." in result.stdout
+    assert "state=unknown" in (Path(env["FAKE_DATA_ROOT"]) / "helper" / "apply-plan").read_text()
+
+
+def test_a_cluster_without_the_release_is_new(env: dict[str, str], tmp_path: Path) -> None:
+    running = deployed(env, tmp_path, 1) | {"FAKE_MANIFEST": ""}
+    assert "Apply will make what's missing and deploy ok3d." in ok3d(running, "check").stdout
+
+
+def test_a_dry_run_that_fails_says_why(env: dict[str, str], tmp_path: Path) -> None:
+    running = deployed(env, tmp_path, 1) | {"FAKE_DRY_RUN_ERROR": "Error: unknown flag: --dry-run=server"}
+    result = ok3d(running, "check")
+    assert "couldn't tell what Apply would change in the running cluster: Error: unknown flag" in result.stdout
+
+
+def test_a_failed_check_leaves_no_plan(env: dict[str, str], tmp_path: Path) -> None:
+    running = deployed(env, tmp_path, 2)
+    plan = Path(env["FAKE_DATA_ROOT"]) / "helper" / "apply-plan"
+    ok3d(running, "check")
+    assert "restart=Grafana" in plan.read_text()
+    assert ok3d(running | {"FAKE_K3D_VERSION": "5.0.0"}, "check").returncode == 1
+    assert plan.read_text() == ""
+
+
+def test_check_warns_when_helm_cant_tell_what_apply_would_change(env: dict[str, str]) -> None:
+    assert "needs 3.13 or newer" in ok3d(env | {"FAKE_HELM_VERSION": "3.12.3"}, "check").stdout
+    assert "needs 3.13 or newer" not in ok3d(env, "check").stdout
+
+
+def test_apply_takes_only_yes(env: dict[str, str]) -> None:
+    result = ok3d(env, "apply", "--yse")
+    assert result.returncode == 2 and "Usage: ./ok3d apply [--yes]" in result.stderr
+    assert calls(env) == []
