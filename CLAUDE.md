@@ -16,8 +16,9 @@ request that finishes an item marks it Done with its own number.
 
 - `v0.2.0` is the old stack's last version; its files are gone from 0.4 (`docs/upgrading.md`
   covers moving from it). Fix forward in ok3d, never by bringing them back.
-- `v0.4.0` is released. 0.5 (the Dashboard) is in progress; `docs/roadmap.md` has where it
-  stands.
+- 0.5 (the Dashboard) is released as `v0.5.0` and `v0.5.1`, signed from `v0.5.0`. 0.6 (logs
+  and changes) is next; `docs/roadmap.md` has where it stands. From 0.5.1, each release test
+  is an upgrade from the release before, from the Dashboard alone.
 - Before 1.0: a full independent review of every file (no spot checks) and an architectural
   review, written up in `docs/reviews/1.0-review.md`.
 

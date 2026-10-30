@@ -60,5 +60,5 @@ release and the reasons behind it.
 | Maintenance windows | Done ([#45](https://github.com/southsidedean/observability-k3d/pull/45)) |
 | Apply asks first when it would stop something | Done ([#43](https://github.com/southsidedean/observability-k3d/pull/43)) |
 | Each choice shown as its `ok3d` command | Done ([#44](https://github.com/southsidedean/observability-k3d/pull/44)) |
-| The Dashboard's screenshots retaken, showing a released version and each page's new text | Planned |
+| The Dashboard's screenshots retaken, showing a released version and each page's new text | Done ([#47](https://github.com/southsidedean/observability-k3d/pull/47)) |
 | Release 0.5.1: the installer from 0.5.0, and the Dashboard's upgrade rehearsed with a test tag (0.5.0 has no Upgrade button) | In progress |
