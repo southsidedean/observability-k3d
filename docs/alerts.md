@@ -115,7 +115,8 @@ On the server:
 
 A length is minutes, hours, or days (`30m`, `2h`, `1d`), and a window lasts at most 30 days.
 A start and an end are in the server's own time. Each window happens once; repeating ones
-(a weekly reboot, say) come later. There can be 20 at once, and one covers up to 50 devices.
+(a weekly reboot, say) come later. There can be 20 at a time, counting the ones that haven't started yet, and one covers up to
+50 devices.
 
 A window for chosen devices covers the alerts about those devices from `devices.yaml`. It
 doesn't cover UniFi's alerts, which name UniFi's own devices: for those, use a window for all

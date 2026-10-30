@@ -144,7 +144,6 @@ def test_the_helper_checks_a_window_the_same_way() -> None:
     assert helper.MAINTENANCE_PATTERNS["when"].pattern == f"{maintenance.LENGTH.pattern.replace('(', '').replace(')', '')}|{maintenance.RANGE.pattern.replace('(', '').replace(')', '')}"
 
 
-
 def test_a_window_without_a_reason_is_listed_without_one() -> None:
     assert maintenance.windows([silence(comment="ok3d")], NOW)[0].endswith(";")
 
