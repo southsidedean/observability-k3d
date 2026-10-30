@@ -195,7 +195,8 @@ def home(config: Config, message: str = "") -> str:
         '<form class="inline" method="post" action="/check"><button>Check</button></form> '
         f'<form class="inline" method="post" action="/apply"><button{disabled}>Apply</button></form>'
         f"{apply_note}{plan_section(config)}"
-        "<p class=muted>On the server: <code>./ok3d check</code>, then <code>./ok3d apply</code>.</p></section>" + todo_section(config) + next_section(config)
+        "<p class=muted>On the server: <code>./ok3d check</code>, then <code>./ok3d apply</code>.</p>"
+        "</section>" + todo_section(config) + next_section(config)
         + answer_section(config)
         + release_section(config)
     )
@@ -480,7 +481,9 @@ def setup_page(config: Config, message: str = "") -> str:
     alerts = "".join(switch_form(s, settings, base, have) for s in switches.ALERTS)
     return (
         f"<section><h2>Ready-made setups</h2>{note}<p>Choose one, or switch the parts on and off "
-        "yourself below. Metrics, alerts, and ok3d's pages are always on.</p>"
+        "yourself below. Metrics, alerts, and ok3d's pages are always on. Each says the line it writes "
+        "in settings.yaml; a dot means one setting inside another, so <code>modules.unifi: true</code> is "
+        "<code>unifi: true</code> under <code>modules:</code>.</p>"
         f'<div class="cards">{cards}</div>{SAVE_NOTE}</section>'
         f"<section><h2>Parts</h2>{modules}</section>"
         f"<section><h2>Where alerts go</h2>{alerts}</section>"

@@ -1120,9 +1120,10 @@ def test_each_page_shows_its_server_command(ready: Dashboard) -> None:
         "/devices": "On the server: edit <code>devices.yaml</code> in the ok3d folder, then <code>./ok3d check</code>.",
         "/keys": "On the server: the line <code>NTFY_TOPIC=</code> in <code>.env</code>.",
         "/setup": "In settings.yaml: <code>modules.unifi: true</code>",
+        "/setup ": "a dot means one setting inside another",
     }
     for path, line in shown.items():
-        assert line in body(ready.get(path, session)), path
+        assert line in body(ready.get(path.strip(), session)), path
 
 
 def test_each_ready_made_setup_shows_the_settings_it_writes() -> None:
