@@ -4,7 +4,8 @@ Where ok3d is, release by release. Every pull request updates this page when it 
 starts, or changes something here. [PLAN.md](../PLAN.md#roadmap) has the detail of each
 release and the reasons behind it.
 
-**Now:** 0.5.1 is being released: the Dashboard's second step. 0.6.0, logs and changes, comes next.
+**Now:** 0.5.1 is released. 0.5.2 is in progress: small fixes, and the first release test
+that upgrades from the Dashboard alone. 0.6.0, logs and changes, comes next.
 
 | Release | What it brings | Status |
 |---|---|---|
@@ -12,7 +13,8 @@ release and the reasons behind it.
 | 0.3.0 | Groundwork: CI, hooks, tests, the charts, the `ok3d` command, the certificate authority | Released ([v0.3.0](https://github.com/southsidedean/observability-k3d/releases/tag/v0.3.0)) |
 | 0.4.0 | Metrics, alerts that reach you, and a safe front door | Released ([v0.4.0](https://github.com/southsidedean/observability-k3d/releases/tag/v0.4.0)) |
 | 0.5.0 | The Dashboard: set up and change ok3d from a web page, and screenshots in the docs | Released ([v0.5.0](https://github.com/southsidedean/observability-k3d/releases/tag/v0.5.0)) |
-| 0.5.1 | The Dashboard's second step: upgrades, maintenance windows, and Apply asking first | In progress |
+| 0.5.1 | The Dashboard's second step: upgrades, maintenance windows, and Apply asking first | Released ([v0.5.1](https://github.com/southsidedean/observability-k3d/releases/tag/v0.5.1)) |
+| 0.5.2 | Small fixes from 0.5.1, and the first release test that upgrades from the Dashboard alone | In progress |
 | 0.6.0 | Logs and changes: syslog, host logs, what-changed markers, new devices | Planned |
 | 0.7.0 | The NOC: the board, alerts that know the layout, the internet link's record, backups | Planned |
 | 0.8.0 | One sign-in for every page, the mesh, and traces | Planned |
@@ -61,4 +63,12 @@ release and the reasons behind it.
 | Apply asks first when it would stop something | Done ([#43](https://github.com/southsidedean/observability-k3d/pull/43)) |
 | Each choice shown as its `ok3d` command | Done ([#44](https://github.com/southsidedean/observability-k3d/pull/44)) |
 | The Dashboard's screenshots retaken, showing a released version and each page's new text | Done ([#47](https://github.com/southsidedean/observability-k3d/pull/47)) |
-| Release 0.5.1: the installer from 0.5.0, and the Dashboard's upgrade rehearsed with a test tag (0.5.0 has no Upgrade button) | In progress |
+| Release 0.5.1 ([#47](https://github.com/southsidedean/observability-k3d/pull/47)): the installer from 0.5.0, and the Dashboard's upgrade rehearsed with a test tag (0.5.0 has no Upgrade button) | Done |
+
+## 0.5.2, in detail
+
+| Part | Status |
+|---|---|
+| The Maintenance page says it hasn't read Alertmanager yet, instead of "No maintenance windows" | Planned |
+| Check whether the upgrade from 0.5.1 restarts the gateway, as the one from 0.5.0 did | Planned |
+| Release 0.5.2, tested with an upgrade from 0.5.1 from the Dashboard alone | Planned |
