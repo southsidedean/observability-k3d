@@ -1048,3 +1048,19 @@ def test_a_request_the_helper_refuses_a_moment_later_doesnt_stop_the_upgrade(rel
     result = upgrade(env, "v0.5.1", "--yes")
     assert result.returncode == 0, result.stdout + result.stderr
     assert "sleep 1" in calls(releases)  # it waited, and read the answer again
+
+
+def test_a_request_that_stays_running_is_refused_after_the_wait(releases: dict[str, str], tmp_path: Path) -> None:
+    # A real Apply stays running: the upgrade reads it again once a second, then refuses, and
+    # never waits longer than it's allowed.
+    result_file = Path(releases["FAKE_DATA_ROOT"]) / "helper" / "result"
+    result_file.write_text("id=0123456789abcdef\naction=apply\nstate=running\n\n")
+    waits = tmp_path / "waits"
+    waits.mkdir()
+    (waits / "sleep").write_text('#!/bin/sh\necho "sleep $*" >>"$FAKE_LOG"\n')
+    (waits / "sleep").chmod(0o755)
+    result = upgrade(releases | {"PATH": f"{waits}:{releases['PATH']}", "OK3D_BUSY_WAIT": "2"}, "v0.5.1", "--yes")
+    assert result.returncode == 1
+    assert "carrying out a request from the Dashboard" in result.stderr
+    assert [c for c in calls(releases) if c.startswith("sleep")] == ["sleep 1", "sleep 1"]
+    assert '"0.5.0"' in at(releases)
