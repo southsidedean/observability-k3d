@@ -70,8 +70,8 @@ Dashboard's container has been taken over:
   plain reason, or a window's id), and asks `systemctl` whether an upgrade is running.
 - A maintenance window never silences the dead man's switch, so even a window for all of
   ok3d, set from a Dashboard someone has taken over, can't hide ok3d stopping. Such a
-  Dashboard could still keep every other alert quiet, 30 days at a time, with up to 20
-  windows, and end ok3d's own windows (never a silence made some other way). Home shows a
+  Dashboard could still keep every other alert quiet, with up to 20 windows of at most 30
+  days each, set now or up to a year ahead, and end ok3d's own windows (never a silence made some other way). Home shows a
   red line while a window is on, and `./ok3d maintenance` on the server lists them.
 - It saves a settings or devices file only after `./ok3d validate` passes it, keeping a
   copy of the old one. A file from the Dashboard may hold only your own settings or devices,

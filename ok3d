@@ -1033,10 +1033,11 @@ maintenance_add() {
 	# The silences there now, so it can count ok3d's windows.
 	silences=$(mktemp "${TMPDIR:-/tmp}/ok3d-silences.XXXXXX")
 	trap 'rm -f "$silences"' EXIT
+	trap 'exit 130' INT TERM HUP
 	amtool silence query --output=json >"$silences"
 	args=$(python3 -I src/ok3d/maintenance.py add "$1" "$2" "$3" "$devices" "$silences") || exit 2
 	rm -f "$silences"
-	trap - EXIT
+	trap - EXIT INT TERM HUP
 	set --
 	while IFS= read -r arg; do
 		set -- "$@" "$arg"
@@ -1052,13 +1053,19 @@ EOF
 maintenance_end() {
 	silences=$(mktemp "${TMPDIR:-/tmp}/ok3d-silences.XXXXXX")
 	trap 'rm -f "$silences"' EXIT
+	trap 'exit 130' INT TERM HUP
 	amtool silence query --output=json >"$silences"
-	python3 -I src/ok3d/maintenance.py ours "$1" "$silences" || {
+	# 2: not one of ours. Anything else: the silences couldn't be read, which it has said.
+	ours=0
+	python3 -I src/ok3d/maintenance.py ours "$1" "$silences" || ours=$?
+	if [ "$ours" = 2 ]; then
 		echo "$1 isn't one of ok3d's maintenance windows: ./ok3d maintenance lists them." >&2
 		exit 2
-	}
+	elif [ "$ours" != 0 ]; then
+		exit 1
+	fi
 	rm -f "$silences"
-	trap - EXIT
+	trap - EXIT INT TERM HUP
 	amtool silence expire "$1"
 	echo "Ended maintenance window $1."
 	maintenance_list

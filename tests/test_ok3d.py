@@ -1359,3 +1359,13 @@ def test_maintenance_stops_at_twenty_windows(env: dict[str, str], tmp_path: Path
 def test_maintenance_takes_only_what_it_says(env: dict[str, str], args: list[str]) -> None:
     result = ok3d(env, "maintenance", *args)
     assert result.returncode == 2 and "Usage: ./ok3d maintenance" in result.stderr
+
+
+
+def test_silences_it_cant_read_arent_taken_for_another_window(env: dict[str, str], tmp_path: Path) -> None:
+    broken = tmp_path / "broken.json"
+    broken.write_text("not json")
+    result = ok3d(with_devices(env, tmp_path) | {"FAKE_SILENCES": str(broken)}, "maintenance", "end",
+                  "54c2bf37-5a0a-45d7-91a0-30e0c9b716b6")  # fmt: skip
+    assert result.returncode == 1 and "Couldn't read Alertmanager's silences." in result.stderr
+    assert "isn't one of ok3d's" not in result.stderr
