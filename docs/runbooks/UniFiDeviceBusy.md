@@ -14,4 +14,4 @@ A UniFi device's processor has been above 90% for 15 minutes.
 
 It clears on its own when the load comes down.
 
-To keep it quiet while you work on it, add a silence in Alertmanager. That arrives on the Dashboard in 0.5; until then, [docs/alerts.md](../alerts.md#silencing-an-alert) shows the command.
+To keep it quiet while you work on it, add a [maintenance window](../alerts.md#maintenance-windows-keeping-alerts-quiet-while-you-work) for all of ok3d on the Dashboard's Maintenance page, or with `./ok3d maintenance add all` on the server. A window for chosen devices doesn't cover UniFi's alerts: they name UniFi's devices, not the ones in `devices.yaml`.

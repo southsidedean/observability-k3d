@@ -93,18 +93,38 @@ Every alert links to its runbook: what it means and what to check, in order.
 Kubernetes' own alerts (a pod that keeps restarting, a volume filling up) come with
 kube-prometheus-stack and cover ok3d's own parts.
 
-## Silencing an alert
+## Maintenance windows: keeping alerts quiet while you work
 
-While you work on something, you can keep its alert quiet. The Dashboard does this from
-0.5; until then, from a terminal on the server:
+While you work on something, a maintenance window keeps its alerts from notifying you: for
+all of ok3d (moving the server, say), or for the devices you choose (a router's firmware
+update). The alerts still fire and show in Grafana, and the dead man's switch keeps
+running, so its service doesn't decide ok3d has stopped.
+
+On the Dashboard, open **Maintenance**, choose all of ok3d or tick the devices, then either
+a length from now or a start and an end, and add a reason if you like. Home says while a
+window is on. **End now** ends one early.
+
+On the server:
 
 ```sh
-kubectl --context k3d-ok3d -n monitoring exec alertmanager-ok3d-kube-prometheus-stack-alertmanager-0 \
-  -c alertmanager -- amtool silence add alertname=DeviceDown device=printer \
-  --comment="Moving the printer" --duration=2h --alertmanager.url=http://localhost:9093
+./ok3d maintenance                                          # the windows
+./ok3d maintenance add all 2h "Moving the server"           # all of ok3d, from now
+./ok3d maintenance add router,nas 2026-11-03T02:00/2026-11-03T04:00 "Firmware"
+./ok3d maintenance end 54c2bf37-5a0a-45d7-91a0-30e0c9b716b6 # one of the ids it lists
 ```
 
-Silences are kept in the data root, so they last through a rebuilt cluster.
+A length is minutes, hours, or days (`30m`, `2h`, `1d`), and a window lasts at most 30 days.
+A start and an end are in the server's own time. Each window happens once; repeating ones
+(a weekly reboot, say) come later. There can be 20 at once, and one covers up to 50 devices.
+
+A window for chosen devices covers the alerts about those devices from `devices.yaml`. It
+doesn't cover UniFi's alerts, which name UniFi's own devices: for those, use a window for all
+of ok3d. Each device's `name:` is read from its own line in `devices.yaml`, as the examples
+write it.
+
+Windows are Alertmanager's silences, kept in the data root, so they last through a rebuilt
+cluster and an upgrade. Silences you make another way (with `amtool`, say) work as well, but
+ok3d lists and ends only its own.
 
 ## If an alert doesn't arrive
 

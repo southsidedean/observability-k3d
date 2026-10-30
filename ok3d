@@ -26,6 +26,15 @@
 #                     is down. If the new release's check or install fails, it moves back and
 #                     the cluster isn't touched. Asks first; --yes skips the question. (Linux,
 #                     with systemd.) docs/upgrading.md says more.
+#   ./ok3d maintenance
+#                     List the maintenance windows: times when alerts don't notify you.
+#   ./ok3d maintenance add WHAT WHEN [REASON]
+#                     Add one. WHAT is all, or devices from devices.yaml joined by commas;
+#                     WHEN is a length from now (30m, 2h, 1d) or START/END in this server's
+#                     time (2026-11-03T02:00/2026-11-03T04:00). Alerts still fire and show in
+#                     Grafana; the dead man's switch is never silenced. docs/alerts.md says more.
+#   ./ok3d maintenance end ID
+#                     End one now.
 #   ./ok3d test-alert Send a test alert through Alertmanager, to check that alerts reach you.
 #   ./ok3d validate settings FILE [--from-dashboard]
 #   ./ok3d validate devices FILE
@@ -657,9 +666,11 @@ now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 # made the folder, and never through a link.
 helper_note() {
 	[ -d "$DATA_ROOT/helper" ] && [ ! -L "$DATA_ROOT/helper" ] || return 0
-	rm -f "$DATA_ROOT/helper/.$1.tmp"
-	printf '%s' "$2" >"$DATA_ROOT/helper/.$1.tmp"
-	mv -f "$DATA_ROOT/helper/.$1.tmp" "$DATA_ROOT/helper/$1"
+	# A temporary name of this run's own, so two runs at once (the helper's and yours) don't
+	# take each other's.
+	rm -f "$DATA_ROOT/helper/.$1.$$.tmp"
+	printf '%s' "$2" >"$DATA_ROOT/helper/.$1.$$.tmp"
+	mv -f "$DATA_ROOT/helper/.$1.$$.tmp" "$DATA_ROOT/helper/$1"
 }
 
 # The Dashboard's certificate, issued by ok3d's certificate authority for dashboard.<domain>,
@@ -971,16 +982,96 @@ cmd_demo() {
 	esac
 }
 
+# Alertmanager's pod, where amtool runs (it's in Alertmanager's own image).
+alertmanager_pod=alertmanager-ok3d-kube-prometheus-stack-alertmanager-0
+
+# amtool ARGS...: amtool in Alertmanager's pod, talking to Alertmanager there.
+amtool() {
+	kubectl --context "$context" --namespace monitoring exec "$alertmanager_pod" --container alertmanager -- \
+		amtool --alertmanager.url=http://localhost:9093 "$@"
+}
+
+cmd_maintenance() {
+	load_settings
+	case "${1:-}" in
+	"") maintenance_list ;;
+	add)
+		if [ $# -lt 3 ] || [ $# -gt 4 ]; then
+			maintenance_usage
+		fi
+		maintenance_add "$2" "$3" "${4:-}"
+		;;
+	end)
+		[ $# -eq 2 ] || maintenance_usage
+		maintenance_end "$2"
+		;;
+	*) maintenance_usage ;;
+	esac
+}
+
+maintenance_usage() {
+	echo "Usage: ./ok3d maintenance [add WHAT WHEN [REASON] | end ID]" >&2
+	exit 2
+}
+
+# The windows, from Alertmanager: printed, and written to the helper's folder as maintenance,
+# where the Dashboard reads them (src/ok3d/maintenance.py says what's in it).
+maintenance_list() {
+	work=$(mktemp -d "${TMPDIR:-/tmp}/ok3d-maintenance.XXXXXX")
+	trap 'rm -rf "$work"' EXIT
+	trap 'exit 130' INT TERM HUP
+	amtool silence query --output=json >"$work/silences"
+	python3 -I src/ok3d/maintenance.py list "$work/silences" >"$work/note"
+	helper_note maintenance "checked=$(now)
+$(cat "$work/note")
+"
+	python3 -I src/ok3d/maintenance.py table "$work/note"
+}
+
+maintenance_add() {
+	# The window, checked whole, as amtool's arguments, one per line (a comment has spaces).
+	# The silences there now, so it can count ok3d's windows.
+	silences=$(mktemp "${TMPDIR:-/tmp}/ok3d-silences.XXXXXX")
+	trap 'rm -f "$silences"' EXIT
+	amtool silence query --output=json >"$silences"
+	args=$(python3 -I src/ok3d/maintenance.py add "$1" "$2" "$3" "$devices" "$silences") || exit 2
+	rm -f "$silences"
+	trap - EXIT
+	set --
+	while IFS= read -r arg; do
+		set -- "$@" "$arg"
+	done <<EOF
+$args
+EOF
+	id=$(amtool silence add "$@")
+	echo "Added maintenance window $id."
+	maintenance_list
+}
+
+# Ends one of ok3d's own windows, never a silence made some other way.
+maintenance_end() {
+	silences=$(mktemp "${TMPDIR:-/tmp}/ok3d-silences.XXXXXX")
+	trap 'rm -f "$silences"' EXIT
+	amtool silence query --output=json >"$silences"
+	python3 -I src/ok3d/maintenance.py ours "$1" "$silences" || {
+		echo "$1 isn't one of ok3d's maintenance windows: ./ok3d maintenance lists them." >&2
+		exit 2
+	}
+	rm -f "$silences"
+	trap - EXIT
+	amtool silence expire "$1"
+	echo "Ended maintenance window $1."
+	maintenance_list
+}
+
 # A test alert, through the real path: Alertmanager's own amtool adds it, and Alertmanager
 # sends it wherever alerts go. It clears itself after 5 minutes.
 cmd_test_alert() {
 	load_settings
-	pod=alertmanager-ok3d-kube-prometheus-stack-alertmanager-0
 	ends=$(date -u -d '+5 minutes' '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || date -u -v+5M '+%Y-%m-%dT%H:%M:%SZ')
-	kubectl --context "$context" --namespace monitoring exec "$pod" --container alertmanager -- \
-		amtool alert add OK3DTestAlert severity=warning device=ok3d \
+	amtool alert add OK3DTestAlert severity=warning device=ok3d \
 		--annotation="summary=\"A test alert from ./ok3d test-alert. If you can read this, alerts reach you.\"" \
-		--end="$ends" --alertmanager.url=http://localhost:9093
+		--end="$ends"
 	echo "Sent. It should arrive within a minute, wherever your alerts go (docs/alerts.md)."
 }
 
@@ -1349,6 +1440,10 @@ delete) cmd_delete "${2:-}" ;;
 demo) cmd_demo "${2:-}" "${3:-}" ;;
 test-alert) cmd_test_alert ;;
 validate) cmd_validate "${2:-}" "${3:-}" "${4:-}" ;;
+maintenance)
+	shift
+	cmd_maintenance "$@"
+	;;
 upgrade) cmd_upgrade "${2:-}" "${3:-}" ;;
 version | --version) cmd_version ;;
 help | --help | -h) usage ;;

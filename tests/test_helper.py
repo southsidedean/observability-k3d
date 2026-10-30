@@ -851,3 +851,40 @@ def test_a_request_says_its_running_before_it_asks_about_an_upgrade(h: helper.Op
     send(h, f"id={ID}\naction=apply\n")
     helper.handle_once(h)
     assert seen and {"action": "apply", "state": "running"}.items() <= seen[0].items()
+
+
+# Maintenance windows: the helper runs ./ok3d maintenance with the request's checked lines.
+
+WINDOW = "54c2bf37-5a0a-45d7-91a0-30e0c9b716b6"
+
+
+@pytest.mark.parametrize(("head", "args"), [
+    ("action=maintenance-add\nwhat=all\nwhen=2h\nreason=Router firmware update\n", "maintenance add all 2h Router firmware update"),
+    ("action=maintenance-add\nwhat=router,nas\nwhen=2026-11-03T02:00/2026-11-03T04:00\n",
+     "maintenance add router,nas 2026-11-03T02:00/2026-11-03T04:00 "),
+    (f"action=maintenance-end\nwindow={WINDOW}\n", f"maintenance end {WINDOW}"),
+    ("action=maintenance-list\n", "maintenance"),
+])  # fmt: skip
+def test_maintenance_requests_run_ok3d_maintenance(h: helper.Opened, head: str, args: str) -> None:
+    send(h, f"id={ID}\n{head}")
+    assert (helper.handle_once(h) or "").startswith("ran ./ok3d maintenance")
+    assert ran(h) == [args]
+
+
+@pytest.mark.parametrize(("head", "reason"), [
+    ("action=maintenance-add\nwhen=2h\n", "the request is missing a line"),
+    ("action=maintenance-add\nwhat=all\n", "the request is missing a line"),
+    ("action=maintenance-end\n", "the request is missing a line"),
+    ("action=maintenance-list\nwhat=all\n", "the request has a line the helper doesn't know"),
+    ("action=check\nwindow=" + WINDOW + "\n", "the request has a line the helper doesn't know"),
+    ("action=maintenance-end\nwindow=" + WINDOW + "\nwhat=all\n", "the request has a line the helper doesn't know"),
+    ("action=maintenance-add\nwhat=All\nwhen=2h\n", "the request's what isn't valid"),
+    ("action=maintenance-add\nwhat=all\nwhen=2 hours\n", "the request's when isn't valid"),
+    ("action=maintenance-add\nwhat=all\nwhen=2h\nreason=--help\n", "the request's reason isn't valid"),
+    ("action=maintenance-add\nwhat=all\nwhen=2h\nreason=a;b\n", "the request's reason isn't valid"),
+    ("action=maintenance-end\nwindow=--all\n", "the request's window isn't valid"),
+])  # fmt: skip
+def test_a_bad_maintenance_request_is_refused(h: helper.Opened, head: str, reason: str) -> None:
+    send(h, f"id={ID}\n{head}")
+    assert helper.handle_once(h) == f"refused a request: {reason}"
+    assert ran(h) == []

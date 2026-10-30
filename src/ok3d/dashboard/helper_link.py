@@ -20,6 +20,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
+from ok3d import maintenance as rules  # a maintenance window's checks, the same ones ./ok3d makes
+
 # The most of any file of the helper's that's read.
 MAX_READ = 256 * 1024
 # The helper counts as running while its heartbeat is younger than this, in seconds. It
@@ -141,6 +143,50 @@ def apply_plan(helper: Path) -> ApplyPlan | None:
         elif key == "other" and re.fullmatch(r"[0-9]{1,6}", value):
             other = int(value)
     return ApplyPlan(state, tuple(parts["restart"]), tuple(parts["stop"]), tuple(parts["start"]), other, hidden)
+
+
+@dataclass(frozen=True)
+class Window:
+    """A maintenance window, as ./ok3d maintenance wrote it (src/ok3d/maintenance.py)."""
+
+    id: str
+    what: str  # all, or device names joined by commas
+    start: datetime  # UTC
+    end: datetime
+    start_here: str  # the server's own time, to show
+    end_here: str
+    reason: str
+
+    def on(self, now: datetime) -> bool:
+        return self.start <= now < self.end
+
+
+# A time as the server shows it: digits, dashes, colons, spaces, and a time zone's letters.
+HERE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}(?: [A-Za-z0-9+-]{1,10})?")
+
+
+def maintenance(helper: Path) -> tuple[str, list[Window]] | None:
+    """When ./ok3d last read the windows from Alertmanager, and the windows; None before it has.
+    A line that isn't one it wrote is left out."""
+    text = read(helper / "maintenance")
+    checked = fields_of(text).get("checked", "")
+    if text is None or not TIME.fullmatch(checked):
+        return None
+    found = []
+    for line in text.splitlines():
+        parts = line.removeprefix("window=").split(";")
+        if not line.startswith("window=") or len(parts) != 7:
+            continue
+        window_id, what, start, end, start_here, end_here, reason = parts
+        try:
+            begins = datetime.strptime(start, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC)
+            ends = datetime.strptime(end, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC)
+        except ValueError:
+            continue
+        if (rules.SILENCE_ID.fullmatch(window_id) and rules.WHAT.fullmatch(what) and HERE.fullmatch(start_here)
+                and HERE.fullmatch(end_here) and rules.REASON.fullmatch(reason)):  # fmt: skip
+            found.append(Window(window_id, what, begins, ends, start_here, end_here, reason))
+    return checked, found
 
 
 def fields_of(text: str | None) -> dict[str, str]:
@@ -275,7 +321,7 @@ def write_private(path: Path, data: bytes) -> None:
 
 
 def send(state: Path, helper: Path, action: str, name: str | None = None, body: bytes | None = None,
-         base: str | None = None, version: str | None = None) -> str:  # fmt: skip
+         base: str | None = None, version: str | None = None, extra: dict[str, str] | None = None) -> str:  # fmt: skip
     """Leaves a request for the helper and returns its id. Raises Busy when one of ours is
     waiting or running, and Unavailable when the outbox can't be written. The request is
     written to a temporary file and renamed into place, so the helper never reads half of
@@ -285,7 +331,8 @@ def send(state: Path, helper: Path, action: str, name: str | None = None, body: 
             raise Busy
         request_id = secrets.token_hex(16)
         head = (f"id={request_id}\naction={action}\n" + (f"name={name}\n" if name else "")
-                + (f"base={base}\n" if base else "") + (f"version={version}\n" if version else ""))  # fmt: skip
+                + (f"base={base}\n" if base else "") + (f"version={version}\n" if version else "")
+                + "".join(f"{key}={value}\n" for key, value in (extra or {}).items()))  # fmt: skip
         data = head.encode() + (b"\n" + body if body is not None else b"")
         try:
             write_private(state / "last-sent", f"{request_id} {time.time()}\n".encode())

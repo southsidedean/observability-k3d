@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import contextlib
 import fcntl
+import json
 import os
 import pty
 import re
@@ -78,7 +79,14 @@ EOF
 	;;
 esac""",
     "kubectl": r"""echo "kubectl $*" >>"$FAKE_LOG"
+# amtool's arguments, one per line, so a test can tell where one ends.
+case "$*" in *amtool*) printf '%s\n' -- "$@" >>"$FAKE_LOG.amtool" ;; esac
 case "$*" in
+# amtool in Alertmanager's pod: a new silence's id (or FAKE_AMTOOL_FAILS), and the silences
+# from FAKE_SILENCES.
+*"amtool"*"silence add"*) [ -z "${FAKE_AMTOOL_FAILS:-}" ] || { echo "amtool: error: bad matcher" >&2; exit 1; }
+	echo 54c2bf37-5a0a-45d7-91a0-30e0c9b716b6 ;;
+*"amtool"*"silence query"*) if [ -n "${FAKE_SILENCES:-}" ]; then cat "$FAKE_SILENCES"; else echo "[]"; fi ;;
 *"--filename -"*) cat >>"$FAKE_LOG.stdin" ;;
 *"--from-file=api-key=/dev/stdin"*) echo "stdin: $(cat)" >>"$FAKE_LOG.stdin"; echo "kind: Secret" ;;
 *"--from-env-file=/dev/stdin"*)
@@ -418,7 +426,7 @@ def test_version_matches_the_package() -> None:
 def test_test_alert_sends_through_alertmanagers_own_amtool(env: dict[str, str]) -> None:
     result = ok3d(env, "test-alert")
     assert result.returncode == 0, result.stderr
-    call = next(line for line in calls(env) if "amtool alert add" in line)
+    call = next(line for line in calls(env) if "amtool --alertmanager.url=http://localhost:9093 alert add" in line)
     assert "--namespace monitoring exec alertmanager-ok3d-kube-prometheus-stack-alertmanager-0" in call
     assert "OK3DTestAlert severity=warning" in call
     # The summary goes as one quoted matcher value, the form Alertmanager's parser wants.
@@ -1264,3 +1272,90 @@ exec "{tmp_path}/bin/helm" "$@"
         with contextlib.suppress(ProcessLookupError):
             os.killpg(proc.pid, signal.SIGKILL)  # the stand-in's sleep too, if the test failed early
     assert list(temp.iterdir()) == []
+
+
+
+# ./ok3d maintenance: windows as Alertmanager silences, through amtool in Alertmanager's pod.
+
+def with_devices(env: dict[str, str], tmp_path: Path) -> dict[str, str]:
+    devices = tmp_path / "devices.yaml"
+    devices.write_text("devices:\n  - name: router\n    address: 192.168.1.1\n")
+    (Path(env["FAKE_DATA_ROOT"]) / "helper").mkdir(exist_ok=True)
+    return env | {"OK3D_DEVICES": str(devices)}
+
+
+def test_maintenance_adds_a_window_through_amtool(env: dict[str, str], tmp_path: Path) -> None:
+    running = with_devices(env, tmp_path)
+    result = ok3d(running, "maintenance", "add", "all", "2h", "Router firmware update")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Added maintenance window 54c2bf37-5a0a-45d7-91a0-30e0c9b716b6." in result.stdout
+    add = next(c for c in calls(running) if "silence add" in c)
+    assert "--container alertmanager -- amtool --alertmanager.url=http://localhost:9093 silence add" in add
+    for part in ('alertname=~".+"', "alertname!=Watchdog", "--author=ok3d", "--comment=ok3d: Router firmware update"):
+        assert part in add, part
+    note = (Path(env["FAKE_DATA_ROOT"]) / "helper" / "maintenance").read_text()
+    assert note.startswith("checked=")
+
+
+def test_maintenance_refuses_a_device_it_doesnt_know_before_amtool(env: dict[str, str], tmp_path: Path) -> None:
+    running = with_devices(env, tmp_path)
+    result = ok3d(running, "maintenance", "add", "printer", "1h")
+    assert result.returncode == 2 and "Not in devices.yaml: printer." in result.stderr
+    assert not any("silence add" in c for c in calls(running))  # it only read the windows there
+
+
+def test_maintenance_lists_ok3ds_windows(env: dict[str, str], tmp_path: Path) -> None:
+    running = with_devices(env, tmp_path)
+    silences = tmp_path / "silences.json"
+    silences.write_text(json.dumps([{"id": "54c2bf37-5a0a-45d7-91a0-30e0c9b716b6", "createdBy": "ok3d",
+        "comment": "ok3d: router firmware", "startsAt": "2026-01-01T00:00:00Z", "endsAt": "2099-01-01T00:00:00Z",
+        "matchers": [{"isEqual": True, "isRegex": True, "name": "device", "value": "router"}]}]))  # fmt: skip
+    result = ok3d(running | {"FAKE_SILENCES": str(silences)}, "maintenance")
+    assert "54c2bf37-5a0a-45d7-91a0-30e0c9b716b6" in result.stdout and "router  (router firmware)" in result.stdout
+    note = (Path(env["FAKE_DATA_ROOT"]) / "helper" / "maintenance").read_text()
+    assert "\nwindow=54c2bf37-5a0a-45d7-91a0-30e0c9b716b6;router;" in note
+
+
+def silences_file(tmp_path: Path, *ids: str, author: str = "ok3d") -> str:
+    silences = tmp_path / "silences.json"
+    silences.write_text(json.dumps([{"id": i, "createdBy": author, "comment": "ok3d", "startsAt": "2026-01-01T00:00:00Z",
+        "endsAt": "2099-01-01T00:00:00Z", "matchers": [{"isEqual": True, "isRegex": True, "name": "device", "value": "router"}]}
+        for i in ids]))  # fmt: skip
+    return str(silences)
+
+
+def test_maintenance_ends_only_ok3ds_own_windows(env: dict[str, str], tmp_path: Path) -> None:
+    window_id = "54c2bf37-5a0a-45d7-91a0-30e0c9b716b6"
+    running = with_devices(env, tmp_path)
+    ended = ok3d(running | {"FAKE_SILENCES": silences_file(tmp_path, window_id)}, "maintenance", "end", window_id)
+    assert ended.returncode == 0, ended.stderr
+    assert any(f"silence expire {window_id}" in c for c in calls(running))
+    for silences, id_ in ((silences_file(tmp_path, window_id, author="you"), window_id), ("", window_id), ("", "--all")):
+        result = ok3d(running | {"FAKE_SILENCES": silences}, "maintenance", "end", id_)
+        assert result.returncode == 2 and "isn't one of ok3d's maintenance windows" in result.stderr
+    assert sum("silence expire" in c for c in calls(running)) == 1
+
+
+def test_the_reason_reaches_amtool_as_one_argument(env: dict[str, str], tmp_path: Path) -> None:
+    running = with_devices(env, tmp_path)
+    assert ok3d(running, "maintenance", "add", "all", "2h", "Router firmware update").returncode == 0
+    assert ok3d(running, "maintenance", "add", "router", "1h", "").returncode == 0
+    args = Path(env["FAKE_LOG"] + ".amtool").read_text().splitlines()
+    assert "--comment=ok3d: Router firmware update" in args and "--comment=ok3d" in args
+
+
+def test_a_window_amtool_refuses_isnt_reported_added(env: dict[str, str], tmp_path: Path) -> None:
+    result = ok3d(with_devices(env, tmp_path) | {"FAKE_AMTOOL_FAILS": "yes"}, "maintenance", "add", "all", "1h")
+    assert result.returncode != 0 and "Added" not in result.stdout and "bad matcher" in result.stderr
+
+
+def test_maintenance_stops_at_twenty_windows(env: dict[str, str], tmp_path: Path) -> None:
+    ids = [f"54c2bf37-5a0a-45d7-91a0-30e0c9b716{n:02d}" for n in range(20)]
+    result = ok3d(with_devices(env, tmp_path) | {"FAKE_SILENCES": silences_file(tmp_path, *ids)}, "maintenance", "add", "all", "1h")
+    assert result.returncode == 2 and "There are 20 maintenance windows already" in result.stderr
+
+
+@pytest.mark.parametrize("args", [["add"], ["add", "all"], ["add", "all", "2h", "why", "more"], ["end"], ["nosuch"]])
+def test_maintenance_takes_only_what_it_says(env: dict[str, str], args: list[str]) -> None:
+    result = ok3d(env, "maintenance", *args)
+    assert result.returncode == 2 and "Usage: ./ok3d maintenance" in result.stderr

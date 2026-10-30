@@ -186,6 +186,28 @@ ok3d-7f3k9q2m8x
 `local/backups/` is in the ok3d checkout, which the Dashboard's container never sees, so a
 copy of `.env` there stays out of its reach.
 
+## Maintenance windows
+
+`maintenance-add`, `maintenance-end`, and `maintenance-list` run `./ok3d maintenance add`,
+`end`, and `./ok3d maintenance` on its own:
+
+```ini
+id=6a1c4e9b2d8f0357
+action=maintenance-add
+what=router,nas
+when=2026-11-03T02:00/2026-11-03T04:00
+reason=Router firmware update
+```
+
+`what` is `all` or up to 50 device names joined by commas; `when` is a length (up to four
+digits, then `m`, `h`, or `d`) or two times; `reason` is optional, at most 100 characters of
+letters, digits, spaces, and `, . ' ( ) / : _ -`, and starts with a letter or digit, so it's
+never taken for an option. `maintenance-end` takes `window`, a silence's id. Each is checked
+whole, with the same patterns as `src/ok3d/maintenance.py` (a test keeps them the same),
+which checks them again, refuses a device that isn't in `devices.yaml` or a 21st window,
+ends only one of ok3d's own windows (never a silence made some other way), and passes
+`amtool` only the arguments it makes itself. The helper never runs `amtool` directly.
+
 ## Looking for a release, and upgrading
 
 `look-for-release` runs `./ok3d upgrade` with nothing after it, which asks GitHub for the list
@@ -271,6 +293,7 @@ temporary file first and renamed into place, so the page never reads half of one
 | `env-set` | The names of the lines in `.env` that have a value, one per line. Never a value |
 | `apply-plan` | What the last Check found Apply would restart, stop, or start in the running cluster (docs/dashboard-under-the-hood.md). `./ok3d check` writes it |
 | `applied` | When the last `./ok3d apply` that worked finished, for the Dashboard's What's next. `./ok3d apply` writes it, not the helper, so an Apply on the server counts too, and `./ok3d delete` removes it |
+| `maintenance` | The maintenance windows ok3d made that haven't ended, from Alertmanager. `./ok3d maintenance` writes it each time it adds, ends, or reads them |
 | `newest-release` | When `./ok3d upgrade` last looked for a release, and the newer one it found. `./ok3d` writes it |
 | `upgrade` | How the last upgrade went: `from`, `to`, `state` (`running`, `finished`, or `failed`), `step`, `started`, and `finished`. `./ok3d upgrade` writes it; the helper rewrites it only to mark an upgrade that stopped partway |
 | `upgrade-output` | Everything the last upgrade printed, written as it runs |
