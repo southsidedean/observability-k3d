@@ -21,7 +21,9 @@ it in 0.4, and its known problems are listed in its release notes and in [PLAN.m
 ## Your data stays home
 
 ok3d has no telemetry. It sends nothing anywhere except what you set up yourself: alerts to
-ntfy or email, the dead man's switch, calls to the AI model, and backups.
+ntfy or email, the dead man's switch, calls to the AI model, and backups. It looks for a new
+release (asking GitHub for the list) only when you ask it to, with **Look for a new release**
+on the Dashboard or `./ok3d upgrade` on the server.
 
 ## How ok3d limits the damage
 
@@ -60,8 +62,11 @@ Dashboard's container has been taken over:
   anything, so a link moves as a link and is never followed. It refuses links, hard links,
   folders, and pipes, and never removes a folder someone sent it.
 - It reads at most 65 KB and accepts a fixed set of fields. The only commands it runs are
-  `./ok3d check`, `./ok3d apply`, and `./ok3d validate` on a file in its own folder, with
-  no arguments from the request.
+  `./ok3d check`, `./ok3d apply`, `./ok3d validate` on a file in its own folder, and
+  `./ok3d upgrade`, either with nothing after it (to look for a release) or, started with
+  `systemd-run` as a service of its own, with the one argument a request may carry: a
+  release, checked to be `v` and three numbers. It also asks `systemctl` whether an
+  upgrade is running.
 - It saves a settings or devices file only after `./ok3d validate` passes it, keeping a
   copy of the old one. A file from the Dashboard may hold only your own settings or devices,
   never the chart's own sections, and may not change where ok3d keeps its data or where it
@@ -80,7 +85,13 @@ Dashboard's container has been taken over:
 - It refuses requests older than 5 minutes, and any of the last 100 ids it carried out.
 - Every request it takes gets an answer, from a fixed list, that repeats nothing from the
   request but a valid id.
-- It runs one request at a time, with a time limit, and a second helper won't start.
+- It runs one request at a time, with a time limit, and a second helper won't start. An
+  upgrade has no time limit (making the cluster again can take as long as a first Apply),
+  and while one runs the helper takes no request at all.
+- An upgrade moves only forward, and only to a release whose tag is signed with ok3d's
+  release key (`deploy/release-signers`, as your copy has it before the move) and named
+  for the release it is. Anyone who could push a tag to ok3d's repository without that key
+  still can't move you to their code, or back to an older release.
 
 These hold only when the Dashboard's container gets the outbox read-write on its own, the
 helper's folder read-only, and runs as you. The installer sets it up that way

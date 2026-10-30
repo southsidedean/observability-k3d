@@ -1,8 +1,9 @@
 """The Dashboard's web server: HTTPS only, behind its own sign-in.
 
-It has the sign-in and five pages: Home (what's left to do, Check and Apply, and What's next),
-Setup (ready-made setups and switches, switches.py), Settings, Devices, and Keys. Each page
-reads what the helper publishes, and each button leaves a request for it (helper_link.py).
+It has the sign-in and five pages: Home (what's left to do, Check and Apply, releases and
+upgrades, and What's next), Setup (ready-made setups and switches, switches.py), Settings,
+Devices, and Keys, plus the Upgrade page that Home leads to. Each page reads what the helper
+publishes, and each button leaves a request for it (helper_link.py).
 
 Every page is made here, with every value escaped, and carries headers that keep it out of
 frames, stop other sites' scripts, and keep it out of caches. A form is accepted only from
@@ -50,6 +51,8 @@ MAX_FILE_FORM = 6 * 64 * 1024 + 1024
 MAX_DISCARD = 1024 * 1024
 # Seconds a form's body may take to arrive, however it's sent (see read_body).
 BODY_TIME = 30
+# Where each release's notes are.
+RELEASES_PAGE = "https://github.com/southsidedean/observability-k3d/releases/tag/"
 # Seconds a whole connection may take, from the TLS handshake to the last byte of the answer
 # (see Server.process_request_thread).
 REQUEST_TIME = 60
@@ -89,6 +92,7 @@ button { font: inherit; padding: 8px 14px; border-radius: 6px; border: 1px solid
   background: var(--accent); color: #fff; cursor: pointer; }
 button.plain { background: none; color: var(--fg); border-color: var(--line); }
 form.inline { display: inline; }
+details { margin-top: 8px; }
 nav a { margin-right: 12px; color: var(--fg); }
 h3 { font-size: 15px; margin: 12px 0 4px; }
 textarea { font: 13px/1.4 ui-monospace, monospace; width: 100%; box-sizing: border-box; padding: 8px;
@@ -165,8 +169,11 @@ def answer_section(config: Config) -> str:
 
 
 def home(config: Config, message: str = "") -> str:
-    """Home: the helper, Check and Apply, and the helper's last answer."""
+    """Home: the helper, Check and Apply, releases and upgrades, and the helper's last answer."""
     note = f"<p class=bad>{html.escape(message)}</p>" if message else ""
+    if helper_link.upgrading(config.helper):
+        return (f"<section><h2>ok3d {html.escape(__version__)}</h2>{note}<p>Check, Apply, and saving are "
+                "off until the upgrade below is done.</p></section>" + release_section(config))  # fmt: skip
     if not helper_link.alive(config.helper):
         helper = (
             "<p class=bad>The helper isn't running, so Check, Apply, and saving can't happen from "
@@ -188,6 +195,81 @@ def home(config: Config, message: str = "") -> str:
         '<form class="inline" method="post" action="/check"><button>Check</button></form> '
         f'<form class="inline" method="post" action="/apply"><button{disabled}>Apply</button></form>'
         f"{apply_note}</section>" + todo_section(config) + next_section(config) + answer_section(config)
+        + release_section(config)
+    )
+
+
+def release_section(config: Config) -> str:
+    """Releases: how the last upgrade went (or how this one is going), and whether a newer
+    release is out, with the way to it."""
+    last = helper_link.upgrade(config.helper)
+    if last is not None and last.state == "running":
+        f = {k: html.escape(v) for k, v in last.fields.items()}
+        return (
+            f"<section><h2>Upgrading</h2><p>From ok3d {f.get('from', '?')} to {f.get('to', '?')}, "
+            f"started at {f.get('started', '?')}. Now: {f.get('step', '?')}.</p>"
+            "<p class=muted>ok3d's pages are down until it's done. The Dashboard restarts partway, so "
+            "you'll sign in again. Reload this page to see how it's going.</p>"
+            f"<pre>{html.escape(last.output)}</pre></section>"
+        )
+    parts = []
+    if last is not None:
+        f = {k: html.escape(v) for k, v in last.fields.items()}
+        what = f"The upgrade from ok3d {f.get('from', '?')} to {f.get('to', '?')}"
+        if last.state == "finished":
+            parts.append(f"<p class=good>{what} finished at {f.get('finished', '?')}.</p>")
+        else:
+            parts.append(f"<p class=bad>{what} stopped at {f.get('finished', '?')}: {f.get('step', '?')}</p>")
+        if last.output.strip():
+            parts.append(f"<details><summary>What it printed</summary><pre>{html.escape(last.output)}</pre></details>")
+    newest = helper_link.newest_release(config.helper)
+    if newest is not None and newest.release and helper_link.is_newer(newest.release, __version__):
+        release = html.escape(newest.release)
+        parts.append(
+            f"<p>ok3d {release} is out. Read its notes first, especially Upgrading: "
+            f'<a href="{RELEASES_PAGE}{release}">{RELEASES_PAGE}{release}</a></p>'
+            f'<form method="get" action="/upgrade"><button>Upgrade to {release}</button></form>'
+            f"<p class=muted>On the server: <code>./ok3d upgrade {release}</code></p>"
+        )
+    elif newest is not None:
+        parts.append(f"<p>No newer release when ok3d last looked, at {html.escape(newest.checked)}.</p>")
+    else:
+        parts.append("<p>ok3d hasn't looked for a newer release yet.</p>")
+    parts.append(
+        '<form method="post" action="/look-for-release"><button class="plain">Look for a new release</button></form>'
+        "<p class=muted>This asks GitHub for the list of ok3d's releases; ok3d never does on its own. "
+        "On the server: <code>./ok3d upgrade</code></p>"
+    )
+    return "<section><h2>Releases</h2>" + "".join(parts) + "</section>"
+
+
+def upgrade_page(config: Config, message: str = "") -> str:
+    """Upgrade: what upgrading to the newer release does, and the button that starts it."""
+    note = f"<p class=bad>{html.escape(message)}</p>" if message else ""
+    newest = helper_link.newest_release(config.helper)
+    if newest is None or not newest.release or not helper_link.is_newer(newest.release, __version__):
+        return (f"<section><h2>Upgrade</h2>{note}<p>There's no newer release to upgrade to. Home can look "
+                'for one: <a href="/">Home</a>.</p></section>')  # fmt: skip
+    release = html.escape(newest.release)
+    return (
+        f"<section><h2>Upgrade to ok3d {release}</h2>{note}"
+        f'<p>Read its notes first, especially Upgrading: <a href="{RELEASES_PAGE}{release}">'
+        f"{RELEASES_PAGE}{release}</a>. If they say to change something first, do that, then come back.</p>"
+        "<p>Upgrading:</p><ol>"
+        f"<li>Checks that {release} is signed with ok3d's release key, and stops if it isn't.</li>"
+        "<li>Copies your <code>settings.yaml</code>, <code>devices.yaml</code>, and <code>.env</code> to "
+        "<code>local/backups/</code> in the ok3d folder.</li>"
+        f"<li>Moves ok3d to {release}, checks your settings with it, and installs its helper and Dashboard. "
+        "If that check or install fails, it moves back, and nothing else changes.</li>"
+        "<li>Deletes the cluster, backs up the certificate authority, Grafana, and Alertmanager to "
+        f"<code>backups/</code> in the data root, then makes the cluster again with {release}.</li></ol>"
+        "<p>ok3d's pages are down until it's done: the new cluster downloads its images again, so it can "
+        "take as long as your first Apply did. The Dashboard restarts partway, so you'll sign in again. "
+        "Prometheus's history, Grafana's dashboards, Alertmanager's silences, and the certificate "
+        "authority come through.</p>"
+        f"<p class=muted>The same on the server: <code>./ok3d upgrade {release}</code></p>"
+        f'<form method="post" action="/upgrade"><input type="hidden" name="version" value="{release}">'
+        "<p><button>Upgrade now</button></p></form></section>"
     )
 
 
@@ -610,14 +692,19 @@ class Handler(BaseHTTPRequestHandler):
         self.redirect("/", {"Set-Cookie": cookie})
 
     def ask_helper(self, back: str, render: Callable[[Config, str], str], title: str, action: str,
-                   name: str | None = None, body: bytes | None = None, base: str | None = None) -> None:  # fmt: skip
+                   name: str | None = None, body: bytes | None = None, base: str | None = None,
+                   version: str | None = None) -> None:  # fmt: skip
         """Leaves a request for the helper, then sends you Home to watch for the answer, or
         back to the page with what went wrong."""
         if not helper_link.alive(self.config.helper):
             self.send(503, page(title, render(self.config, "The helper isn't running, so nothing was sent."), True))
             return
+        if helper_link.upgrading(self.config.helper):
+            self.send(409, page(title, render(self.config, "An upgrade is running, so nothing was sent. "
+                                              "Home shows how it's going."), True))  # fmt: skip
+            return
         try:
-            helper_link.send(self.config.state, self.config.helper, action, name, body, base)
+            helper_link.send(self.config.state, self.config.helper, action, name, body, base, version)
         except helper_link.Unavailable:
             self.send(503, page(title, render(self.config, "The Dashboard can't write its outbox, so nothing "
                                               "was sent. Check the Dashboard's folder on the server."), True))  # fmt: skip
@@ -637,6 +724,22 @@ class Handler(BaseHTTPRequestHandler):
                                 "no problems first.</p>", True))  # fmt: skip
             return
         self.ask_helper("/", home, "Home", "apply")
+
+    def post_look_for_release(self) -> None:
+        self.discard_body()
+        self.ask_helper("/", home, "Home", "look-for-release")
+
+    def post_upgrade(self) -> None:
+        form = self.read_form()
+        version = (form or {}).get("version", "")
+        newest = helper_link.newest_release(self.config.helper)
+        # Only the release Home offered: one ./ok3d upgrade found, newer than this Dashboard.
+        if (form is None or newest is None or version != newest.release
+                or not helper_link.is_newer(version, __version__)):  # fmt: skip
+            self.send(409, page("Upgrade", upgrade_page(self.config, "That isn't the release on offer any more. "
+                                                        "Here's what is."), True))  # fmt: skip
+            return
+        self.ask_helper("/", upgrade_page, "Upgrade", "upgrade", version=version)
 
     def post_file(self, name: str, action: str, title: str) -> None:
         def render(config: Config, message: str) -> str:
@@ -734,6 +837,7 @@ PAGES: dict[str, tuple[str, Callable[[Config, str], str]]] = {
     "/settings": ("Settings", lambda c, m: file_page(c, "settings.yaml", m)),
     "/devices": ("Devices", lambda c, m: file_page(c, "devices.yaml", m)),
     "/keys": ("Keys", keys_page),
+    "/upgrade": ("Upgrade", upgrade_page),
 }
 
 # What each form does, by path. Every one needs a session and the Dashboard's own Origin.
@@ -744,6 +848,8 @@ ACTIONS: dict[str, Callable[[Handler], None]] = {
     "/settings": Handler.post_settings,
     "/devices": Handler.post_devices,
     "/keys": Handler.post_keys,
+    "/look-for-release": Handler.post_look_for_release,
+    "/upgrade": Handler.post_upgrade,
 }
 
 

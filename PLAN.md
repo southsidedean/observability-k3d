@@ -450,12 +450,24 @@ turn up. Production moves to ok3d at 0.4.0.
 
 ### 0.5.1: The Dashboard's second step (moved from 0.5.0, decided 2026-10-29)
 
-- Upgrades from the Dashboard: back up, move to the new release, recreate, and check.
+- Upgrades from the Dashboard: back up, move to the new release, check, install, recreate
+  (decided 2026-10-30). `./ok3d upgrade vX.Y.Z` does it, run by the helper in a systemd unit
+  of its own, since the new release's `./ok3d install` restarts the helper. It takes only a
+  newer release whose tag is signed by a key in `deploy/release-signers` (the copy from
+  before the move), backs up the settings files, moves back if the new release's check or
+  install fails, and backs up `certs/`, `grafana/`, and `alertmanager/` while the cluster is
+  down. Looking for a release happens only when you ask (`./ok3d upgrade`, or the button on
+  Home), so ok3d still sends nothing on its own.
 - Maintenance windows.
 - Apply asks first when it would stop something.
 - Each choice shown as its `ok3d` command.
 - Home's screenshot retaken from a release: 0.5.0's shows `0.5.0.dev0`.
-- Test: an upgrade from 0.5.0 from the Dashboard alone, with no terminal.
+- Test: 0.5.0 has no upgrade button, so the Dashboard's upgrade is rehearsed on the test VM
+  instead, from the Dashboard alone: two local commits of the branch, each with a Dashboard
+  image built on the VM and releases fetched from a repository on the VM, the first adding a
+  test key to `deploy/release-signers` and the second tagged and signed with it. The
+  installer sets up the first, and the Dashboard upgrades it to the second. The upgrade from 0.5.0 to 0.5.1 uses the installer, as before. From 0.5.2,
+  each release test is an upgrade from the release before, from the Dashboard alone.
 
 ### 0.6: Logs and changes
 

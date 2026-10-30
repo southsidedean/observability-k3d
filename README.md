@@ -88,6 +88,7 @@ cp devices.demo.yaml devices.yaml             # watch the simulated network for 
 [open the pages](docs/certificate.md), [get alerts](docs/alerts.md), and
 [list your own devices](docs/devices.md). `./ok3d test-alert` checks that alerts reach you.
 `./ok3d delete --yes` deletes the cluster and keeps your data; `./ok3d apply` brings it back.
+`./ok3d upgrade` says whether a newer release is out, and moves to it ([upgrading](docs/upgrading.md)).
 
 ## The docs
 

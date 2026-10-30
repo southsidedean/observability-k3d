@@ -1,8 +1,8 @@
 # The Dashboard under the hood
 
-How the Dashboard is built, as the code stands. It's arriving in parts during 0.5: so far it
-has its sign-in and five pages (Home, with Check and Apply; Setup; Settings; Devices; and
-Keys). The
+How the Dashboard is built, as the code stands. So far it has its sign-in, five pages
+(Home, with Check, Apply, and releases; Setup; Settings; Devices; and Keys), and the Upgrade
+page Home leads to. The
 installer (`./ok3d install`, and `install.sh` for `curl | sh`) sets it all up. To see how a request reaches the server, read
 [the helper under the hood](helper-under-the-hood.md).
 
@@ -118,7 +118,8 @@ when the cluster is down.
 
 | Page | What it shows | What it can do |
 |---|---|---|
-| Home | Whether the helper is running, what's left before ok3d can do its job, What's next once an Apply has worked, and the helper's last answer with what `ok3d` printed | **Check**, and **Apply** once a Check has found no problems |
+| Home | Whether the helper is running, what's left before ok3d can do its job, What's next once an Apply has worked, the helper's last answer with what `ok3d` printed, and Releases: a newer release if one was found, and how the last upgrade went (or how this one is going) | **Check**, and **Apply** once a Check has found no problems; **Look for a new release** |
+| Upgrade | What upgrading to the newer release does, with a link to its notes and its `./ok3d upgrade` command | **Upgrade now** |
 | Setup | The ready-made setups, a switch for each module, and where alerts go | Choose a setup, or turn one switch on or off |
 | Settings | Your `settings.yaml`, as the helper last copied it | Save a changed one |
 | Devices | Your `devices.yaml` (or an empty list) | Save a changed one |
@@ -135,6 +136,10 @@ Each page reads only the helper's folder, mounted read-only at `/helper`:
 - `applied`: when the last `./ok3d apply` that worked finished, from the Dashboard or on the
   server. `./ok3d apply` writes it, and `./ok3d delete` removes it. Home shows What's next
   while it's there.
+- `newest-release`: when `./ok3d upgrade` last looked for a release, and the newer one it
+  found. One that isn't a time and a `vX.Y.Z` (or `none`) is ignored.
+- `upgrade` and `upgrade-output`: how the last upgrade went, and the last 16 KB of what it
+  printed, which Home shows escaped.
 
 Every button leaves one request in `/state/outbox/request`, written to a temporary file and
 renamed into place, then sends you to Home, where the answer appears. The Dashboard keeps the
@@ -154,6 +159,17 @@ with a note to wait. If the outbox can't be written, the page says so and sends 
   isn't overwritten. Then it checks the file with `./ok3d validate` and saves it only if it
   passes. A settings save can't change the settings only you may change on the
   server, and Settings has nothing to save until `settings.yaml` exists on the server.
+- **Look for a new release** sends `look-for-release`; the helper runs `./ok3d upgrade`, which
+  asks GitHub for ok3d's list of releases. Home then offers a newer one, if there is one,
+  with a link to its notes and its command. Nothing looks on its own.
+- **Upgrade now** sends `upgrade` with the release, but only the one `newest-release` names,
+  and only if it's newer than the Dashboard's own version: a form naming any other is
+  refused and sends nothing. The helper starts `./ok3d upgrade` in a service of its own,
+  which checks the release again, signature included (helper-under-the-hood.md). While an
+  upgrade runs, Home shows its step and output instead of Check and Apply, and every form
+  that would send a request is refused, as the helper refuses them too. Partway through, the
+  new release's `./ok3d install` replaces the Dashboard's container, and since sessions live
+  in memory, you sign in again.
 - **Keys** checks a value the way the helper will (one line of letters, digits, and symbols,
   with no spaces, quotes, backslashes, `$`, or backticks), so a value the helper would
   refuse is never sent. A value is never shown back, not even in an error.

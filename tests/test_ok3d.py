@@ -6,11 +6,14 @@ tested on the test VM: PLAN.md, "The test VM".)
 
 from __future__ import annotations
 
+import fcntl
 import os
 import pty
 import re
+import shutil
 import stat
 import subprocess
+import tarfile
 from pathlib import Path
 
 import pytest
@@ -100,6 +103,9 @@ fi""",
     # whatever machine the tests run on.
     "uname": 'echo "${FAKE_UNAME:-Darwin}"',
     "systemctl": 'echo "systemctl $*" >>"$FAKE_LOG"',
+    # As util-linux's flock -n FD (macOS has none): the same kernel lock, taken on the shell's
+    # open file, so it's held until the shell ends.
+    "flock": 'exec python3 -c "import fcntl, sys; fcntl.flock(int(sys.argv[1]), fcntl.LOCK_EX | fcntl.LOCK_NB)" "$2" 2>/dev/null',
     "loginctl": 'echo "loginctl $*" >>"$FAKE_LOG"; echo "${FAKE_LINGER:-yes}"',
 }
 
@@ -638,3 +644,423 @@ def test_install_needs_a_data_root(linux: dict[str, str]) -> None:
     result = ok3d(linux, "install")
     assert result.returncode == 1
     assert not any(line.startswith("docker run") for line in calls(linux))
+
+
+# ./ok3d upgrade, with a real git repository standing in for ok3d's releases: v0.5.0 is this
+# ok3d, and v0.5.1 is a stand-in whose ok3d records what it's asked to run (failing a
+# command named in FAKE_NEW_FAIL). Tags are signed with a key made for the test.
+
+NEW_OK3D = r"""#!/bin/sh
+echo "new ok3d $*" >>"$FAKE_LOG"
+# A change to one of ok3d's own files, so moving back fails.
+[ -z "${FAKE_NEW_DIRTY:-}" ] || echo "# changed" >>src/ok3d/__init__.py
+[ "$1" != "${FAKE_NEW_FAIL:-}" ] || { echo "the new $1 failed"; exit 1; }
+"""
+
+
+def git(cwd: Path, *args: str, env: dict[str, str] | None = None) -> str:
+    return subprocess.run(["git", *args], cwd=cwd, env=env, capture_output=True, text=True, check=True).stdout
+
+
+def git_env(tmp_path: Path) -> dict[str, str]:
+    """git without the machine's own settings (a signing key, a signers file), as a made-up person."""
+    return {**os.environ, "GIT_CONFIG_GLOBAL": str(tmp_path / "no-gitconfig"), "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_AUTHOR_NAME": "Test", "GIT_AUTHOR_EMAIL": "test@example.com",
+            "GIT_COMMITTER_NAME": "Test", "GIT_COMMITTER_EMAIL": "test@example.com"}  # fmt: skip
+
+
+def signing_key(tmp_path: Path, name: str) -> Path:
+    key = tmp_path / name
+    subprocess.run(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", "", "-f", str(key)], check=True)
+    return key
+
+
+@pytest.fixture
+def releases(linux: dict[str, str], tmp_path: Path) -> dict[str, str]:
+    """A releases repository and a checkout of it at v0.5.0, and the env to upgrade it with."""
+    genv = git_env(tmp_path)
+    key = signing_key(tmp_path, "release-key")
+    other = signing_key(tmp_path, "other-key")
+    repo = tmp_path / "releases"
+    (repo / "src" / "ok3d").mkdir(parents=True)
+    (repo / "deploy").mkdir()
+    (repo / "deploy" / "release-signers").write_text(
+        f'ok3d-release namespaces="git" {key.with_suffix(".pub").read_text().split()[0]} '
+        f"{key.with_suffix('.pub').read_text().split()[1]}\n"
+    )
+    shutil.copy(ROOT / "ok3d", repo / "ok3d")
+    shutil.copy(ROOT / "deploy" / "ok3d-helper.service", repo / "deploy")
+    git(repo, "init", "--quiet", "--initial-branch=main", env=genv)
+
+    def commit(version: str, ok3d_text: str | None = None) -> None:
+        (repo / "src" / "ok3d" / "__init__.py").write_text(f'__version__ = "{version}"\n')
+        if ok3d_text is not None:
+            (repo / "ok3d").write_text(ok3d_text)
+        git(repo, "add", "-A", env=genv)
+        git(repo, "commit", "--quiet", "-m", version, env=genv)
+
+    def tag(name: str, with_key: Path | None) -> None:
+        if with_key is None:
+            git(repo, "tag", "-a", name, "-m", name, env=genv)
+        else:
+            git(repo, "-c", "gpg.format=ssh", "-c", f"user.signingkey={with_key}", "tag", "-s", name, "-m", name, env=genv)
+
+    commit("0.5.0")
+    tag("v0.5.0", key)
+    commit("0.5.1.dev0")
+    git(repo, "branch", "dev", env=genv)
+    commit("0.5.1", NEW_OK3D)
+    tag("v0.5.1", key)
+    commit("0.5.2", NEW_OK3D)
+    tag("v0.5.2", None)  # not signed
+    commit("0.5.3", NEW_OK3D)
+    tag("v0.5.3", other)  # signed, by a key that isn't in deploy/release-signers
+    # v0.5.1's signed tag, pushed again under a newer name by someone without the key.
+    git(repo, "update-ref", "refs/tags/v0.5.4", git(repo, "rev-parse", "v0.5.1", env=genv).strip(), env=genv)
+    commit("0.5.4", NEW_OK3D)
+    tag("v0.5.5", key)  # properly signed, but its ok3d says it's 0.5.4
+    tag("v0.9.0-rc1", key)  # a test release, never offered
+    git(repo, "checkout", "--quiet", "dev", env=genv)
+    checkout = tmp_path / "checkout"
+    git(tmp_path, "clone", "--quiet", "--branch", "v0.5.0", str(repo), str(checkout), env=genv)
+    for tag_name in ("v0.5.1", "v0.5.2", "v0.5.3", "v0.5.4", "v0.5.5", "v0.9.0-rc1"):  # as if they weren't out yet
+        git(checkout, "tag", "--delete", tag_name, env=genv)
+    data = Path(linux["FAKE_DATA_ROOT"])
+    for part in ("helper", "certs", "grafana", "alertmanager", "prometheus"):
+        (data / part).mkdir()
+    (data / "grafana" / "grafana.db").write_text("dashboards")
+    (data / "prometheus" / "big").write_text("history")
+    git_only = {k: v for k, v in genv.items() if k.startswith("GIT_")}  # the stand-ins' PATH stays
+    return {**linux, **git_only, "OK3D_REPO": str(repo), "CHECKOUT": str(checkout)}
+
+
+def upgrade(env: dict[str, str], *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run([str(Path(env["CHECKOUT"]) / "ok3d"), "upgrade", *args],
+                          capture_output=True, text=True, env=env, check=False)  # fmt: skip
+
+
+def at(env: dict[str, str]) -> str:
+    return (Path(env["CHECKOUT"]) / "src" / "ok3d" / "__init__.py").read_text()
+
+
+def note(env: dict[str, str], name: str) -> dict[str, str]:
+    text = (Path(env["FAKE_DATA_ROOT"]) / "helper" / name).read_text()
+    return dict(line.split("=", 1) for line in text.splitlines() if "=" in line)
+
+
+def test_upgrade_says_which_release_is_newer(releases: dict[str, str]) -> None:
+    result = upgrade(releases)
+    assert result.returncode == 0, result.stderr
+    assert "ok3d v0.5.5 is out (this is ok3d 0.5.0)." in result.stdout  # not v0.9.0-rc1
+    assert "./ok3d upgrade v0.5.5" in result.stdout
+    assert note(releases, "newest-release")["newest"] == "v0.5.5"
+
+
+def test_upgrade_moves_to_a_signed_release_and_makes_the_cluster_again(releases: dict[str, str]) -> None:
+    result = upgrade(releases, "v0.5.1", "--yes")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert '"0.5.1"' in at(releases)
+    assert [c for c in calls(releases) if c.startswith("new ok3d")] == [
+        "new ok3d check", "new ok3d install", "new ok3d delete --yes", "new ok3d apply"]  # fmt: skip
+    data = Path(releases["FAKE_DATA_ROOT"])
+    (archive,) = (data / "backups").glob("before-v0.5.1-*.tar.gz")
+    with tarfile.open(archive) as tar:
+        names = tar.getnames()
+    assert "grafana/grafana.db" in names and "certs" in names and "alertmanager" in names
+    assert not any(n.startswith("prometheus") for n in names)
+    assert stat.S_IMODE(archive.stat().st_mode) == 0o600
+    (saved,) = (Path(releases["CHECKOUT"]) / "local" / "backups").glob("before-v0.5.1-*")
+    assert (saved / "settings.yaml").read_text() == "settingsVersion: 1\n"
+    done = note(releases, "upgrade")
+    assert {"from": "0.5.0", "to": "v0.5.1", "state": "finished"}.items() <= done.items()
+    output = (data / "helper" / "upgrade-output").read_text()
+    assert "== Checking v0.5.1's signature" in output and "Upgraded from ok3d 0.5.0 to v0.5.1." in output
+    with (Path(releases["CHECKOUT"]) / "local" / "upgrading").open() as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)  # let go of: no one holds it now
+
+
+@pytest.mark.parametrize("tag", ["v0.5.2", "v0.5.3"])
+def test_upgrade_refuses_a_release_without_a_known_signature(releases: dict[str, str], tag: str) -> None:
+    result = upgrade(releases, tag, "--yes")
+    assert result.returncode == 1
+    assert "isn't signed by a key in deploy/release-signers" in result.stderr
+    assert '"0.5.0"' in at(releases)
+    assert not any(c.startswith(("new ok3d", "k3d cluster delete")) for c in calls(releases))
+    assert note(releases, "upgrade")["state"] == "failed"
+
+
+def test_a_failed_check_moves_back_and_leaves_the_cluster(releases: dict[str, str]) -> None:
+    result = upgrade(releases | {"FAKE_NEW_FAIL": "check"}, "v0.5.1", "--yes")
+    assert result.returncode == 1
+    assert "check found problems" in result.stderr
+    assert '"0.5.0"' in at(releases)
+    assert [c for c in calls(releases) if c.startswith("new ok3d")] == ["new ok3d check"]
+    assert note(releases, "upgrade")["state"] == "failed"
+
+
+def test_a_failed_install_moves_back_and_installs_the_old_release_again(releases: dict[str, str]) -> None:
+    result = upgrade(releases | {"FAKE_NEW_FAIL": "install"}, "v0.5.1", "--yes")
+    assert result.returncode == 1
+    assert '"0.5.0"' in at(releases)
+    log = calls(releases)
+    assert [c for c in log if c.startswith("new ok3d")] == ["new ok3d check", "new ok3d install"]
+    after = log[log.index("new ok3d install") :]
+    assert any(c.startswith("docker run") for c in after)  # 0.5.0's own install, again
+    assert not any(c.startswith("new ok3d delete") for c in log)
+
+
+def test_a_failed_apply_stops_and_says_so(releases: dict[str, str]) -> None:
+    result = upgrade(releases | {"FAKE_NEW_FAIL": "apply"}, "v0.5.1", "--yes")
+    assert result.returncode == 1
+    assert "./ok3d apply failed" in result.stderr
+    assert {"state": "failed", "to": "v0.5.1"}.items() <= note(releases, "upgrade").items()
+
+
+@pytest.mark.parametrize("tag", ["v0.5.0", "v0.4.0"])
+def test_upgrade_only_moves_forward(releases: dict[str, str], tag: str) -> None:
+    result = upgrade(releases, tag, "--yes")
+    assert result.returncode == 1
+    assert "only moves forward" in result.stderr
+
+
+@pytest.mark.parametrize("tag", ["0.5.1", "v0.5", "v0.5.1.1", "vv0.5.1", "v0..5", "v0.5.1;reboot",
+                                 "v0.5.1\nv", "v0.5.", "--yes", "v123456789.123456789.0"])  # fmt: skip
+def test_upgrade_takes_only_a_release_tag(releases: dict[str, str], tag: str) -> None:
+    result = upgrade(releases, tag, "--yes")
+    assert result.returncode == 2
+    assert "a release tag such as v0.5.1" in result.stderr
+
+
+def test_upgrade_needs_a_yes(releases: dict[str, str]) -> None:
+    result = upgrade(releases, "v0.5.1")
+    assert result.returncode == 1
+    assert "--yes" in result.stderr
+    assert '"0.5.0"' in at(releases)
+
+
+def test_upgrade_wont_move_a_checkout_with_your_changes(releases: dict[str, str]) -> None:
+    (Path(releases["CHECKOUT"]) / "ok3d").write_text((Path(releases["CHECKOUT"]) / "ok3d").read_text() + "\n# mine\n")
+    result = upgrade(releases, "v0.5.1", "--yes")
+    assert result.returncode == 1
+    assert "changes of yours" in result.stderr
+
+
+def test_one_upgrade_at_a_time(releases: dict[str, str]) -> None:
+    lock = Path(releases["CHECKOUT"]) / "local" / "upgrading"
+    lock.parent.mkdir(parents=True)
+    with lock.open("w") as held:
+        fcntl.flock(held, fcntl.LOCK_EX)  # as an upgrade that's running holds it
+        result = upgrade(releases, "v0.5.1", "--yes")
+    assert result.returncode == 1
+    assert "An upgrade is running already" in result.stderr
+    assert '"0.5.0"' in at(releases)
+
+
+def test_a_lock_file_left_behind_counts_for_nothing(releases: dict[str, str]) -> None:
+    lock = Path(releases["CHECKOUT"]) / "local" / "upgrading"
+    lock.parent.mkdir(parents=True)
+    lock.write_text("")  # left by an upgrade that ended, however it ended: nothing holds it
+    result = upgrade(releases, "v0.5.1", "--yes")
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_a_signed_tag_under_another_name_isnt_taken(releases: dict[str, str]) -> None:
+    result = upgrade(releases, "v0.5.4", "--yes")
+    assert result.returncode == 1
+    assert "The tag called v0.5.4 is really v0.5.1." in result.stdout
+    assert '"0.5.0"' in at(releases)
+
+
+def test_a_release_whose_ok3d_says_another_version_is_left(releases: dict[str, str]) -> None:
+    result = upgrade(releases, "v0.5.5", "--yes")
+    assert result.returncode == 1
+    assert "v0.5.5 says it's ok3d 0.5.4, not 0.5.5" in result.stderr
+    assert '"0.5.0"' in at(releases)
+    assert not any(c.startswith("new ok3d") for c in calls(releases))
+
+
+def test_the_signed_commit_is_checked_out_even_with_a_branch_of_the_same_name(releases: dict[str, str]) -> None:
+    checkout = Path(releases["CHECKOUT"])
+    git(checkout, "branch", "v0.5.1", "origin/dev", env=releases)  # a branch called v0.5.1, at 0.5.1.dev0
+    assert upgrade(releases, "v0.5.1", "--yes").returncode == 0
+    assert '"0.5.1"' in at(releases)
+    assert git(checkout, "rev-parse", "HEAD", env=releases) == git(checkout, "rev-parse", "refs/tags/v0.5.1^{commit}", env=releases)
+
+
+def test_a_refusal_shows_on_the_dashboard(releases: dict[str, str]) -> None:
+    script = Path(releases["CHECKOUT"]) / "ok3d"
+    script.write_text(script.read_text() + "\n# mine\n")
+    result = upgrade(releases | {"OK3D_UPGRADE_FROM_DASHBOARD": "yes"}, "v0.5.1", "--yes")
+    assert result.returncode == 1
+    told = note(releases, "upgrade")
+    assert {"from": "0.5.0", "to": "v0.5.1", "state": "failed"}.items() <= told.items()
+    assert "changes of yours" in told["step"]
+    assert "changes of yours" in (Path(releases["FAKE_DATA_ROOT"]) / "helper" / "upgrade-output").read_text()
+
+
+def test_upgrade_waits_for_a_request_the_helper_is_carrying_out(releases: dict[str, str]) -> None:
+    result_file = Path(releases["FAKE_DATA_ROOT"]) / "helper" / "result"
+    result_file.write_text("id=0123456789abcdef\naction=apply\nstate=running\n\n")
+    result = upgrade(releases | {"OK3D_BUSY_WAIT": "0"}, "v0.5.1", "--yes")  # a real Apply: still running
+    assert result.returncode == 1
+    assert "carrying out a request from the Dashboard" in result.stderr
+    # The helper's own answer while it starts an upgrade doesn't count.
+    result_file.write_text("id=0123456789abcdef\naction=upgrade\nstate=running\n\n")
+    assert upgrade(releases, "v0.5.1", "--yes").returncode == 0
+
+
+def test_a_failed_check_moves_back_to_the_branch_you_were_on(releases: dict[str, str]) -> None:
+    checkout = Path(releases["CHECKOUT"])
+    git(checkout, "checkout", "--quiet", "-b", "mine", env=releases)
+    result = upgrade(releases | {"FAKE_NEW_FAIL": "check"}, "v0.5.1", "--yes")
+    assert result.returncode == 1
+    assert git(checkout, "symbolic-ref", "--short", "HEAD", env=releases).strip() == "mine"
+    assert note(releases, "upgrade")["state"] == "failed"
+
+
+def test_only_the_last_three_settings_backups_are_kept(releases: dict[str, str]) -> None:
+    backups = Path(releases["CHECKOUT"]) / "local" / "backups"
+    for n in range(4):
+        old = backups / f"before-v0.5.1-2026010{n}T000000Z"
+        old.mkdir(parents=True)
+        os.utime(old, (n, n))
+    assert upgrade(releases | {"FAKE_NEW_FAIL": "check"}, "v0.5.1", "--yes").returncode == 1
+    kept = sorted(p.name for p in backups.glob("before-*"))
+    assert len(kept) == 3 and "before-v0.5.1-20260100T000000Z" not in kept
+
+
+def test_a_development_version_comes_before_its_release(releases: dict[str, str]) -> None:
+    git(Path(releases["CHECKOUT"]), "fetch", "--quiet", "origin", "dev", env=releases)
+    git(Path(releases["CHECKOUT"]), "checkout", "--quiet", "FETCH_HEAD", env=releases)
+    assert '"0.5.1.dev0"' in at(releases)
+    result = upgrade(releases, "v0.5.1", "--yes")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert '"0.5.1"' in at(releases)
+
+
+def test_a_refusal_on_the_server_leaves_homes_record_alone(releases: dict[str, str]) -> None:
+    record = Path(releases["FAKE_DATA_ROOT"]) / "helper" / "upgrade"
+    record.write_text("from=0.4.0\nto=v0.5.0\nstate=finished\n")
+    assert upgrade(releases, "v0.4.0", "--yes").returncode == 1  # a typo, from a terminal
+    assert record.read_text() == "from=0.4.0\nto=v0.5.0\nstate=finished\n"
+
+
+def test_a_refusal_never_writes_over_a_running_upgrades_record(releases: dict[str, str]) -> None:
+    helper_dir = Path(releases["FAKE_DATA_ROOT"]) / "helper"
+    (helper_dir / "upgrade").write_text("from=0.5.0\nto=v0.5.1\nstate=running\nstep=Making the cluster again\n")
+    (helper_dir / "upgrade-output").write_text("== Moving to v0.5.1\n")
+    lock = Path(releases["CHECKOUT"]) / "local" / "upgrading"
+    lock.parent.mkdir(parents=True)
+    with lock.open("w") as held:
+        fcntl.flock(held, fcntl.LOCK_EX)  # that upgrade, running
+        result = upgrade(releases | {"OK3D_UPGRADE_FROM_DASHBOARD": "yes"}, "v0.4.0", "--yes")
+    assert "An upgrade is running already" in result.stderr
+    assert "state=running" in (helper_dir / "upgrade").read_text()
+    assert (helper_dir / "upgrade-output").read_text() == "== Moving to v0.5.1\n"
+
+
+def test_the_lock_is_held_while_it_asks(releases: dict[str, str]) -> None:
+    # Held from before the check for a request the helper is carrying out until the end, so
+    # the helper can't start an Apply while you're deciding.
+    main, side = pty.openpty()
+    proc = subprocess.Popen([str(Path(releases["CHECKOUT"]) / "ok3d"), "upgrade", "v0.5.1"], stdin=side,
+                            stdout=side, stderr=subprocess.PIPE, env=releases)  # fmt: skip
+    try:
+        out = b""
+        while b"Type v0.5.1" not in out:
+            out += os.read(main, 4096)
+        with (Path(releases["CHECKOUT"]) / "local" / "upgrading").open() as lock, pytest.raises(BlockingIOError):
+            fcntl.flock(lock, fcntl.LOCK_SH | fcntl.LOCK_NB)
+        os.write(main, b"no\n")
+        assert proc.wait(timeout=30) == 1
+    finally:
+        proc.kill()
+        os.close(main)
+        os.close(side)
+    assert '"0.5.0"' in at(releases)
+
+
+def test_a_failed_move_back_says_so(releases: dict[str, str]) -> None:
+    result = upgrade(releases | {"FAKE_NEW_FAIL": "check", "FAKE_NEW_DIRTY": "yes"}, "v0.5.1", "--yes")
+    assert result.returncode == 1
+    assert "Moving back to 0.5.0 failed too" in result.stderr
+    assert "Moving back to 0.5.0 failed too" in note(releases, "upgrade")["step"]
+
+
+def sign(releases: dict[str, str], tmp_path: Path, name: str, target: str, version: str) -> str:
+    """A tag called name, signed with the release key, for a new commit saying version (or,
+    with target "tree", for that commit's tree); returns the tag object's id."""
+    repo = Path(releases["OK3D_REPO"])
+    git(repo, "checkout", "--quiet", "v0.5.1", env=releases)
+    (repo / "src" / "ok3d" / "__init__.py").write_text(f'__version__ = "{version}"\n')
+    git(repo, "commit", "--quiet", "-am", version, env=releases)
+    git(repo, "-c", "gpg.format=ssh", "-c", f"user.signingkey={tmp_path / 'release-key'}", "tag", "-s", name,
+        "-m", name, "HEAD^{tree}" if target == "tree" else "HEAD", env=releases)  # fmt: skip
+    return git(repo, "rev-parse", f"refs/tags/{name}", env=releases).strip()
+
+
+def test_the_tag_name_is_matched_exactly(releases: dict[str, str], tmp_path: Path) -> None:
+    # A signed tag called v0a5a6 (whose name would match v0.5.6 as a pattern), published as v0.5.6.
+    made = sign(releases, tmp_path, "v0a5a6", "commit", "0.5.6")
+    git(Path(releases["OK3D_REPO"]), "update-ref", "refs/tags/v0.5.6", made, env=releases)
+    result = upgrade(releases, "v0.5.6", "--yes")
+    assert result.returncode == 1
+    assert "The tag called v0.5.6 is really v0a5a6." in result.stdout
+    assert '"0.5.0"' in at(releases)
+
+
+def test_a_signed_tag_of_something_other_than_a_commit_is_refused(releases: dict[str, str], tmp_path: Path) -> None:
+    sign(releases, tmp_path, "v0.5.7", "tree", "0.5.7")
+    result = upgrade(releases, "v0.5.7", "--yes")
+    assert result.returncode == 1
+    assert "v0.5.7 is a tag for something other than a commit." in result.stdout
+
+
+def test_a_tag_here_that_isnt_the_one_there_is_refused_and_says_why(releases: dict[str, str]) -> None:
+    checkout = Path(releases["CHECKOUT"])
+    git(checkout, "tag", "v0.5.1", env=releases)  # a different v0.5.1, already here
+    result = upgrade(releases, "v0.5.1", "--yes")
+    assert result.returncode == 1
+    assert "would clobber existing tag" in result.stdout
+    assert "would clobber existing tag" in (Path(releases["FAKE_DATA_ROOT"]) / "helper" / "upgrade-output").read_text()
+
+
+def test_a_failed_check_never_reinstalls_whatever_the_environment_says(releases: dict[str, str]) -> None:
+    result = upgrade(releases | {"FAKE_NEW_FAIL": "check", "reinstall": "yes"}, "v0.5.1", "--yes")
+    assert result.returncode == 1
+    log = calls(releases)
+    assert not any(c.startswith("docker run") for c in log[log.index("new ok3d check"):])
+
+
+def test_a_request_the_helper_refuses_a_moment_later_doesnt_stop_the_upgrade(releases: dict[str, str],
+                                                                             tmp_path: Path) -> None:  # fmt: skip
+    # A Check that arrived just now says it's running, then the helper sees the upgrade's lock
+    # and refuses it: the upgrade reads the answer again, and goes on. The stand-in sleep is
+    # where the helper refuses it, so the test doesn't depend on timing.
+    result_file = Path(releases["FAKE_DATA_ROOT"]) / "helper" / "result"
+    result_file.write_text("id=0123456789abcdef\naction=check\nstate=running\n\n")
+    waits = tmp_path / "waits"
+    waits.mkdir()
+    (waits / "sleep").write_text('#!/bin/sh\necho "sleep $*" >>"$FAKE_LOG"\n'
+                                 'printf \'id=0123456789abcdef\\nstate=refused\\n\\n\' >"$FAKE_RESULT"\n')  # fmt: skip
+    (waits / "sleep").chmod(0o755)
+    env = releases | {"PATH": f"{waits}:{releases['PATH']}", "FAKE_RESULT": str(result_file), "OK3D_BUSY_WAIT": "5"}
+    result = upgrade(env, "v0.5.1", "--yes")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "sleep 1" in calls(releases)  # it waited, and read the answer again
+
+
+def test_a_request_that_stays_running_is_refused_after_the_wait(releases: dict[str, str], tmp_path: Path) -> None:
+    # A real Apply stays running: the upgrade reads it again once a second, then refuses, and
+    # never waits longer than it's allowed.
+    result_file = Path(releases["FAKE_DATA_ROOT"]) / "helper" / "result"
+    result_file.write_text("id=0123456789abcdef\naction=apply\nstate=running\n\n")
+    waits = tmp_path / "waits"
+    waits.mkdir()
+    (waits / "sleep").write_text('#!/bin/sh\necho "sleep $*" >>"$FAKE_LOG"\n')
+    (waits / "sleep").chmod(0o755)
+    result = upgrade(releases | {"PATH": f"{waits}:{releases['PATH']}", "OK3D_BUSY_WAIT": "2"}, "v0.5.1", "--yes")
+    assert result.returncode == 1
+    assert "carrying out a request from the Dashboard" in result.stderr
+    assert [c for c in calls(releases) if c.startswith("sleep")] == ["sleep 1", "sleep 1"]
+    assert '"0.5.0"' in at(releases)

@@ -731,6 +731,7 @@ def test_the_dashboard_and_the_helper_agree_on_what_may_be_sent() -> None:
     assert tuple(name for name, _ in server.KEY_ABOUT) == helper.ENV_NAMES
     assert helper_link.ENV_VALUE.pattern == helper.ENV_VALUE.pattern
     assert helper_link.MAX_FILE == helper.MAX_FILE
+    assert helper_link.VERSION.pattern == helper.VERSION.pattern
 
 
 
@@ -930,3 +931,110 @@ def test_whats_next_never_links_to_a_domain_it_cant_trust(ready: Dashboard) -> N
     shown = body(ready.get("/", ready.sign_in()))
     assert "<script>" not in shown
     assert '<a href="https://grafana.noc.home.arpa:8443/">' in shown
+
+
+# Releases and upgrades: ./ok3d upgrade writes newest-release and upgrade to the helper's
+# folder; the Dashboard shows them, and sends only the release it found.
+
+NEWER = "v99.0.0"
+
+
+def found(dash: Dashboard, release: str = NEWER) -> None:
+    (dash.helper / "newest-release").write_text(f"checked=2026-10-30T09:00:00Z\nnewest={release}\n")
+
+
+def test_home_offers_to_look_for_a_release(ready: Dashboard) -> None:
+    session = ready.sign_in()
+    page = body(ready.get("/", session))
+    assert "ok3d hasn't looked for a newer release yet." in page
+    assert ready.post("/look-for-release", session=session).status == 303
+    assert head(outbox(ready))["action"] == "look-for-release"
+
+
+def test_home_shows_a_newer_release_with_its_notes_and_command(ready: Dashboard) -> None:
+    found(ready)
+    page = body(ready.get("/", ready.sign_in()))
+    assert f"ok3d {NEWER} is out." in page
+    assert f'href="https://github.com/southsidedean/observability-k3d/releases/tag/{NEWER}"' in page
+    assert f"<code>./ok3d upgrade {NEWER}</code>" in page
+    assert '<form method="get" action="/upgrade">' in page
+
+
+def test_a_release_that_isnt_newer_isnt_offered(ready: Dashboard) -> None:
+    found(ready, "v0.0.1")
+    session = ready.sign_in()
+    assert "No newer release when ok3d last looked, at 2026-10-30T09:00:00Z." in body(ready.get("/", session))
+    assert "no newer release to upgrade to" in body(ready.get("/upgrade", session))
+    assert ready.post("/upgrade", "version=v0.0.1", session=session).status == 409
+    assert not (ready.state / "outbox" / "request").exists()
+
+
+def test_the_upgrade_page_says_what_happens_then_sends_the_release(ready: Dashboard) -> None:
+    found(ready)
+    session = ready.sign_in()
+    page = body(ready.get("/upgrade", session))
+    assert f"Upgrade to ok3d {NEWER}" in page and "signed with ok3d's release key" in page
+    assert ready.post("/upgrade", f"version={NEWER}", session=session).status == 303
+    request = outbox(ready)
+    fields = head(request)
+    assert request == f"id={fields['id']}\naction=upgrade\nversion={NEWER}\n".encode()
+
+
+@pytest.mark.parametrize("form", ["version=v98.0.0", "version=v99.0.0%0Aaction=apply", "", "version=main"])
+def test_only_the_release_on_offer_is_sent(ready: Dashboard, form: str) -> None:
+    found(ready)
+    assert ready.post("/upgrade", form, session=ready.sign_in()).status == 409
+    assert not (ready.state / "outbox" / "request").exists()
+
+
+def test_a_newest_release_file_that_isnt_ok3ds_is_ignored(ready: Dashboard) -> None:
+    (ready.helper / "newest-release").write_text("checked=2026-10-30T09:00:00Z\nnewest=v1.0.0<script>\n")
+    session = ready.sign_in()
+    assert "<script>" not in body(ready.get("/", session))
+    assert ready.post("/upgrade", "version=v1.0.0", session=session).status == 409
+
+
+def test_a_running_upgrade_shows_how_its_going_and_stops_everything_else(ready: Dashboard) -> None:
+    (ready.helper / "upgrade").write_text("from=0.5.1\nto=v0.5.2\nstate=running\nstep=Deleting the cluster\n"
+                                          "started=2026-10-30T09:00:00Z\n")
+    (ready.helper / "upgrade-output").write_text("== Moving to v0.5.2\n<b>printed</b>\n")
+    session = ready.sign_in()
+    page = body(ready.get("/", session))
+    assert "From ok3d 0.5.1 to v0.5.2, started at 2026-10-30T09:00:00Z. Now: Deleting the cluster." in page
+    assert "&lt;b&gt;printed&lt;/b&gt;" in page
+    assert 'action="/check"' not in page
+    for path, form in (("/check", ""), ("/look-for-release", ""), ("/keys", "name=NTFY_TOPIC&value=x")):
+        assert ready.post(path, form, session=session).status == 409, path
+    assert not (ready.state / "outbox" / "request").exists()
+
+
+@pytest.mark.parametrize(("state", "says"), [("finished", "finished at 2026-10-30T09:40:00Z."),
+                                             ("failed", "stopped at 2026-10-30T09:40:00Z: ./ok3d apply failed")])
+def test_home_says_how_the_last_upgrade_went(ready: Dashboard, state: str, says: str) -> None:
+    (ready.helper / "upgrade").write_text(f"from=0.5.1\nto=v0.5.2\nstate={state}\nstep=./ok3d apply failed\n"
+                                          "finished=2026-10-30T09:40:00Z\n")
+    page = body(ready.get("/", ready.sign_in()))
+    assert f"The upgrade from ok3d 0.5.1 to v0.5.2 {says}" in page
+    assert 'action="/check"' in page
+
+
+def test_only_the_end_of_a_long_upgrade_is_shown(tmp_path: Path) -> None:
+    from ok3d.dashboard import helper_link
+
+    (tmp_path / "upgrade").write_text("state=running\n")
+    (tmp_path / "upgrade-output").write_text("".join(f"line {n}\n" for n in range(10_000)))
+    shown = helper_link.upgrade(tmp_path)
+    assert shown is not None
+    assert shown.output.endswith("line 9999\n") and len(shown.output) <= helper_link.UPGRADE_TAIL
+    assert shown.output.startswith("line ")  # from the start of a line
+
+
+@pytest.mark.parametrize(("tag", "version", "newer"), [
+    ("v0.5.1", "0.5.0", True), ("v0.5.1", "0.5.1.dev0", True), ("v0.5.1", "0.5.1", False),
+    ("v0.5.0", "0.5.1.dev0", False), ("v0.10.0", "0.9.9", True), ("v1.0.0", "0.99.0", True),
+    ("v0.5", "0.4.0", False), ("main", "0.4.0", False),
+])  # fmt: skip
+def test_which_releases_are_newer(tag: str, version: str, newer: bool) -> None:
+    from ok3d.dashboard import helper_link
+
+    assert helper_link.is_newer(tag, version) is newer

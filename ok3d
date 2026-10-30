@@ -15,6 +15,14 @@
 #   ./ok3d demo up    Start the simulated network: a few small containers that stand in for a
 #                     home network's devices, and a fake UniFi controller. docs/demo.md says
 #                     more. Also: demo down, demo status, demo fail <device>, demo fix <device>.
+#   ./ok3d upgrade    Look for a newer release of ok3d, and say how to move to it.
+#   ./ok3d upgrade vX.Y.Z
+#                     Move to that release: check its signature, back up your settings, move
+#                     this checkout to it, check, install its helper and Dashboard, then make
+#                     the cluster again from it, with the data root backed up while the cluster
+#                     is down. If the new release's check or install fails, it moves back and
+#                     the cluster isn't touched. Asks first; --yes skips the question. (Linux,
+#                     with systemd.) docs/upgrading.md says more.
 #   ./ok3d test-alert Send a test alert through Alertmanager, to check that alerts reach you.
 #   ./ok3d validate settings FILE [--from-dashboard]
 #   ./ok3d validate devices FILE
@@ -51,6 +59,11 @@ min_watches=1048576
 # Free memory below this gets a warning: the whole stack needs about 11 GiB, and about 7 with
 # agents off (PLAN.md, "The host").
 warn_memory_gib=7
+
+# Where releases come from, for ./ok3d upgrade. OK3D_REPO names another, for a test; the
+# helper never passes it on.
+releases_repo=${OK3D_REPO:-https://github.com/southsidedean/observability-k3d.git}
+releases_page=https://github.com/southsidedean/observability-k3d/releases/tag
 
 # The simulated network (docs/demo.md): its devices are listed in demo/network.tsv, on a Docker
 # network of their own in 198.51.100.0/24, a range reserved for documentation. The gateway
@@ -523,13 +536,21 @@ cmd_apply() {
 		echo "The admin password is in $DATA_ROOT/admin-password."
 	fi
 	echo "Point *.$DOMAIN at this computer in your router or local DNS server (docs/certificate.md)."
-	# When it worked, for the Dashboard's What's next, in the helper's folder once the
-	# installer has made it (docs/dashboard-under-the-hood.md).
-	if [ -d "$DATA_ROOT/helper" ] && [ ! -L "$DATA_ROOT/helper" ]; then
-		rm -f "$DATA_ROOT/helper/.applied.tmp"
-		date -u +%Y-%m-%dT%H:%M:%SZ >"$DATA_ROOT/helper/.applied.tmp"
-		mv -f "$DATA_ROOT/helper/.applied.tmp" "$DATA_ROOT/helper/applied"
-	fi
+	# When it worked, for the Dashboard's What's next (docs/dashboard-under-the-hood.md).
+	helper_note applied "$(now)
+"
+}
+
+now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
+
+# helper_note NAME TEXT: a file in the helper's folder for the Dashboard to read, written
+# whole and renamed into place, so it never reads half of one. Only once the installer has
+# made the folder, and never through a link.
+helper_note() {
+	[ -d "$DATA_ROOT/helper" ] && [ ! -L "$DATA_ROOT/helper" ] || return 0
+	rm -f "$DATA_ROOT/helper/.$1.tmp"
+	printf '%s' "$2" >"$DATA_ROOT/helper/.$1.tmp"
+	mv -f "$DATA_ROOT/helper/.$1.tmp" "$DATA_ROOT/helper/$1"
 }
 
 # The Dashboard's certificate, issued by ok3d's certificate authority for dashboard.<domain>,
@@ -910,7 +931,305 @@ cmd_validate() {
 }
 
 cmd_version() {
-	sed -n 's/^__version__ = "\(.*\)"$/ok3d \1/p' src/ok3d/__init__.py
+	echo "ok3d $(this_version)"
+}
+
+this_version() {
+	sed -n 's/^__version__ = "\(.*\)"$/\1/p' src/ok3d/__init__.py
+}
+
+# is_newer vX.Y.Z: whether that release is newer than this checkout. A development version
+# (0.5.1.dev0) comes before its release (0.5.1).
+is_newer() {
+	have=$(this_version)
+	base=$(printf '%s' "$have" | sed 's/^\([0-9]*\.[0-9]*\.[0-9]*\).*/\1/')
+	if [ "${1#v}" = "$base" ]; then
+		case "$have" in *dev*) return 0 ;; *) return 1 ;; esac
+	fi
+	version_at_least "${1#v}" "$base"
+}
+
+# The newest release's tag (vX.Y.Z, not a test tag like v1.2.3-rc1), from releases_repo.
+newest_release() {
+	git ls-remote --tags --refs "$releases_repo" 'v*' |
+		sed -n 's#.*refs/tags/\(v[0-9]\{1,6\}\.[0-9]\{1,6\}\.[0-9]\{1,6\}\)$#\1#p' |
+		sort -t. -k1.2,1n -k2,2n -k3,3n | tail -n 1
+}
+
+cmd_upgrade() {
+	load_settings
+	if [ -z "${1:-}" ]; then
+		look_for_release
+	else
+		upgrade_to "$1" "${2:-}"
+	fi
+}
+
+# Asks releases_repo for its releases (nothing is sent but the request), and says whether
+# one is newer. The answer goes to the helper's folder too, for the Dashboard's Home.
+look_for_release() {
+	newest=$(newest_release) || newest=""
+	if [ -z "$newest" ]; then
+		echo "Couldn't get the list of ok3d's releases from $releases_repo." >&2
+		exit 1
+	fi
+	if is_newer "$newest"; then
+		helper_note newest-release "checked=$(now)
+newest=$newest
+"
+		echo "ok3d $newest is out (this is ok3d $(this_version))."
+		echo "Read its notes first, especially Upgrading: $releases_page/$newest"
+		echo "Then move to it: ./ok3d upgrade $newest"
+	else
+		helper_note newest-release "checked=$(now)
+newest=none
+"
+		echo "No release is newer than this one (ok3d $(this_version))."
+	fi
+}
+
+# upgrade_note STATE STEP: how the upgrade is going, for the Dashboard's Home.
+upgrade_note() {
+	helper_note upgrade "from=$from
+to=$target
+state=$1
+step=$2
+started=$started
+$([ "$1" = running ] || echo "finished=$(now)")
+"
+}
+
+# step WHAT COMMAND...: one step of the upgrade, its output both on the screen and in the
+# log the Dashboard shows. Fails when the command does. A function run this way is in an ||
+# list, where set -e doesn't stop it, so each of those returns on its own failures.
+step() {
+	what=$1
+	shift
+	upgrade_note running "$what"
+	echo "== $what" | tee -a "$log"
+	{
+		s=0
+		"$@" 2>&1 9>&- || s=$?
+		echo "$s" >"$work/status"
+	} | tee -a "$log"
+	[ "$(cat "$work/status")" = 0 ]
+}
+
+# stopped WHY: the upgrade stopped partway; says so on the screen, in the log, and to the
+# Dashboard.
+stopped() {
+	echo "The upgrade stopped: $1" | tee -a "$log" >&2
+	upgrade_note failed "$1"
+	exit 1
+}
+
+# go_back WHY: moves the checkout back to where it was before the upgrade, then stops,
+# saying why, and whether the move back worked.
+go_back() {
+	echo "Moving back to ok3d $from." | tee -a "$log"
+	if ! git -c advice.detachedHead=false checkout --quiet "$old" >>"$log" 2>&1; then
+		stopped "$1 Moving back to $from failed too (see the log), so this checkout is on $target: git -C $root checkout $old moves it back."
+	fi
+	if [ "$reinstall" = yes ]; then
+		./ok3d install 2>&1 9>&- | tee -a "$log" || true
+	fi
+	stopped "$1"
+}
+
+# verify_release: whether the fetched tag is the release it's named for: an annotated tag
+# object whose own name is $target (so a signed tag of an older release, pushed under a newer
+# name, isn't taken for it), for a commit, signed with an SSH key in the copy of
+# deploy/release-signers made before anything moved. Only SSH: git would check an OpenPGP or
+# X.509 signature against your own keyring instead, so those programs are set to fail. Writes
+# the release's commit to $work/commit, so that commit is what's checked out, whatever else
+# has the same name (a branch, say).
+verify_release() {
+	if [ "$(git cat-file -t "refs/tags/$target")" != tag ]; then
+		echo "$target is a plain tag, with nothing to sign."
+		return 1
+	fi
+	git cat-file tag "refs/tags/$target" >"$work/tag" || return 1
+	sed -n '1,/^$/p' "$work/tag" >"$work/tag-head"
+	if ! grep -Fqx "tag $target" "$work/tag-head"; then
+		echo "The tag called $target is really $(sed -n 's/^tag //p' "$work/tag-head" | head -n 1)."
+		return 1
+	fi
+	if ! grep -qx 'type commit' "$work/tag-head"; then
+		echo "$target is a tag for something other than a commit."
+		return 1
+	fi
+	if ! grep -qx -e '-----BEGIN SSH SIGNATURE-----' "$work/tag"; then
+		echo "$target has no SSH signature."
+		return 1
+	fi
+	git -c gpg.ssh.program=ssh-keygen -c gpg.ssh.allowedSignersFile="$work/release-signers" \
+		-c gpg.openpgp.program=false -c gpg.x509.program=false verify-tag "refs/tags/$target" || return 1
+	git rev-parse --verify --quiet "refs/tags/$target^{commit}" >"$work/commit" || return 1
+}
+
+# helper_busy: whether the helper's last answer says it's carrying out a request other than
+# starting this upgrade. Only the answer's head counts, not what the command printed.
+helper_busy() {
+	busy_head=$(sed -n '1,/^$/p' "$DATA_ROOT/helper/result" 2>/dev/null || true)
+	printf '%s\n' "$busy_head" | grep -qx 'state=running' && ! printf '%s\n' "$busy_head" | grep -qx 'action=upgrade'
+}
+
+# refuse WHY: won't upgrade, before anything has changed. Says so on the screen and, when the
+# helper started it for the Dashboard, on Home, which would otherwise show nothing. Only once
+# the lock is held (notes=yes), so it never writes over a running upgrade's record.
+refuse() {
+	echo "$1" >&2
+	if [ "$notes" = yes ] && [ "${OK3D_UPGRADE_FROM_DASHBOARD:-}" = yes ]; then
+		helper_note upgrade-output "$1
+"
+		upgrade_note failed "$1"
+	fi
+	exit 1
+}
+
+back_up_settings() {
+	saved="$root/local/backups/before-$target-$stamp"
+	install -d -m 0700 "$root/local" "$root/local/backups" "$saved" || return 1
+	for file in "$settings" "$devices" "$envfile"; do
+		[ ! -f "$file" ] || cp -p "$file" "$saved/" || return 1
+	done
+	echo "Copied your settings, devices, and .env to $saved."
+	# The last three are kept.
+	# shellcheck disable=SC2012 # names ok3d made itself: before-vX.Y.Z-<time>
+	ls -1dt "$root"/local/backups/before-v*/ | tail -n +4 | while read -r old_saved; do
+		rm -rf "$old_saved"
+	done
+}
+
+# The data root's small, precious parts, while the cluster is down so nothing is writing to
+# them: the certificate authority, Grafana's database, and Alertmanager's silences.
+# Prometheus's history is left out: it's large, and the new cluster picks it up as it is. The
+# last three are kept.
+back_up_data() {
+	install -d -m 0700 "$DATA_ROOT/backups" || return 1
+	archive="$DATA_ROOT/backups/before-$target-$stamp.tar.gz"
+	parts=""
+	for part in certs grafana alertmanager; do
+		[ ! -d "$DATA_ROOT/$part" ] || parts="$parts $part"
+	done
+	# shellcheck disable=SC2086 # one argument per part, on purpose
+	(umask 077 && tar -C "$DATA_ROOT" -czf "$archive" $parts) || return 1
+	echo "Backed up$parts to $archive."
+	# shellcheck disable=SC2012 # names ok3d made itself: before-vX.Y.Z-<time>.tar.gz
+	ls -1t "$DATA_ROOT"/backups/before-v*.tar.gz | tail -n +4 | while read -r old_archive; do
+		rm -f "$old_archive"
+	done
+}
+
+upgrade_to() {
+	# vX.Y.Z and nothing else: a v and a digit, then only digits and two dots, never two
+	# together or at the end, and short.
+	target=$1
+	case "$target" in
+	v[0-9]*.[0-9]*.[0-9]*) ;;
+	*) target="" ;;
+	esac
+	case "$target" in
+	*[!v0-9.]* | v*v* | *..* | *. | *.*.*.*) target="" ;;
+	esac
+	if [ -z "$target" ] || [ ${#target} -gt 20 ]; then
+		echo "Usage: ./ok3d upgrade [vX.Y.Z] [--yes]: a release tag such as v0.5.1." >&2
+		exit 2
+	fi
+	notes=""
+	reinstall=""
+	[ "$(id -u)" != 0 ] || refuse "Run ok3d as yourself, not as root."
+	if [ "$(uname -s)" != Linux ] || ! command -v systemctl >/dev/null 2>&1; then
+		refuse "./ok3d upgrade needs Linux with systemd, for the helper's service."
+	fi
+	command -v flock >/dev/null 2>&1 || refuse "./ok3d upgrade needs flock (in util-linux)."
+	# One upgrade at a time, whether from here or from the Dashboard: a lock on local/upgrading
+	# for as long as this runs, which the system lets go of when it ends, however it ends. The
+	# helper checks the same lock, and takes no request while it's held (helper.py), so the
+	# checks below can't race an Apply it starts. Each step runs without it (9>&-), so nothing
+	# a step leaves running holds it.
+	install -d -m 0700 "$root/local"
+	exec 9>"$root/local/upgrading"
+	if ! flock -n 9; then
+		echo "An upgrade is running already." >&2
+		exit 1
+	fi
+	notes=yes
+	from=$(this_version)
+	started=$(now)
+	is_newer "$target" || refuse "$target isn't newer than this ok3d ($from): ./ok3d upgrade only moves forward."
+	[ -d .git ] || refuse "$root isn't a git checkout, so it can't move to another release. Use the installer (docs/upgrading.md)."
+	if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+		refuse "$root has changes of yours to ok3d's own files. Commit or stash them first (your settings are safe: they're not ok3d's)."
+	fi
+	command -v ssh-keygen >/dev/null 2>&1 || refuse "./ok3d upgrade needs ssh-keygen (in openssh-client)."
+	[ -f deploy/release-signers ] || refuse "There's no deploy/release-signers to check $target's signature with."
+	# Not under a request the helper is carrying out (an Apply from the Dashboard, say): the
+	# upgrade would delete the cluster under it, and the new release's install restarts the
+	# helper. A request that arrived just now says it's running for a moment before the helper
+	# sees this lock and refuses it, so a running answer is read again for a few seconds
+	# before it counts, and it refuses only on a read that showed running with no time left.
+	# OK3D_BUSY_WAIT (seconds, 5 when unset) is for the tests.
+	waited=0
+	while helper_busy; do
+		[ "$waited" -lt "${OK3D_BUSY_WAIT:-5}" ] ||
+			refuse "The helper is carrying out a request from the Dashboard. Wait for Home to show its answer, then upgrade."
+		sleep 1
+		waited=$((waited + 1))
+	done
+	if [ "${2:-}" != --yes ]; then
+		if [ ! -t 0 ]; then
+			echo "Upgrading needs a yes: run ./ok3d upgrade $target --yes, or run it in a terminal to be asked." >&2
+			exit 1
+		fi
+		echo "This moves ok3d to $target and makes the cluster $CLUSTER_NAME again: its pages are"
+		echo "down until it's done. Read $releases_page/$target first."
+		printf 'Type %s to go ahead: ' "$target"
+		read -r answer
+		if [ "$answer" != "$target" ]; then
+			echo "Not upgraded."
+			exit 1
+		fi
+	fi
+	work=$(mktemp -d)
+	trap 'rm -rf "$work"' EXIT
+	install -d -m 0700 "$DATA_ROOT/helper"
+	log="$DATA_ROOT/helper/upgrade-output"
+	rm -f "$log"
+	(umask 077 && : >"$log")
+	stamp=$(date -u +%Y%m%dT%H%M%SZ)
+	# Where to go back to: the branch you were on, or the commit.
+	old=$(git symbolic-ref --quiet --short HEAD || git rev-parse HEAD)
+	# The signature is checked with this release's copy of the keys, made before anything moves.
+	cp deploy/release-signers "$work/release-signers"
+
+	# Not --quiet, which would hide why a fetch was refused (a tag here already that isn't the
+	# one there, say: git never replaces a tag with another).
+	step "Getting $target" git fetch --no-progress "$releases_repo" "refs/tags/$target:refs/tags/$target" ||
+		stopped "couldn't get $target from $releases_repo."
+	step "Checking $target's signature" verify_release ||
+		stopped "$target isn't signed by a key in deploy/release-signers, so it wasn't used."
+	step "Backing up your settings" back_up_settings || stopped "couldn't back up your settings."
+	# git writes each changed file as a new one, so this script, already open, runs on as it
+	# was; every ./ok3d after this is the new release's.
+	step "Moving to $target" git -c advice.detachedHead=false checkout --quiet "$(cat "$work/commit")" ||
+		stopped "couldn't move this checkout to $target."
+	[ "$(this_version)" = "${target#v}" ] ||
+		go_back "$target says it's ok3d $(this_version), not ${target#v}, so it wasn't used."
+	step "Checking with $target" ./ok3d check ||
+		go_back "$target's check found problems (above). Nothing else changed: read $target's Upgrading notes, fix what it says, and try again."
+	if ! step "Installing $target's helper and Dashboard" ./ok3d install; then
+		reinstall=yes
+		go_back "$target's install failed (above). This checkout, the helper, and the Dashboard are back on $from; the cluster wasn't touched."
+	fi
+	step "Deleting the cluster" ./ok3d delete --yes ||
+		stopped "couldn't delete the cluster (above). ./ok3d apply brings it up to date with $target."
+	step "Backing up the data root" back_up_data ||
+		stopped "couldn't back up the data root (above). The cluster is down: ./ok3d apply brings it back."
+	step "Making the cluster again with $target" ./ok3d apply ||
+		stopped "./ok3d apply failed (above). docs/upgrading.md says how to try again or go back."
+	upgrade_note finished "done"
+	echo "Upgraded from ok3d $from to $target." | tee -a "$log"
 }
 
 case "${1:-}" in
@@ -921,6 +1240,7 @@ delete) cmd_delete "${2:-}" ;;
 demo) cmd_demo "${2:-}" "${3:-}" ;;
 test-alert) cmd_test_alert ;;
 validate) cmd_validate "${2:-}" "${3:-}" "${4:-}" ;;
+upgrade) cmd_upgrade "${2:-}" "${3:-}" ;;
 version | --version) cmd_version ;;
 help | --help | -h) usage ;;
 *)

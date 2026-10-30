@@ -1,0 +1,6 @@
+# The keys ok3d's releases are signed with, for ./ok3d upgrade to check a release's signature
+# before moving to it (git verify-tag, with this as gpg.ssh.allowedSignersFile). Each release
+# checks the next with the copy it has, so a new key comes in a release signed with the old.
+# The same key is on GitHub as the account's signing key, which is how GitHub shows the tags
+# as Verified.
+ok3d-release namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHVMctw6n1/1AuxZgN3OnlpnVDr3ND11TwifUpvpQReW

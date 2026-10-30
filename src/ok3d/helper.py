@@ -16,8 +16,10 @@ but not write, checks every value again, carries it out, and writes its answer t
 It assumes the Dashboard's container may have been taken over, so it trusts nothing in the
 outbox: not the file's contents, not its type (it may be a link, a folder, or a pipe), and not
 its size. The most a request can ever do is what you could do yourself: run `./ok3d check`
-or `./ok3d apply`, save a settings or devices file that `./ok3d validate` passes, or set one
-of four lines of .env (ENV_NAMES). docs/helper-under-the-hood.md has the whole story.
+or `./ok3d apply`, save a settings or devices file that `./ok3d validate` passes, set one
+of four lines of .env (ENV_NAMES), or look for a newer release and move to one, which
+`./ok3d upgrade` takes only when its tag is signed by a key in deploy/release-signers.
+docs/helper-under-the-hood.md has the whole story.
 
 It uses only the standard library and runs on the host's own Python (`python3 -I`), so the
 host needs nothing installed.
@@ -54,7 +56,9 @@ MAX_SKEW = 60
 #   save-settings     check the file that follows with ./ok3d validate, then save it as settings.yaml
 #   save-devices      the same for devices.yaml
 #   set-env           set one line of .env (name=, one of ENV_NAMES) to the value that follows
-ACTIONS = ("check", "apply", "save-settings", "save-devices", "set-env")
+#   look-for-release  run ./ok3d upgrade, which says whether a newer release is out
+#   upgrade           start ./ok3d upgrade <version=> --yes, in a service of its own (see start_upgrade)
+ACTIONS = ("check", "apply", "save-settings", "save-devices", "set-env", "look-for-release", "upgrade")
 # The files the two save actions write, in the ok3d checkout, and what ./ok3d validate calls them.
 SAVES = {"save-settings": ("settings.yaml", "settings"), "save-devices": ("devices.yaml", "devices")}
 # The .env lines set-env may set. Not OK3D_ADMIN_PASSWORD, ANTHROPIC_API_KEY, or DEADMAN_URL:
@@ -70,12 +74,23 @@ ENV_NAMES = ("UNIFI_API_KEY", "NTFY_TOPIC", "NTFY_TOKEN", "SMTP_PASSWORD")
 ENV_VALUE = re.compile(r"[!#%&()*+,\-./0-9:;<=>?@A-Z\[\]^_a-z{|}~]{0,1024}")
 # The id is the page's own random number, so it knows which answer is to its request.
 ID = re.compile(r"[0-9a-f]{16,64}")
+# A release to upgrade to: vX.Y.Z, as ./ok3d upgrade takes it.
+VERSION = re.compile(r"v[0-9]{1,6}\.[0-9]{1,6}\.[0-9]{1,6}")
 # The lines a request's head may have, each at most once: id and action always, name only
-# with set-env, and base (optional) only with a save: the SHA-256 of the file the page showed,
-# so a save doesn't overwrite a change made on the server since.
-FIELDS = ("id", "action", "name", "base")
-# How long each action may run before it's stopped. A first apply downloads images.
-TIMEOUTS = {"check": 300, "apply": 3600, "save-settings": 120, "save-devices": 120}
+# with set-env, version only with upgrade, and base (optional) only with a save: the SHA-256
+# of the file the page showed, so a save doesn't overwrite a change made on the server since.
+FIELDS = ("id", "action", "name", "base", "version")
+# How long each action may run before it's stopped. A first apply downloads images. An
+# upgrade only has to start here: it runs in a service of its own.
+TIMEOUTS = {"check": 300, "apply": 3600, "save-settings": 120, "save-devices": 120, "look-for-release": 120,
+            "upgrade": 60}  # fmt: skip
+# Why a request is refused while an upgrade holds its lock, which includes one from a terminal
+# waiting for you to type yes.
+UPGRADE_RUNNING = "an upgrade is running, or waiting on the server for a yes: wait for it to finish"
+# The service an upgrade runs in, and the commands that start it and ask about it.
+UPGRADE_UNIT = "ok3d-upgrade"
+SYSTEMD_RUN = "systemd-run"
+SYSTEMCTL = "systemctl"
 # How many lines of what the command printed go into the result.
 TAIL = 200
 # How many recent ids are kept, so the same request can't be carried out twice.
@@ -104,6 +119,7 @@ class Request:
     name: str | None = None  # the .env line, for set-env
     body: bytes = b""  # the file, or the .env value
     base: str | None = None  # for a save: the SHA-256 of the file as the page showed it
+    version: str | None = None  # for an upgrade: the release, vX.Y.Z
 
 
 @dataclass(frozen=True)
@@ -214,6 +230,11 @@ def parse_request(data: bytes, mtime: float, now: float) -> Request:
                       else "the request is missing a line")  # fmt: skip
     if "base" in fields and (action not in SAVES or not re.fullmatch(r"[0-9a-f]{64}|none", fields["base"])):
         raise Refused("the request's base isn't valid")
+    if ("version" in fields) != (action == "upgrade"):
+        raise Refused("the request has a line the helper doesn't know" if "version" in fields
+                      else "the request is missing a line")  # fmt: skip
+    if action == "upgrade" and not VERSION.fullmatch(fields["version"]):
+        raise Refused("the request's version isn't a release")
     has_body = action in SAVES or action == "set-env"
     if bool(blank) != has_body:
         raise Refused("the request has something after it" if blank else "the request isn't finished")
@@ -225,7 +246,7 @@ def parse_request(data: bytes, mtime: float, now: float) -> Request:
         body = body.removesuffix(b"\n")
         if not ENV_VALUE.fullmatch(body.decode("ascii", errors="replace")):
             raise Refused("the value has characters .env can't hold safely")
-    return Request(fields["id"], action, fields.get("name"), body, fields.get("base"))
+    return Request(fields["id"], action, fields.get("name"), body, fields.get("base"), fields.get("version"))
 
 
 def check_file(body: bytes) -> None:
@@ -338,8 +359,7 @@ def run_ok3d(opened: Opened, args: list[str], timeout: int) -> tuple[int, str]:
         process = subprocess.Popen(
             [str(ok3d_dir / "ok3d"), *args],
             cwd=ok3d_dir,
-            # Without OK3D_SETTINGS and the like, so ./ok3d reads the same files the helper writes.
-            env={k: v for k, v in os.environ.items() if not k.startswith("OK3D_")},
+            env=ok3d_env(),
             stdin=subprocess.DEVNULL,
             stdout=out,
             stderr=subprocess.STDOUT,
@@ -460,11 +480,66 @@ def set_env_value(opened: Opened, request: Request) -> tuple[int, str]:
     return 0, f"Saved {request.name} in .env.\n"
 
 
+def ok3d_env() -> dict[str, str]:
+    """The environment ./ok3d runs with: the helper's, without OK3D_SETTINGS and the like, so
+    it reads the same files the helper writes, and fetches releases from where it should."""
+    return {k: v for k, v in os.environ.items() if not k.startswith("OK3D_")}
+
+
+def upgrading(ok3d_dir: Path) -> bool:
+    """Whether an upgrade is running: one from the Dashboard (its service is active), or one
+    from a terminal (./ok3d upgrade holds a lock on local/upgrading, which the system lets go
+    of when it ends, however it ends). While one is, the helper takes no other request: an
+    Apply or a save partway through would race it."""
+    try:
+        fd = os.open(ok3d_dir / "local" / "upgrading", os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except OSError:
+        pass  # no lock file: no upgrade has run from here
+    else:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_SH | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return True
+        finally:
+            os.close(fd)  # which lets go of the lock, if it was taken here
+    try:
+        return subprocess.run([SYSTEMCTL, "--user", "is-active", "--quiet", UPGRADE_UNIT], check=False, env=ok3d_env(),
+                              stdin=subprocess.DEVNULL, capture_output=True, timeout=30).returncode == 0  # fmt: skip
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
+def start_upgrade(opened: Opened, request: Request) -> tuple[int, str]:
+    """upgrade: starts ./ok3d upgrade <version> --yes as a service of its own, and answers once
+    it has started. Not under the helper: partway through, the new release's ./ok3d install
+    restarts the helper's service, which stops everything the helper started. ./ok3d upgrade
+    checks the version again (a release, newer than this one, signed by a key it knows), and
+    writes how it's going to the helper's folder, where Home shows it."""
+    ok3d_dir = opened.folders.ok3d_dir
+    process = subprocess.run(
+        [SYSTEMD_RUN, "--user", f"--unit={UPGRADE_UNIT}", "--collect", "--quiet",
+         f"--working-directory={ok3d_dir}", f"--setenv=PATH={os.environ.get('PATH', '/usr/bin:/bin')}",
+         # So ./ok3d upgrade also writes a refusal for Home, which would otherwise show nothing.
+         "--setenv=OK3D_UPGRADE_FROM_DASHBOARD=yes",
+         "--", str(ok3d_dir / "ok3d"), "upgrade", str(request.version), "--yes"],
+        check=False, env=ok3d_env(), stdin=subprocess.DEVNULL, capture_output=True, text=True, errors="replace",
+        timeout=TIMEOUTS["upgrade"],
+    )  # fmt: skip
+    if process.returncode != 0:
+        return process.returncode, process.stdout + process.stderr + "The upgrade didn't start.\n"
+    return 0, (f"Started the upgrade to {request.version}. Home shows how it's going; the Dashboard "
+               "restarts partway, so you'll sign in again.\n")  # fmt: skip
+
+
 def carry_out(opened: Opened, request: Request) -> tuple[int, str]:
     if request.action in SAVES:
         return save(opened, request)
     if request.action == "set-env":
         return set_env_value(opened, request)
+    if request.action == "upgrade":
+        return start_upgrade(opened, request)
+    if request.action == "look-for-release":
+        return run_ok3d(opened, ["upgrade"], TIMEOUTS[request.action])
     return run_ok3d(opened, [request.action], TIMEOUTS[request.action])
 
 
@@ -481,16 +556,21 @@ def handle_once(opened: Opened, now: float | None = None) -> str | None:
         request = parse_request(*taken, now=time.time() if now is None else now)
         if seen_before(opened, request.id):
             raise Refused("the request was carried out already")
+        answer = {"id": request.id, "action": request.action} | ({"name": request.name} if request.name else {})
+        # Running first, then whether an upgrade is: ./ok3d upgrade takes its lock first, then
+        # reads this answer, so whichever comes second sees the other, and an upgrade never
+        # starts under an Apply, nor an Apply under an upgrade.
+        write_result(opened, answer | {"state": "running"})
+        if upgrading(opened.folders.ok3d_dir):
+            raise Refused(UPGRADE_RUNNING)
     except Refused as e:
         fields = {"id": request_id} if request_id else {}
         write_result(opened, fields | {"state": "refused", "reason": str(e), "finished": now_utc()})
         return f"refused a request: {e}"
-    answer = {"id": request.id, "action": request.action} | ({"name": request.name} if request.name else {})
-    write_result(opened, answer | {"state": "running"})
     try:
         status, output = carry_out(opened, request)
-    except OSError:
-        reason = "the ok3d command couldn't run" if request.action in ("check", "apply") else "the file couldn't be saved"
+    except (OSError, subprocess.TimeoutExpired):
+        reason = "the file couldn't be saved" if request.action in (*SAVES, "set-env") else "the ok3d command couldn't run"
         write_result(opened, answer | {"state": "failed", "reason": reason, "finished": now_utc()})
         return f"couldn't carry out {describe(request)}"
     write_result(opened, answer | {"state": "finished", "exit": str(status), "finished": now_utc()}, output)
@@ -499,7 +579,8 @@ def handle_once(opened: Opened, now: float | None = None) -> str | None:
 
 def describe(request: Request) -> str:
     """What a request was, for the log: its action and id, both checked already, never its body."""
-    what = {"check": "./ok3d check", "apply": "./ok3d apply"}.get(request.action, request.action)
+    what = {"check": "./ok3d check", "apply": "./ok3d apply", "look-for-release": "./ok3d upgrade",
+            "upgrade": f"./ok3d upgrade {request.version}"}.get(request.action, request.action)  # fmt: skip
     return f"{what} for {request.id}"
 
 
@@ -522,6 +603,7 @@ def publish(opened: Opened) -> None:
     - current-settings.yaml and current-devices.yaml: copies of yours, which aren't secret,
       so it can show them and you can change them there (missing when you have none).
     - env-set: the names of the lines in .env that have a value, one per line. Never a value.
+    - upgrade: rewritten only when it says an upgrade is running and none is.
     - alive: when this was last written, so the Dashboard knows the helper is running.
     """
     ok3d_dir = opened.folders.ok3d_dir
@@ -545,7 +627,34 @@ def publish(opened: Opened) -> None:
             values[key] = value
     set_names = [n for n in ENV_SHOWN if values.get(n.encode())]
     write_file(opened, "env-set", "".join(f"{n}\n" for n in set_names))
+    clear_stopped_upgrade(opened)
     write_file(opened, "alive", now_utc() + "\n")
+
+
+def clear_stopped_upgrade(opened: Opened) -> None:
+    """An upgrade that says it's running when none is (the machine restarted partway) is
+    marked as stopped, so Home doesn't show it running forever. ./ok3d upgrade writes the
+    file, in the helper's folder, as you.
+
+    It asks whether one is running first, and reads the file only if none is: ./ok3d upgrade
+    writes its last state before it ends, so a file read after it ended is never one it will
+    change again. Read first, a running one could finish in between, and be marked stopped."""
+    if upgrading(opened.folders.ok3d_dir):
+        return
+    try:
+        fd = os.open("upgrade", os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=opened.own)
+    except OSError:
+        return
+    with os.fdopen(fd, "rb") as f:
+        text = f.read(4096).decode("utf-8", errors="replace")
+    fields = dict(line.split("=", 1) for line in text.splitlines() if "=" in line)
+    # Asked again: an upgrade from a terminal may have taken the lock and written its first
+    # state since the first ask.
+    if fields.get("state") != "running" or upgrading(opened.folders.ok3d_dir):
+        return
+    fields |= {"state": "failed", "step": f"it stopped partway, at {fields.get('step', 'a step')} (the server "
+               "restarted, say): docs/upgrading.md says how to carry on", "finished": now_utc()}  # fmt: skip
+    write_file(opened, "upgrade", "".join(f"{k}={v}\n" for k, v in fields.items()))
 
 
 def clear_unfinished(opened: Opened) -> None:
@@ -591,7 +700,7 @@ def watch(folders: Folders) -> None:
 
 
 def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(prog="ok3d-helper", description="Runs ./ok3d check and apply when the Dashboard asks.")
+    parser = argparse.ArgumentParser(prog="ok3d-helper", description="Carries out the Dashboard's requests.")
     parser.add_argument("command", choices=("watch", "once"), help="watch the outbox, or handle one request")
     parser.add_argument("--ok3d-dir", type=Path, required=True, help="the ok3d checkout")
     parser.add_argument("--data-root", type=Path, required=True, help="host.dataRoot from settings.yaml")

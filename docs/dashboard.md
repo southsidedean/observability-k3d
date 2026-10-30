@@ -55,6 +55,26 @@ Home is where you start and finish each change:
 4. **What's next** appears once an Apply has worked: the steps on your own devices that the
    Dashboard can't do for you, such as trusting the certificate authority and opening
    Grafana.
+5. **Releases** says whether a newer release of ok3d is out, once you've pressed **Look for a
+   new release**, and how your last upgrade went ([Upgrading](#upgrading), below).
+
+## Upgrading
+
+From 0.5.1, the Dashboard can move ok3d to a newer release:
+
+1. On Home, press **Look for a new release**. This asks GitHub for the list of ok3d's
+   releases; ok3d never does on its own.
+2. If one is out, Home links to its notes. Read them first, especially anything under
+   "Upgrading", and do what they say before you go on.
+3. Press **Upgrade to** the release. The Upgrade page says what happens; press **Upgrade
+   now** to start.
+4. Home shows each step as it happens: reload the page to follow it. Partway through, the
+   Dashboard restarts with the new release, so you'll sign in again.
+
+ok3d's pages (Grafana, Prometheus, Alertmanager) are down while the cluster is made again,
+which can take as long as your first Apply did. If the new release's check or install fails,
+ok3d moves back and nothing else changes. [Upgrading](upgrading.md) has the details, the
+backups it makes, and what to do if an upgrade stops partway.
 
 ## Setup
 

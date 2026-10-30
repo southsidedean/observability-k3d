@@ -3,41 +3,111 @@
 ## To a new release
 
 Everything worth keeping stays in the data root, so a new release picks up where the old one
-left off.
+left off. Before you move, read the release's notes in [CHANGELOG.md](../CHANGELOG.md),
+especially anything under "Upgrading".
 
-1. Read the release's notes in [CHANGELOG.md](../CHANGELOG.md), especially anything under
-   "Upgrading".
-2. Back up the data root's small, precious parts: `grafana/`, `certs/`, and your
-   `settings.yaml`, `devices.yaml`, and `.env`. (From 0.7, `./ok3d backup` does this.)
-3. Run the installer again, on the server, as yourself. If you cloned ok3d somewhere other
-   than `~/ok3d`, put `OK3D_DIR=/path/to/ok3d` before `sh`, or it makes a fresh copy there:
+### From the Dashboard (from 0.5.1)
 
-   ```sh
-   curl -fsSL https://raw.githubusercontent.com/southsidedean/observability-k3d/main/install.sh | sh
-   ```
+On Home, press **Look for a new release**, read the notes it links to, then **Upgrade to** the
+release and **Upgrade now**. [The Dashboard's guide](dashboard.md#upgrading) walks through it.
 
-   It brings `~/ok3d` to the latest release, keeps your settings, devices, `.env`, and the
-   certificate authority, and starts the new release's Dashboard. From 0.4, this is also
-   what first sets up the Dashboard. It stops if you changed ok3d's own files (your settings
-   are safe: they're not ok3d's).
-4. On the Dashboard, **Check**, then **Apply**, which brings the cluster up to date with the
-   new release. If a release changes the cluster itself (its Kubernetes version, say), its
-   Upgrading notes say to make the cluster again instead, with the commands below.
+### With a command (from 0.5.1)
 
-From 0.5.1, an Upgrade button on the Dashboard does steps 2 to 4.
-
-### With commands instead
-
-To move to a release yourself and make the cluster again from scratch:
+On the server, as yourself:
 
 ```sh
 cd ~/ok3d
-git fetch --tags && git switch --detach v0.5.0   # the release you're moving to
-./ok3d install   # the new release's helper and Dashboard (Linux with systemd)
-./ok3d check
+./ok3d upgrade           # is a newer release out?
+./ok3d upgrade v0.5.2    # move to it (it asks first; --yes skips the question)
+```
+
+Either way, the upgrade:
+
+1. Fetches the release's tag, and checks that it's signed with ok3d's release key (the keys
+   in `deploy/release-signers`, as your copy has them). It stops if it isn't.
+2. Copies your `settings.yaml`, `devices.yaml`, and `.env` to
+   `local/backups/before-<release>-<time>/` in the ok3d folder.
+3. Moves the ok3d folder to the release and runs its `./ok3d check`, then its `./ok3d install`,
+   which brings the helper and the Dashboard up to the release. If either fails, it moves
+   back and stops (after a failed install, it installs the old helper and Dashboard again):
+   nothing else changed. Read what the check said, and the release's Upgrading notes, then
+   try again.
+4. Deletes the cluster, and backs up the certificate authority (`certs/`), Grafana's database
+   (`grafana/`), and Alertmanager's silences (`alertmanager/`) while nothing is writing to
+   them, to `backups/before-<release>-<time>.tar.gz` in the data root. The last three are
+   kept. Prometheus's history is left out, since it's large; the new cluster picks it up as
+   it is.
+5. Makes the cluster again with `./ok3d apply`. The new cluster downloads its images again,
+   so this can take as long as your first Apply did. ok3d's pages are down until it's done.
+
+It moves only forward, one upgrade at a time, and needs Linux with systemd, like the helper.
+The ok3d folder mustn't have changes of yours to ok3d's own files (your settings are safe:
+they're not ok3d's), and it waits for anything the helper is doing for the Dashboard (an
+Apply, say) to finish first.
+
+### If an upgrade stops partway
+
+The Dashboard's Home, or what `./ok3d upgrade` printed, says which step it stopped at.
+
+- **The check or the install**: ok3d is back on the release you had, and the cluster wasn't
+  touched. Fix what the check said, then upgrade again.
+- **Deleting the cluster, the backup, or Apply**: the ok3d folder, the helper, and the
+  Dashboard are on the new release. Fix what Apply said, then **Check** and **Apply** on the
+  Dashboard, or `./ok3d apply` on the server.
+- **The server restarted partway**: Home says the upgrade stopped, and at which step. If it
+  stopped before "Moving to", nothing changed: upgrade again. If it stopped during "Moving
+  to", `git -C ~/ok3d status` may show ok3d's files half moved; put them back with
+  `git -C ~/ok3d checkout --force` and the release (or branch) you had, such as `v0.5.1`,
+  then upgrade again. If it stopped later, the ok3d folder is already on the new release, so
+  finish by hand on the server, with the steps the upgrade would have taken (with your data
+  root for `/srv/ok3d`):
+
+  ```sh
+  cd ~/ok3d
+  ./ok3d check            # your settings, with the new release
+  ./ok3d install          # the new release's helper and Dashboard
+  ./ok3d delete --yes     # the data root stays
+  install -d -m 0700 /srv/ok3d/backups
+  (umask 077 && tar -C /srv/ok3d -czf /srv/ok3d/backups/before-v0.5.2-by-hand.tar.gz certs grafana alertmanager)
+  ./ok3d apply            # makes the cluster again with the new release
+  ```
+
+  The backup holds the certificate authority's private key, so `umask 077` keeps it yours
+  alone. Leave out of the `tar` line any of the three folders your data root doesn't have.
+
+To go back to the release you had instead, put the backups back where they were and make
+the cluster again from it:
+
+```sh
+cd ~/ok3d
+git switch --detach v0.5.1                   # the release you had
+cp local/backups/before-v0.5.2-<time>/* .    # your settings, devices, and .env from before
+cp local/backups/before-v0.5.2-<time>/.env .
+./ok3d install
 ./ok3d delete --yes
+tar -C /srv/ok3d -xzf /srv/ok3d/backups/before-v0.5.2-<time>.tar.gz   # your data root
 ./ok3d apply
 ```
+
+Your settings go back to how they were, in case you changed them for the new release, and
+Grafana's database goes back to how it was before the upgrade, which matters if the new
+release's Grafana changed it.
+
+### To 0.5.1, from 0.5.0 or 0.4
+
+Those releases don't have `./ok3d upgrade`, so run the installer again, on the server, as
+yourself. If you cloned ok3d somewhere other than `~/ok3d`, put `OK3D_DIR=/path/to/ok3d`
+before `sh`, or it makes a fresh copy there:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/southsidedean/observability-k3d/main/install.sh | sh
+```
+
+It brings `~/ok3d` to the latest release, keeps your settings, devices, `.env`, and the
+certificate authority, and starts the new release's Dashboard. From 0.4, this is also what
+first sets up the Dashboard. It stops if you changed ok3d's own files. Back up `grafana/` and
+`certs/` in the data root first. Then, on the Dashboard, **Check**, then **Apply**, which
+brings the cluster up to date with the new release.
 
 Either way, Prometheus's history, Alertmanager's silences, Grafana's database, and the
 certificate authority come through unchanged, so your devices keep trusting the pages.
