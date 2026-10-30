@@ -125,6 +125,11 @@ when the cluster is down.
 | Devices | Your `devices.yaml` (or an empty list) | Save a changed one |
 | Keys | Which lines of `.env` are set, never their values | Set or clear `UNIFI_API_KEY`, `NTFY_TOPIC`, `NTFY_TOKEN`, or `SMTP_PASSWORD` |
 
+Every page also shows, in a muted line, what you'd do on the server instead: `./ok3d check`
+and `./ok3d apply` on Home, the file to edit and `./ok3d check` on Settings and Devices, the
+`settings.yaml` lines each ready-made setup and switch writes on Setup, the `.env` line each
+key goes into on Keys, and `./ok3d upgrade` on the release pages.
+
 Each page reads only the helper's folder, mounted read-only at `/helper`:
 
 - `current-settings.yaml` and `current-devices.yaml`: the helper's copies of yours.
