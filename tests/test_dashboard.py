@@ -1107,3 +1107,29 @@ def test_a_restart_whose_name_cant_be_shown_still_asks(ready: Dashboard) -> None
     page = body(ready.post("/apply", session=session))
     assert "<h2>Apply?</h2>" in page and "1 more part(s), whose names can't be shown here" in page
     assert not (ready.state / "outbox" / "request").exists()
+
+
+# Each choice on the Dashboard is shown as what you'd do on the server instead.
+
+def test_each_page_shows_its_server_command(ready: Dashboard) -> None:
+    (ready.helper / "current-settings.yaml").write_text("modules:\n  unifi: false\n")
+    session = ready.sign_in()
+    shown = {
+        "/": "On the server: <code>./ok3d check</code>, then <code>./ok3d apply</code>.",
+        "/settings": "On the server: edit <code>settings.yaml</code> in the ok3d folder, then <code>./ok3d check</code>.",
+        "/devices": "On the server: edit <code>devices.yaml</code> in the ok3d folder, then <code>./ok3d check</code>.",
+        "/keys": "On the server: the line <code>NTFY_TOPIC=</code> in <code>.env</code>.",
+        "/setup": "In settings.yaml: <code>modules.unifi: true</code>",
+        "/setup ": "a dot means one setting inside another",
+    }
+    for path, line in shown.items():
+        assert line in body(ready.get(path.strip(), session)), path
+
+
+def test_each_ready_made_setup_shows_the_settings_it_writes() -> None:
+    from ok3d.dashboard import server, switches
+
+    card = next(c for c in switches.CARDS if c.available)
+    html_text = server.card_html(card, "modules:\n  unifi: false\n", "none")
+    for setting, on in card.changes().items():
+        assert f"<code>{setting}: {'true' if on else 'false'}</code>" in html_text

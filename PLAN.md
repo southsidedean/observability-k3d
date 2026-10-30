@@ -465,8 +465,12 @@ turn up. Production moves to ok3d at 0.4.0.
   The Dashboard asks before an Apply that restarts or stops anything, or when Check couldn't
   tell; `./ok3d apply` asks on a terminal. The helper's Apply doesn't ask: the Dashboard
   already has.
-- Each choice shown as its `ok3d` command.
-- Home's screenshot retaken from a release: 0.5.0's shows `0.5.0.dev0`.
+- Each choice shown as its `ok3d` command (decided 2026-10-29): a muted line on each page
+  saying what you'd do on the server instead: `./ok3d check` and `apply` on Home, the file to
+  edit on Settings and Devices, the `settings.yaml` lines each setup and switch writes on
+  Setup, the `.env` line each key goes into on Keys, and `./ok3d upgrade` on the release pages.
+- The Dashboard's screenshots retaken from a release: 0.5.0's show `0.5.0.dev0`, and each page
+  now has text they don't (Releases, the commands, what Apply would change).
 - Test: 0.5.0 has no upgrade button, so the Dashboard's upgrade is rehearsed on the test VM
   instead, from the Dashboard alone: two local commits of the branch, each with a Dashboard
   image built on the VM and releases fetched from a repository on the VM, the first adding a

@@ -42,6 +42,9 @@ minute.
   <img src="../images/screenshots/dashboard-home-light.png" alt="The Dashboard's Home page: ok3d's version, the helper running, the Check and Apply buttons, a Before you Apply list saying alerts go nowhere yet, What's next with five steps and links to the certificate authority and Grafana, and the helper's last answer, a Check that finished with exit status 0, with what ok3d check printed." width="700">
 </picture>
 
+Each page also says what its buttons do on the server, as the command or the line in a file
+you'd use there instead, so anything you do here you can also do over SSH.
+
 Home is where you start and finish each change:
 
 1. **Before you Apply** lists what's still missing: a key a part you switched on needs,

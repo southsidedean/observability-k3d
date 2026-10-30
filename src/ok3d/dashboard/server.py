@@ -194,7 +194,9 @@ def home(config: Config, message: str = "") -> str:
         "deploy, or bring it up to date with your settings.</p>"
         '<form class="inline" method="post" action="/check"><button>Check</button></form> '
         f'<form class="inline" method="post" action="/apply"><button{disabled}>Apply</button></form>'
-        f"{apply_note}{plan_section(config)}</section>" + todo_section(config) + next_section(config)
+        f"{apply_note}{plan_section(config)}"
+        "<p class=muted>On the server: <code>./ok3d check</code>, then <code>./ok3d apply</code>.</p>"
+        "</section>" + todo_section(config) + next_section(config)
         + answer_section(config)
         + release_section(config)
     )
@@ -451,9 +453,13 @@ def card_html(card: switches.Card, settings: str, base: str) -> str:
     else:
         action = (f'<form method="post" action="/setup"><input type="hidden" name="base" value="{base}">'
                   f'<input type="hidden" name="card" value="{card.id}"><button>Choose</button></form>')  # fmt: skip
+    # What choosing it writes, as the lines you'd set in settings.yaml on the server.
+    lines = ", ".join(f"<code>{s}: {'true' if on else 'false'}</code>" for s, on in card.changes().items())
     return (
         f'<div class="card{" chosen" if chosen else ""}"><h3>{html.escape(card.name)}</h3>'
-        f"<p>{html.escape(card.about)}</p><p class=muted>Needs: {html.escape(card.needs)}</p>{action}</div>"
+        f"<p>{html.escape(card.about)}</p><p class=muted>Needs: {html.escape(card.needs)}</p>"
+        + (f"<p class=muted>In settings.yaml: {lines}.</p>" if card.available and lines else "")
+        + f"{action}</div>"
     )
 
 
@@ -475,7 +481,9 @@ def setup_page(config: Config, message: str = "") -> str:
     alerts = "".join(switch_form(s, settings, base, have) for s in switches.ALERTS)
     return (
         f"<section><h2>Ready-made setups</h2>{note}<p>Choose one, or switch the parts on and off "
-        "yourself below. Metrics, alerts, and ok3d's pages are always on.</p>"
+        "yourself below. Metrics, alerts, and ok3d's pages are always on. Each says the line it writes "
+        "in settings.yaml; a dot means one setting inside another, so <code>modules.unifi: true</code> is "
+        "<code>unifi: true</code> under <code>modules:</code>.</p>"
         f'<div class="cards">{cards}</div>{SAVE_NOTE}</section>'
         f"<section><h2>Parts</h2>{modules}</section>"
         f"<section><h2>Where alerts go</h2>{alerts}</section>"
@@ -511,7 +519,8 @@ def file_page(config: Config, name: str, message: str = "") -> str:
         f'<form method="post" action="/{title.lower()}"><input type="hidden" name="base" value="{base}">'
         # The newline after <textarea> is one HTML drops, so a file that starts with a blank line keeps it.
         f'<p><textarea name="file" rows="24" spellcheck="false" aria-label="{name}">\n{html.escape(text)}</textarea></p>'
-        f"{SAVE_NOTE}<p><button>Save</button></p></form></section>"
+        f"{SAVE_NOTE}<p class=muted>On the server: edit <code>{name}</code> in the ok3d folder, then "
+        "<code>./ok3d check</code>.</p><p><button>Save</button></p></form></section>"
     )
 
 
@@ -533,7 +542,8 @@ def keys_page(config: Config, message: str = "") -> str:
         state = "<span class=good>set</span>" if name in have else "<span class=muted>not set</span>"
         rows.append(
             f'<form method="post" action="/keys"><h3><code>{name}</code> {state}</h3>'
-            f"<p class=muted>{html.escape(about)}</p>"
+            f"<p class=muted>{html.escape(about)} On the server: the line <code>{name}=</code> in "
+            "<code>.env</code>.</p>"
             f'<input type="hidden" name="name" value="{name}">'
             f'<p><input type="password" name="value" autocomplete="off" aria-label="{name}"> '
             "<button>Save</button></p></form>"
