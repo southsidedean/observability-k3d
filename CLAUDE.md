@@ -41,8 +41,9 @@ in this repository.
   in its outbox, and the helper checks it and runs `./ok3d check` or `apply`, or saves
   settings, devices, or a `.env` line after `./ok3d validate` checks them
   (`--from-dashboard` for settings, which refuses the settings only the user may change on the
-  server), or starts `./ok3d upgrade` in a systemd unit of its own (the new release's install
-  restarts the helper). `docs/dashboard-under-the-hood.md` and `docs/helper-under-the-hood.md`
+  server), runs `./ok3d maintenance` for maintenance windows (Alertmanager silences that
+  never cover the dead man's Watchdog), or starts `./ok3d upgrade` in a systemd unit of its
+  own (the new release's install restarts the helper). `docs/dashboard-under-the-hood.md` and `docs/helper-under-the-hood.md`
   describe both.
 - `install.sh` (for `curl ... | sh`) checks out the latest release into `~/ok3d` and runs
   `./ok3d install`, which sets up the helper and the Dashboard. From 0.5.1, `./ok3d upgrade`

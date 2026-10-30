@@ -31,7 +31,8 @@ def server_time(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
 @pytest.fixture
 def devices(tmp_path: Path) -> Path:
     path = tmp_path / "devices.yaml"
-    path.write_text("devices:\n  - name: router\n    address: 192.168.1.1\n  - name: nas\n    address: 192.168.1.20\n")
+    path.write_text("devices:\n  - name: router  # the one by the door\n    address: 192.168.1.1\n  - name: nas\n"
+                    "    address: 192.168.1.20\n")
     return path
 
 
@@ -67,7 +68,7 @@ def test_a_window_already_started_starts_now(devices: Path) -> None:
     ("all", "0h", "", "When is a length"),
     ("all", "31d", "", "at most 30 days"),
     ("all", "2026-11-03T04:00/2026-11-03T02:00", "", "ends before it starts"),
-    ("all", "2026-11-01T08:00/2026-11-01T09:00", "", "ends before it starts"),
+    ("all", "2026-11-01T08:00/2026-11-01T09:00", "", "already ended"),
     ("all", "2028-01-01T00:00/2028-01-01T01:00", "", "a year from now"),
     ("all", "2026-02-30T00:00/2026-03-01T01:00", "", "can read"),
     ("all", "2h", "a;b", "The reason"),
@@ -123,9 +124,10 @@ def run(*args: str) -> subprocess.CompletedProcess[str]:
 
 
 def test_it_runs_isolated(tmp_path: Path, devices: Path) -> None:
-    added = run("add", "all", "1h", "", str(devices))
+    (tmp_path / "none.json").write_text("[]")
+    added = run("add", "all", "1h", "", str(devices), str(tmp_path / "none.json"))
     assert added.returncode == 0 and added.stdout.splitlines()[:2] == ['alertname=~".+"', "alertname!=Watchdog"]
-    refused = run("add", "router;reboot", "1h", "", str(devices))
+    refused = run("add", "router;reboot", "1h", "", str(devices), str(tmp_path / "none.json"))
     assert refused.returncode == 2 and "What is all" in refused.stderr
     later = (datetime.now(UTC) + timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
     (tmp_path / "silences.json").write_text(json.dumps([silence(endsAt=later)]))
@@ -133,8 +135,6 @@ def test_it_runs_isolated(tmp_path: Path, devices: Path) -> None:
     assert listed.returncode == 0 and listed.stdout.startswith("window=54c2bf37")
     (tmp_path / "note").write_text(listed.stdout)
     assert "all of ok3d  (router firmware)" in run("table", str(tmp_path / "note")).stdout
-    assert run("id", "54c2bf37-5a0a-45d7-91a0-30e0c9b716b6").returncode == 0
-    assert run("id", "54c2bf37; rm -rf /").returncode == 2
 
 
 def test_the_helper_checks_a_window_the_same_way() -> None:
@@ -142,3 +142,30 @@ def test_the_helper_checks_a_window_the_same_way() -> None:
     assert helper.MAINTENANCE_PATTERNS["reason"].pattern == maintenance.REASON.pattern
     assert helper.MAINTENANCE_PATTERNS["window"].pattern == maintenance.SILENCE_ID.pattern
     assert helper.MAINTENANCE_PATTERNS["when"].pattern == f"{maintenance.LENGTH.pattern.replace('(', '').replace(')', '')}|{maintenance.RANGE.pattern.replace('(', '').replace(')', '')}"
+
+
+
+def test_a_window_without_a_reason_is_listed_without_one() -> None:
+    assert maintenance.windows([silence(comment="ok3d")], NOW)[0].endswith(";")
+
+
+def test_a_window_across_the_clocks_going_back_has_the_right_length(devices: Path) -> None:
+    # Paris goes from summer time (UTC+2) to winter time (UTC+1) at 03:00 on 2027-10-31.
+    args = maintenance.add("all", "2027-10-31T01:00/2027-10-31T04:00", "", devices, datetime(2027, 10, 1, tzinfo=UTC))
+    assert "--start=2027-10-30T23:00:00Z" in args and "--end=2027-10-31T03:00:00Z" in args
+
+
+def test_at_most_twenty_windows_at_once(devices: Path) -> None:
+    taken = [silence(id=f"54c2bf37-5a0a-45d7-91a0-30e0c9b716{n:02d}") for n in range(maintenance.MOST)]
+    with pytest.raises(maintenance.Refused, match="20 maintenance windows already"):
+        maintenance.add("all", "1h", "", devices, NOW, taken)
+    assert maintenance.add("all", "1h", "", devices, NOW, taken[1:])  # one fewer is fine
+
+
+def test_ending_takes_only_ok3ds_own_windows(tmp_path: Path) -> None:
+    later = (datetime.now(UTC) + timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    (tmp_path / "s.json").write_text(json.dumps([silence(endsAt=later), silence(id="0" * 8 + "-0000-0000-0000-" + "0" * 12,
+                                                                                createdBy="you", endsAt=later)]))  # fmt: skip
+    assert run("ours", "54c2bf37-5a0a-45d7-91a0-30e0c9b716b6", str(tmp_path / "s.json")).returncode == 0
+    assert run("ours", "00000000-0000-0000-0000-000000000000", str(tmp_path / "s.json")).returncode == 2
+    assert run("ours", "--all", str(tmp_path / "s.json")).returncode == 2

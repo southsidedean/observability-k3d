@@ -666,9 +666,11 @@ now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 # made the folder, and never through a link.
 helper_note() {
 	[ -d "$DATA_ROOT/helper" ] && [ ! -L "$DATA_ROOT/helper" ] || return 0
-	rm -f "$DATA_ROOT/helper/.$1.tmp"
-	printf '%s' "$2" >"$DATA_ROOT/helper/.$1.tmp"
-	mv -f "$DATA_ROOT/helper/.$1.tmp" "$DATA_ROOT/helper/$1"
+	# A temporary name of this run's own, so two runs at once (the helper's and yours) don't
+	# take each other's.
+	rm -f "$DATA_ROOT/helper/.$1.$$.tmp"
+	printf '%s' "$2" >"$DATA_ROOT/helper/.$1.$$.tmp"
+	mv -f "$DATA_ROOT/helper/.$1.$$.tmp" "$DATA_ROOT/helper/$1"
 }
 
 # The Dashboard's certificate, issued by ok3d's certificate authority for dashboard.<domain>,
@@ -980,8 +982,6 @@ cmd_demo() {
 	esac
 }
 
-# A test alert, through the real path: Alertmanager's own amtool adds it, and Alertmanager
-# sends it wherever alerts go. It clears itself after 5 minutes.
 # Alertmanager's pod, where amtool runs (it's in Alertmanager's own image).
 alertmanager_pod=alertmanager-ok3d-kube-prometheus-stack-alertmanager-0
 
@@ -1028,7 +1028,13 @@ $(cat "$work/note")
 
 maintenance_add() {
 	# The window, checked whole, as amtool's arguments, one per line (a comment has spaces).
-	args=$(python3 -I src/ok3d/maintenance.py add "$1" "$2" "$3" "$devices") || exit 2
+	# The silences there now, so it can count ok3d's windows.
+	silences=$(mktemp "${TMPDIR:-/tmp}/ok3d-silences.XXXXXX")
+	trap 'rm -f "$silences"' EXIT
+	amtool silence query --output=json >"$silences"
+	args=$(python3 -I src/ok3d/maintenance.py add "$1" "$2" "$3" "$devices" "$silences") || exit 2
+	rm -f "$silences"
+	trap - EXIT
 	set --
 	while IFS= read -r arg; do
 		set -- "$@" "$arg"
@@ -1040,24 +1046,30 @@ EOF
 	maintenance_list
 }
 
+# Ends one of ok3d's own windows, never a silence made some other way.
 maintenance_end() {
-	python3 -I src/ok3d/maintenance.py id "$1" || {
-		echo "$1 isn't a maintenance window's id: ./ok3d maintenance lists them." >&2
+	silences=$(mktemp "${TMPDIR:-/tmp}/ok3d-silences.XXXXXX")
+	trap 'rm -f "$silences"' EXIT
+	amtool silence query --output=json >"$silences"
+	python3 -I src/ok3d/maintenance.py ours "$1" "$silences" || {
+		echo "$1 isn't one of ok3d's maintenance windows: ./ok3d maintenance lists them." >&2
 		exit 2
 	}
+	rm -f "$silences"
+	trap - EXIT
 	amtool silence expire "$1"
 	echo "Ended maintenance window $1."
 	maintenance_list
 }
 
+# A test alert, through the real path: Alertmanager's own amtool adds it, and Alertmanager
+# sends it wherever alerts go. It clears itself after 5 minutes.
 cmd_test_alert() {
 	load_settings
-	pod=$alertmanager_pod
 	ends=$(date -u -d '+5 minutes' '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || date -u -v+5M '+%Y-%m-%dT%H:%M:%SZ')
-	kubectl --context "$context" --namespace monitoring exec "$pod" --container alertmanager -- \
-		amtool alert add OK3DTestAlert severity=warning device=ok3d \
+	amtool alert add OK3DTestAlert severity=warning device=ok3d \
 		--annotation="summary=\"A test alert from ./ok3d test-alert. If you can read this, alerts reach you.\"" \
-		--end="$ends" --alertmanager.url=http://localhost:9093
+		--end="$ends"
 	echo "Sent. It should arrive within a minute, wherever your alerts go (docs/alerts.md)."
 }
 

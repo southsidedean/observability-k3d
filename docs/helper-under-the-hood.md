@@ -204,8 +204,9 @@ digits, then `m`, `h`, or `d`) or two times; `reason` is optional, at most 100 c
 letters, digits, spaces, and `, . ' ( ) / : _ -`, and starts with a letter or digit, so it's
 never taken for an option. `maintenance-end` takes `window`, a silence's id. Each is checked
 whole, with the same patterns as `src/ok3d/maintenance.py` (a test keeps them the same),
-which checks them again, refuses a device that isn't in `devices.yaml`, and passes `amtool`
-only the arguments it makes itself. The helper never runs `amtool` directly.
+which checks them again, refuses a device that isn't in `devices.yaml` or a 21st window,
+ends only one of ok3d's own windows (never a silence made some other way), and passes
+`amtool` only the arguments it makes itself. The helper never runs `amtool` directly.
 
 ## Looking for a release, and upgrading
 

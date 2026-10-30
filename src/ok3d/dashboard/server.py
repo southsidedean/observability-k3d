@@ -270,7 +270,7 @@ def maintenance_note(config: Config) -> str:
 LENGTHS = (("30m", "30 minutes"), ("1h", "1 hour"), ("2h", "2 hours"), ("4h", "4 hours"), ("8h", "8 hours"),
            ("1d", "1 day"))  # fmt: skip
 # A device's name in devices.yaml.
-DEVICE_NAMES = re.compile(rf"^\s*(?:-\s+)?name:\s*['\"]?({rules.DEVICE})['\"]?\s*$", re.MULTILINE)
+DEVICE_NAMES = re.compile(rules.NAME_LINE, re.MULTILINE)  # as ./ok3d maintenance reads them
 
 
 def maintenance_page(config: Config, message: str = "") -> str:
@@ -287,13 +287,14 @@ def maintenance_page(config: Config, message: str = "") -> str:
             f"<li>{who(w.what)}, {html.escape(w.start_here)} to {html.escape(w.end_here)}: {state}"
             + (f" ({html.escape(w.reason)})" if w.reason else "")
             + f' <form class="inline" method="post" action="/maintenance/end"><input type="hidden" name="window" '
-            f'value="{w.id}"><button class="plain">End now</button></form></li>'
+            f'value="{html.escape(w.id)}"><button class="plain">End now</button></form></li>'
         )
     listed = f"<ul class=todo>{''.join(rows)}</ul>" if rows else "<p class=muted>No maintenance windows.</p>"
     checked = (f"Read from Alertmanager at {html.escape(found[0])}." if found
                else "Not read from Alertmanager yet.")  # fmt: skip
     devices = DEVICE_NAMES.findall(helper_link.current(config.helper, "devices.yaml") or "")
-    boxes = "".join(f'<label><input type="checkbox" name="device-{d}" value="on"> {d}</label> ' for d in devices)
+    boxes = "".join(f'<label><input type="checkbox" name="device-{html.escape(d)}" value="on"> {html.escape(d)}</label> '
+                    for d in devices)  # fmt: skip
     lengths = "".join(f'<option value="{v}"{" selected" if v == "2h" else ""}>{w}</option>' for v, w in LENGTHS)
     return (
         f"<section><h2>Maintenance windows</h2>{note}"

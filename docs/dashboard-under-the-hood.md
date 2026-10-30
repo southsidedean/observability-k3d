@@ -183,10 +183,13 @@ with a note to wait. If the outbox can't be written, the page says so and sends 
   that would send a request is refused, as the helper refuses them too. Partway through, the
   new release's `./ok3d install` replaces the Dashboard's container, and since sessions live
   in memory, you sign in again.
-- **A maintenance window** is checked the way `./ok3d maintenance` will check it
+- **A maintenance window** is checked with the same patterns `./ok3d maintenance` uses
   (`src/ok3d/maintenance.py`, which the Dashboard imports): all or device names, a length
-  from the list or a start and an end, and a reason of plain text. One that wouldn't pass is
-  never sent. The windows come from `helper/maintenance`, which `./ok3d maintenance` writes
+  from the list or a start and an end, and a reason of plain text. One that doesn't match
+  is never sent. The rest is checked on the server, since only it knows its own time zone
+  and devices: that the end comes after the start and within 30 days, the devices are in
+  `devices.yaml`, and there are fewer than 20 windows. Home shows that answer. Like any
+  request, it turns Apply off until the next Check. The windows come from `helper/maintenance`, which `./ok3d maintenance` writes
   each time it adds, ends, or reads them: a line the Dashboard can't read whole is left out.
   The page knows a window is on, or has ended, from its times, without asking again.
 - **Keys** checks a value the way the helper will (one line of letters, digits, and symbols,

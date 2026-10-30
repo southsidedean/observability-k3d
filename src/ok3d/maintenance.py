@@ -7,9 +7,11 @@ the service watching it would decide ok3d had stopped.
 
 `./ok3d maintenance` runs this with the server's own Python (`python3 -I`):
 
-    maintenance.py add WHAT WHEN REASON DEVICES_FILE
+    maintenance.py add WHAT WHEN REASON DEVICES_FILE SILENCES_JSON
         Checks the window and prints amtool's arguments, one per line, for
         `amtool silence add`: the matchers, then --start, --end, --author, and --comment.
+        SILENCES_JSON is `amtool silence query -o json`, to count ok3d's windows (at most
+        MOST at once).
     maintenance.py list SILENCES_JSON
         Reads `amtool silence query -o json`, and prints ok3d's windows that haven't ended,
         one per line, for the helper's folder (the Dashboard reads them):
@@ -17,8 +19,9 @@ the service watching it would decide ok3d had stopped.
         START and END are UTC; START_HERE and END_HERE are the server's own time.
     maintenance.py table NOTE_FILE
         The same windows, as lines a person reads.
-    maintenance.py id ID
-        Exits 0 if ID looks like a silence's id, and 2 if not.
+    maintenance.py ours ID SILENCES_JSON
+        Exits 0 if ID is one of ok3d's windows that hasn't ended, and 2 if not, so ending one
+        never ends a silence made some other way.
 
 WHAT is "all" or device names joined by commas. WHEN is a length from now (30m, 2h, 1d), or
 START/END in the server's local time (2026-11-03T02:00/2026-11-03T04:00). REASON is a short
@@ -44,6 +47,9 @@ RANGE = re.compile(rf"({LOCAL})/({LOCAL})")
 # A reason: plain text, at most 100 characters, starting with a letter or digit.
 REASON = re.compile(r"(?:[A-Za-z0-9][A-Za-z0-9 ,.'()/:_-]{0,99})?")
 SILENCE_ID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+# The most of ok3d's windows that may be set at once: plenty for a home, and a limit on what a
+# Dashboard someone had taken over could pile into Alertmanager.
+MOST = 20
 # The longest a window may last, and how far ahead one may start.
 LONGEST = timedelta(days=30)
 FURTHEST = timedelta(days=366)
@@ -87,6 +93,8 @@ def window_times(when: str, now: datetime) -> tuple[datetime, datetime]:
             raise Refused("That isn't a date and time this server can read.") from None
         if start < now:
             start = now  # already started: from now
+    if end <= now:
+        raise Refused("That window has already ended.")
     if end <= start:
         raise Refused("The window ends before it starts.")
     if end - start > LONGEST:
@@ -96,17 +104,24 @@ def window_times(when: str, now: datetime) -> tuple[datetime, datetime]:
     return start, end
 
 
+# A device's name in devices.yaml, on a line of its own (a comment after it is fine).
+NAME_LINE = rf"^\s*(?:-\s+)?name:\s*['\"]?({DEVICE})['\"]?\s*(?:#.*)?$"
+
+
 def device_names(devices_file: Path) -> set[str]:
-    """The names in devices.yaml, as `name:` lines."""
+    """The names in devices.yaml, as `name:` lines, one to a line."""
     try:
         text = devices_file.read_bytes()[:MAX_READ].decode("utf-8", errors="replace")
     except OSError:
         return set()
-    return set(re.findall(rf"^\s*(?:-\s+)?name:\s*['\"]?({DEVICE})['\"]?\s*$", text, re.MULTILINE))
+    return set(re.findall(NAME_LINE, text, re.MULTILINE))
 
 
-def add(what: str, when: str, reason: str, devices_file: Path, now: datetime) -> list[str]:
-    """amtool's arguments for the window, or raises Refused."""
+def add(what: str, when: str, reason: str, devices_file: Path, now: datetime, silences: object = ()) -> list[str]:
+    """amtool's arguments for the window, or raises Refused. silences are Alertmanager's, to
+    count ok3d's windows."""
+    if len(windows(silences, now)) >= MOST:
+        raise Refused(f"There are {MOST} maintenance windows already: end one first.")
     if not WHAT.fullmatch(what):
         raise Refused("What is all, or device names from devices.yaml joined by commas.")
     if not REASON.fullmatch(reason):
@@ -159,7 +174,7 @@ def windows(silences: object, now: datetime) -> list[str]:
             continue
         if what is None or start is None or end is None or end <= now:
             continue
-        reason = comment.removeprefix(f"{AUTHOR}:").strip() if comment.startswith(AUTHOR) else ""
+        reason = comment.removeprefix(f"{AUTHOR}:").strip() if comment.startswith(f"{AUTHOR}:") else ""
         if not REASON.fullmatch(reason):
             reason = ""
         found.append((start, f"window={silence_id};{what};{stamp(start)};{stamp(end)};{here(start)};{here(end)};{reason}"))
@@ -177,20 +192,27 @@ def table(note: str) -> list[str]:
     return lines or ["No maintenance windows."]
 
 
+def silences_in(path: Path) -> object:
+    """Alertmanager's silences, from `amtool silence query -o json`."""
+    text = path.read_bytes()[:MAX_READ].decode("utf-8", errors="replace")
+    return json.loads(text or "[]")
+
+
 def main(argv: list[str]) -> int:
     now = datetime.now(UTC)
     try:
-        if len(argv) == 5 and argv[0] == "add":
-            print("\n".join(add(argv[1], argv[2], argv[3], Path(argv[4]), now)))
+        if len(argv) == 6 and argv[0] == "add":
+            print("\n".join(add(argv[1], argv[2], argv[3], Path(argv[4]), now, silences_in(Path(argv[5])))))
         elif len(argv) == 2 and argv[0] == "list":
-            text = Path(argv[1]).read_bytes()[:MAX_READ].decode("utf-8", errors="replace")
-            print("\n".join(windows(json.loads(text or "[]"), now)))
+            print("\n".join(windows(silences_in(Path(argv[1])), now)))
         elif len(argv) == 2 and argv[0] == "table":
             print("\n".join(table(Path(argv[1]).read_text(encoding="utf-8", errors="replace"))))
-        elif len(argv) == 2 and argv[0] == "id":
-            return 0 if SILENCE_ID.fullmatch(argv[1]) else 2
+        elif len(argv) == 3 and argv[0] == "ours":
+            ours = [line.split(";")[0].removeprefix("window=") for line in windows(silences_in(Path(argv[2])), now)]
+            return 0 if SILENCE_ID.fullmatch(argv[1]) and argv[1] in ours else 2
         else:
-            print("usage: maintenance.py add WHAT WHEN REASON DEVICES | list JSON | table NOTE | id ID", file=sys.stderr)
+            print("usage: maintenance.py add WHAT WHEN REASON DEVICES JSON | list JSON | table NOTE | ours ID JSON",
+                  file=sys.stderr)  # fmt: skip
             return 2
     except Refused as e:
         print(e, file=sys.stderr)

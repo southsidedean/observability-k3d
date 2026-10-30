@@ -17,8 +17,9 @@ It assumes the Dashboard's container may have been taken over, so it trusts noth
 outbox: not the file's contents, not its type (it may be a link, a folder, or a pipe), and not
 its size. The most a request can ever do is what you could do yourself: run `./ok3d check`
 or `./ok3d apply`, save a settings or devices file that `./ok3d validate` passes, set one
-of four lines of .env (ENV_NAMES), or look for a newer release and move to one, which
-`./ok3d upgrade` takes only when its tag is signed by a key in deploy/release-signers.
+of four lines of .env (ENV_NAMES), look for a newer release and move to one, which
+`./ok3d upgrade` takes only when its tag is signed by a key in deploy/release-signers, or
+add, end, and list maintenance windows with `./ok3d maintenance`.
 docs/helper-under-the-hood.md has the whole story.
 
 It uses only the standard library and runs on the host's own Python (`python3 -I`), so the

@@ -115,11 +115,16 @@ On the server:
 
 A length is minutes, hours, or days (`30m`, `2h`, `1d`), and a window lasts at most 30 days.
 A start and an end are in the server's own time. Each window happens once; repeating ones
-(a weekly reboot, say) come later.
+(a weekly reboot, say) come later. There can be 20 at once, and one covers up to 50 devices.
+
+A window for chosen devices covers the alerts about those devices from `devices.yaml`. It
+doesn't cover UniFi's alerts, which name UniFi's own devices: for those, use a window for all
+of ok3d. Each device's `name:` is read from its own line in `devices.yaml`, as the examples
+write it.
 
 Windows are Alertmanager's silences, kept in the data root, so they last through a rebuilt
 cluster and an upgrade. Silences you make another way (with `amtool`, say) work as well, but
-the Dashboard lists only ok3d's.
+ok3d lists and ends only its own.
 
 ## If an alert doesn't arrive
 

@@ -15,4 +15,4 @@ unpoller hasn't been able to read your UniFi controller for 10 minutes, so UniFi
 
 It clears on its own when unpoller reads the controller again.
 
-To keep it quiet while you work on it, add a [maintenance window](../alerts.md#maintenance-windows-keeping-alerts-quiet-while-you-work) on the Dashboard's Maintenance page, or with `./ok3d maintenance` on the server.
+To keep it quiet while you work on it, add a [maintenance window](../alerts.md#maintenance-windows-keeping-alerts-quiet-while-you-work) for all of ok3d on the Dashboard's Maintenance page, or with `./ok3d maintenance add all` on the server. A window for chosen devices doesn't cover UniFi's alerts: they name UniFi's devices, not the ones in `devices.yaml`.
