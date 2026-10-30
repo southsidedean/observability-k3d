@@ -4,15 +4,15 @@ Where ok3d is, release by release. Every pull request updates this page when it 
 starts, or changes something here. [PLAN.md](../PLAN.md#roadmap) has the detail of each
 release and the reasons behind it.
 
-**Now:** 0.5.0 is being released. 0.5.1, the Dashboard's second step, comes next.
+**Now:** 0.5.0 is released. 0.5.1 is in progress: the Dashboard's second step.
 
 | Release | What it brings | Status |
 |---|---|---|
 | 0.2.0 | The old stack's last version | Released ([v0.2.0](https://github.com/southsidedean/observability-k3d/tree/v0.2.0)) |
 | 0.3.0 | Groundwork: CI, hooks, tests, the charts, the `ok3d` command, the certificate authority | Released ([v0.3.0](https://github.com/southsidedean/observability-k3d/releases/tag/v0.3.0)) |
 | 0.4.0 | Metrics, alerts that reach you, and a safe front door | Released ([v0.4.0](https://github.com/southsidedean/observability-k3d/releases/tag/v0.4.0)) |
-| 0.5.0 | The Dashboard: set up and change ok3d from a web page, and screenshots in the docs | In progress |
-| 0.5.1 | The Dashboard's second step: upgrades, maintenance windows, and Apply asking first | Planned |
+| 0.5.0 | The Dashboard: set up and change ok3d from a web page, and screenshots in the docs | Released ([v0.5.0](https://github.com/southsidedean/observability-k3d/releases/tag/v0.5.0)) |
+| 0.5.1 | The Dashboard's second step: upgrades, maintenance windows, and Apply asking first | In progress |
 | 0.6.0 | Logs and changes: syslog, host logs, what-changed markers, new devices | Planned |
 | 0.7.0 | The NOC: the board, alerts that know the layout, the internet link's record, backups | Planned |
 | 0.8.0 | One sign-in for every page, the mesh, and traces | Planned |
@@ -50,4 +50,15 @@ release and the reasons behind it.
 | A time limit on each whole request to the Dashboard, its headers too | Done ([#32](https://github.com/southsidedean/observability-k3d/pull/32)) |
 | Installing with an AI assistant: a prompt to paste into one, offered near the top of the README | Done ([#33](https://github.com/southsidedean/observability-k3d/pull/33)) |
 | Upgrades from the Dashboard, maintenance windows, Apply asking first, and each choice's command | Moved to 0.5.1 |
-| Release 0.5.0, tested from a bare test VM with the installer and the Dashboard alone, the AI prompt, and the upgrade from 0.4 | In progress |
+| Release 0.5.0 ([#40](https://github.com/southsidedean/observability-k3d/pull/40)), tested from a bare test VM with the installer and the Dashboard alone, the AI prompt, and the upgrade from 0.4 | Done |
+
+## 0.5.1, in detail
+
+| Part | Status |
+|---|---|
+| Upgrades from the Dashboard: back up, move to the new release, recreate, and check | Planned |
+| Maintenance windows | Planned |
+| Apply asks first when it would stop something | Planned |
+| Each choice shown as its `ok3d` command | Planned |
+| Home's screenshot retaken, showing a released version | Planned |
+| Release 0.5.1, tested with an upgrade from 0.5.0 from the Dashboard alone | Planned |

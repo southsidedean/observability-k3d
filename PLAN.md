@@ -454,6 +454,7 @@ turn up. Production moves to ok3d at 0.4.0.
 - Maintenance windows.
 - Apply asks first when it would stop something.
 - Each choice shown as its `ok3d` command.
+- Home's screenshot retaken from a release: 0.5.0's shows `0.5.0.dev0`.
 - Test: an upgrade from 0.5.0 from the Dashboard alone, with no terminal.
 
 ### 0.6: Logs and changes
