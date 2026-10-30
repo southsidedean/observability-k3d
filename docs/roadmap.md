@@ -4,8 +4,8 @@ Where ok3d is, release by release. Every pull request updates this page when it 
 starts, or changes something here. [PLAN.md](../PLAN.md#roadmap) has the detail of each
 release and the reasons behind it.
 
-**Now:** 0.5.1 is released. 0.5.2 is in progress: small fixes, and the first upgrade from the
-Dashboard alone. 0.6.0, logs and changes, comes next.
+**Now:** 0.5.1 is released. 0.5.2 is in progress: small fixes, and the first release test
+that upgrades from the Dashboard alone. 0.6.0, logs and changes, comes next.
 
 | Release | What it brings | Status |
 |---|---|---|

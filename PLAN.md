@@ -441,8 +441,8 @@ turn up. Production moves to ok3d at 0.4.0.
   password is kept. It never reads the password or asks for a key (and `./ok3d install`
   prints the password only on a terminal, so it isn't in the assistant's output), and
   stops at the Dashboard, where settings, devices, and keys are set. On an error it
-  reports it and stops. Tested with Claude Code on a bare test VM as part of the release test; the docs
-  say which assistants it's been tested with.
+  reports it and stops. Tested with Claude Code on a bare test VM as part of the release
+  test; the docs say which assistants it's been tested with.
 - Test: from a bare test VM, the installer and the Dashboard alone give the 0.4 stack, with
   no terminal after the installer, and the upgrade from 0.4 works with the installer and the
   Dashboard. The AI prompt does the same on a bare VM (it can be the same install the
@@ -480,8 +480,9 @@ turn up. Production moves to ok3d at 0.4.0.
   instead, from the Dashboard alone: two local commits of the branch, each with a Dashboard
   image built on the VM and releases fetched from a repository on the VM, the first adding a
   test key to `deploy/release-signers` and the second tagged and signed with it. The
-  installer sets up the first, and the Dashboard upgrades it to the second. The upgrade from 0.5.0 to 0.5.1 uses the installer, as before. From 0.5.2,
-  each release test is an upgrade from the release before, from the Dashboard alone.
+  installer sets up the first, and the Dashboard upgrades it to the second. The upgrade
+  from 0.5.0 to 0.5.1 uses the installer, as before. From 0.5.2, each release test is an
+  upgrade from the release before, from the Dashboard alone.
 
 ### 0.5.2: Small fixes
 
