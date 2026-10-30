@@ -211,7 +211,8 @@ release; `none` when nothing running would change; and `unknown` when Check coul
 That's when the cluster didn't answer, the dry run failed (Helm older than 3.13 has no
 server-side dry run, and Check warns about that), an object in either manifest couldn't be
 read, there's no admin password yet, or Apply would first move a release from 0.3, which
-restarts everything. Check says why, from Helm's own error.
+restarts everything. Check says why: Helm's own error line when Helm failed, and its own
+words otherwise. A Check that finds problems after reading your settings empties the file.
 
 Home shows the plan only once a Check has passed, so a Check that stops partway (on a
 setting it can't read, say) and leaves the file as it was makes no difference. Only the ok3d

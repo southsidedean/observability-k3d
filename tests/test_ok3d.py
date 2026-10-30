@@ -6,6 +6,7 @@ tested on the test VM: PLAN.md, "The test VM".)
 
 from __future__ import annotations
 
+import contextlib
 import fcntl
 import os
 import pty
@@ -1218,9 +1219,11 @@ def test_apply_takes_only_yes(env: dict[str, str]) -> None:
 
 
 def test_a_0_3_release_makes_apply_ask(env: dict[str, str], tmp_path: Path) -> None:
-    running = deployed(env, tmp_path, 1) | {"FAKE_OLD_RELEASE": "0"}  # still in ok3d-system
+    # A release in ok3d-system and none in monitoring: once taken for a new cluster.
+    running = deployed(env, tmp_path, 1) | {"FAKE_OLD_RELEASE": "0", "FAKE_MANIFEST": ""}
     result = ok3d(running, "check")
     assert "Apply will move ok3d's 0.3 release, which restarts everything" in result.stdout
+    assert "helm status ok3d --kube-context k3d-ok3d --namespace ok3d-system" in calls(running)
     assert "state=unknown" in (Path(env["FAKE_DATA_ROOT"]) / "helper" / "apply-plan").read_text()
 
 
@@ -1258,5 +1261,6 @@ exec "{tmp_path}/bin/helm" "$@"
         os.killpg(proc.pid, signal.SIGTERM)
         proc.wait(timeout=10)
     finally:
-        proc.kill()
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(proc.pid, signal.SIGKILL)  # the stand-in's sleep too, if the test failed early
     assert list(temp.iterdir()) == []
