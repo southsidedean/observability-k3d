@@ -996,7 +996,9 @@ cmd_maintenance() {
 	case "${1:-}" in
 	"") maintenance_list ;;
 	add)
-		[ $# -ge 3 ] && [ $# -le 4 ] || maintenance_usage
+		if [ $# -lt 3 ] || [ $# -gt 4 ]; then
+			maintenance_usage
+		fi
 		maintenance_add "$2" "$3" "${4:-}"
 		;;
 	end)
