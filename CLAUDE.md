@@ -58,7 +58,8 @@ in this repository.
 
 ```bash
 ./ok3d check          # is this machine ready, and are the settings valid? changes nothing
-./ok3d apply          # make what's missing (data root folders, CA, cluster), then deploy
+./ok3d apply [--yes]  # make what's missing (data root folders, CA, cluster), then deploy; asks first
+                      # on a terminal if it would restart or stop something (check lists what)
 ./ok3d install        # the helper and the Dashboard (Linux with systemd)
 ./ok3d delete --yes   # delete the cluster; the data root stays
 ./ok3d upgrade [vX.Y.Z] [--yes]   # is a newer release out? / move to it and make the cluster again

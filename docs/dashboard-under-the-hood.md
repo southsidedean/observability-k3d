@@ -153,6 +153,13 @@ with a note to wait. If the outbox can't be written, the page says so and sends 
   as does a failed Check. The server checks this too, not only the button. It doesn't see
   changes you make to the files on the server after the Check, and the helper doesn't
   enforce it: Apply is something you could run yourself anyway.
+- **Apply asks first** when the Check said it would restart or stop part of the running
+  cluster, or couldn't tell. `./ok3d check` works that out (below) and writes it to
+  `helper/apply-plan`; Home lists it under Apply once that Check has passed. Pressing Apply
+  then shows a page naming those parts instead of sending anything, and its **Apply anyway**
+  sends the same form with `confirm=yes`. With no `apply-plan` at all, it asks too. A part's
+  name is shown only if it's plain text (letters, digits, spaces, and a little
+  punctuation); any other line is left out.
 - **Saving settings or devices** sends the whole file, with a browser's `\r\n` line endings
   turned into `\n`, at most 64 KB, and the SHA-256 of the file as the page showed it. The
   helper refuses the save if the file has changed on the server since, so an edit there
@@ -173,6 +180,36 @@ with a note to wait. If the outbox can't be written, the page says so and sends 
 - **Keys** checks a value the way the helper will (one line of letters, digits, and symbols,
   with no spaces, quotes, backslashes, `$`, or backticks), so a value the helper would
   refuse is never sent. A value is never shown back, not even in an error.
+
+## What Apply would change
+
+With a cluster running, `./ok3d check` ends by working out what Apply would change, and
+changes nothing to do it:
+
+1. It reads the ok3d release as it's deployed (`helm get manifest ok3d`).
+2. It asks the cluster what Apply would deploy, with Apply's own arguments (the same
+   `chart_args` that Apply uses), as a server-side dry run: `helm upgrade --dry-run=server`.
+3. `src/ok3d/apply_plan.py` compares the two, one object at a time (by kind, namespace, and
+   name). A workload (a Deployment, StatefulSet, or DaemonSet, or the Prometheus and
+   Alertmanager the operator runs) whose object changes would restart; one that's gone would
+   stop; a new one would start. Other changes (alert rules, dashboards, device checks) stop
+   nothing, so they're only counted.
+
+It writes the answer to `helper/apply-plan`:
+
+```ini
+checked=2026-10-30T09:00:00Z
+state=changes
+restart=Grafana
+other=2
+```
+
+`state=new` when there's no cluster or release yet (Apply makes them), `none` when nothing
+running would change, and `unknown` when it couldn't tell: the dry run failed (Helm older
+than 3.13 has no server-side dry run), or there's no admin password yet. A Check that finds
+problems leaves the file empty. Only the ok3d release is compared; the platform's
+(cert-manager) rarely changes. On the server, `./ok3d apply` asks the same question on a
+terminal (`--yes` skips it); run by another program, such as the helper, it goes ahead.
 
 ## Setup and its switches
 

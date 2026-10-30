@@ -1,11 +1,14 @@
 #!/bin/sh
 # ok3d: check this machine, create the cluster and deploy, or delete the cluster.
 #
-#   ./ok3d check      Is this machine ready, and are the settings valid? Changes nothing.
+#   ./ok3d check      Is this machine ready, and are the settings valid? With a cluster
+#                     running, also says what Apply would restart, stop, or start. Changes
+#                     nothing.
 #   ./ok3d apply      Check, then make what's missing: the data root's folders, the
 #                     certificate authority, and the cluster. Then deploy both releases
 #                     (ok3d-platform, then ok3d). Safe to run again: it changes only what's
-#                     different.
+#                     different. When that would restart or stop part of the running
+#                     cluster, it says which and asks first; --yes skips the question.
 #   ./ok3d install    Set up the Dashboard: the helper as a service of yours, the Dashboard's
 #                     certificate, and its container, which keeps running when the cluster
 #                     doesn't. Prints its address, and its password on a terminal. Safe to
@@ -289,9 +292,11 @@ cmd_check() {
 	check_data_root
 	if [ "$failures" -gt 0 ]; then
 		echo "$failures problem(s) to fix before ./ok3d apply."
+		helper_note apply-plan ""
 		return 1
 	fi
 	echo "Ready."
+	apply_plan
 }
 
 # The certificate authority, made once in the data root and kept: every new cluster loads the
@@ -469,6 +474,19 @@ deploy() {
 	password=$(admin_password)
 	load_admin_secret "$password"
 	echo "Deploying ok3d."
+	# shellcheck disable=SC2046 # chart_args prints one argument per line, on purpose
+	helm upgrade --install ok3d chart/ok3d $(chart_args "$password") \
+		--kube-context "$context" --namespace monitoring \
+		--wait --timeout 30m
+	kubectl --context "$context" --namespace gateway wait certificate/ok3d-pages \
+		--for=condition=Ready --timeout=120s
+}
+
+# chart_args PASSWORD: the ok3d release's values, as Helm arguments, one per line: your
+# settings and devices, then what ok3d works out itself. Apply deploys with these, and Check
+# renders with the same ones to see what Apply would change (apply_plan).
+chart_args() {
+	values_args
 	# Prometheus runs as you (the data root's owner), and keeps the history your settings ask
 	# for. Those go to the kube-prometheus-stack chart directly, since a chart's settings can't
 	# be read by the charts inside it.
@@ -478,9 +496,8 @@ deploy() {
 	a=kube-prometheus-stack.alertmanager.alertmanagerSpec
 	g=kube-prometheus-stack.grafana
 	# The gateway restarts when the password changes: it gets a checksum, never the password.
-	checksum=$(printf '%s' "$password" | openssl dgst -sha256 -r | cut -d' ' -f1)
-	# shellcheck disable=SC2046 # values_args prints one argument per line, on purpose
-	helm upgrade --install ok3d chart/ok3d $(values_args) \
+	checksum=$(printf '%s' "$1" | openssl dgst -sha256 -r | cut -d' ' -f1)
+	printf '%s\n' \
 		--set "host.uid=$uid,host.gid=$gid" \
 		--set "$p.securityContext.runAsUser=$uid,$p.securityContext.runAsGroup=$gid,$p.securityContext.fsGroup=$gid" \
 		--set "$a.securityContext.runAsUser=$uid,$a.securityContext.runAsGroup=$gid,$a.securityContext.fsGroup=$gid" \
@@ -489,11 +506,52 @@ deploy() {
 		--set "$g.grafana\.ini.security.csrf_trusted_origins=grafana.$DOMAIN" \
 		--set-file "tls.caCertificate=$DATA_ROOT/certs/ca.crt" \
 		--set "gateway.adminChecksum=$checksum" \
-		--set "$p.retention=$METRICS_RETENTION,$p.retentionSize=$METRICS_RETENTION_SIZE" \
-		--kube-context "$context" --namespace monitoring \
-		--wait --timeout 30m
-	kubectl --context "$context" --namespace gateway wait certificate/ok3d-pages \
-		--for=condition=Ready --timeout=120s
+		--set "$p.retention=$METRICS_RETENTION,$p.retentionSize=$METRICS_RETENTION_SIZE"
+}
+
+# What Apply would change in the cluster that's running: the parts it would restart, stop,
+# or start (src/ok3d/apply_plan.py compares a server-side dry run with what's deployed). It
+# changes nothing. Prints them, and writes them to the helper's folder as apply-plan, where
+# the Dashboard reads them to ask before an Apply that would stop something. Sets
+# plan_asks when Apply should ask first: something would restart or stop, or it couldn't
+# tell. Only the ok3d release is compared; the platform's (cert-manager) rarely changes.
+apply_plan() {
+	plan_asks=""
+	plan_work=$(mktemp -d)
+	if ! k3d cluster get "$CLUSTER_NAME" >/dev/null 2>&1 ||
+		! helm get manifest ok3d --kube-context "$context" --namespace monitoring >"$plan_work/now" 2>/dev/null; then
+		plan="state=new"
+	elif [ ! -s "$DATA_ROOT/admin-password" ] && [ -z "$(env_value_if_any OK3D_ADMIN_PASSWORD)" ]; then
+		plan="state=unknown"  # the password is made by Apply, and the release depends on it
+	else
+		# shellcheck disable=SC2046 # chart_args prints one argument per line, on purpose
+		if helm upgrade ok3d chart/ok3d $(chart_args "$(admin_password)") --kube-context "$context" \
+			--namespace monitoring --dry-run=server >"$plan_work/next" 2>"$plan_work/errors" &&
+			plan=$(python3 -I src/ok3d/apply_plan.py "$plan_work/now" "$plan_work/next"); then
+			:
+		else
+			plan="state=unknown"
+		fi
+	fi
+	rm -rf "$plan_work"
+	helper_note apply-plan "checked=$(now)
+$plan
+"
+	echo
+	case "$plan" in
+	state=new*) echo "Apply will make what's missing and deploy ok3d." ;;
+	state=none*) echo "Apply will change nothing that's running." ;;
+	state=changes*)
+		echo "What Apply will change:"
+		printf '%s\n' "$plan" | sed -n 's/^restart=/  restart  /p; s/^stop=/  stop     /p; s/^start=/  start    /p'
+		other=$(printf '%s\n' "$plan" | sed -n 's/^other=//p')
+		[ "${other:-0}" = 0 ] || echo "  and $other other change(s), such as alert rules or dashboards, which stop nothing"
+		;;
+	*) echo "Check couldn't tell what Apply would change in the running cluster." ;;
+	esac
+	case "$plan" in
+	*restart=* | *stop=* | state=unknown*) plan_asks=yes ;;
+	esac
 }
 
 # Puts the cluster's node on the demo network, if both are there, so Prometheus can reach the
@@ -511,6 +569,20 @@ connect_demo() {
 
 cmd_apply() {
 	cmd_check
+	# Asks first, on a terminal, when Apply would restart or stop something (apply_plan).
+	# --yes skips the question. Run by another program (the helper, an upgrade), it goes
+	# ahead: the Dashboard asks before it sends an Apply.
+	if [ "$plan_asks" = yes ] && [ "${1:-}" != --yes ] && [ -t 0 ]; then
+		printf 'Go ahead? [y/N] '
+		read -r answer
+		case "$answer" in
+		y | Y | yes | Yes) ;;
+		*)
+			echo "Nothing was applied."
+			exit 1
+			;;
+		esac
+	fi
 	if [ "$(id -u)" = 0 ]; then
 		echo "Run ok3d as yourself, not as root: what it keeps in the data root should be yours." >&2
 		exit 1
@@ -1234,7 +1306,7 @@ upgrade_to() {
 
 case "${1:-}" in
 check) cmd_check ;;
-apply) cmd_apply ;;
+apply) cmd_apply "${2:-}" ;;
 install) cmd_install ;;
 delete) cmd_delete "${2:-}" ;;
 demo) cmd_demo "${2:-}" "${3:-}" ;;

@@ -51,7 +51,10 @@ Home is where you start and finish each change:
    arrive.
 3. **Apply** turns on once a Check finds no problems. The first Apply makes the cluster and
    takes about 20 minutes; later ones bring it up to date with your settings, and are
-   quicker.
+   quicker. Once a cluster is running, Check also lists what Apply would change: the parts
+   it would restart (Grafana, say, after a change to its settings), stop (a part you
+   switched off), or start. If Apply would restart or stop anything, it asks first: a page
+   names those parts, and **Apply anyway** goes ahead.
 4. **What's next** appears once an Apply has worked: the steps on your own devices that the
    Dashboard can't do for you, such as trusting the certificate authority and opening
    Grafana.

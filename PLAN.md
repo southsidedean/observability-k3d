@@ -459,7 +459,12 @@ turn up. Production moves to ok3d at 0.4.0.
   down. Looking for a release happens only when you ask (`./ok3d upgrade`, or the button on
   Home), so ok3d still sends nothing on its own.
 - Maintenance windows.
-- Apply asks first when it would stop something.
+- Apply asks first when it would stop something (decided 2026-10-30): Check compares a
+  server-side dry run of Apply (`helm upgrade --dry-run=server`, with Apply's own arguments)
+  with the deployed release, and lists the workloads that would restart, stop, or start.
+  The Dashboard asks before an Apply that restarts or stops anything, or when Check couldn't
+  tell; `./ok3d apply` asks on a terminal. The helper's Apply doesn't ask: the Dashboard
+  already has.
 - Each choice shown as its `ok3d` command.
 - Home's screenshot retaken from a release: 0.5.0's shows `0.5.0.dev0`.
 - Test: 0.5.0 has no upgrade button, so the Dashboard's upgrade is rehearsed on the test VM

@@ -98,6 +98,46 @@ def applied(helper: Path) -> str | None:
     return text if TIME.fullmatch(text) else None
 
 
+@dataclass(frozen=True)
+class ApplyPlan:
+    """What the last Check found Apply would change (./ok3d's apply_plan): state is new (no
+    cluster or release yet), none, changes, or unknown (Check couldn't tell)."""
+
+    state: str
+    restart: tuple[str, ...] = ()
+    stop: tuple[str, ...] = ()
+    start: tuple[str, ...] = ()
+    other: int = 0
+
+    @property
+    def asks(self) -> bool:
+        """Whether Apply should ask first: it would restart or stop something, or no one knows."""
+        return bool(self.restart or self.stop) or self.state == "unknown"
+
+
+# A part's plain name, as apply_plan.py writes it: letters, digits, spaces, and a little
+# punctuation, and short. Anything else in the file is ignored.
+PART = re.compile(r"[A-Za-z0-9 ,.'()/_-]{1,100}")
+
+
+def apply_plan(helper: Path) -> ApplyPlan | None:
+    """What the last Check said Apply would change; None before a Check that passed has said,
+    or when the file isn't one ./ok3d wrote."""
+    text = read(helper / "apply-plan") or ""
+    state = fields_of(text).get("state", "")
+    if state not in ("new", "none", "changes", "unknown"):
+        return None
+    parts: dict[str, list[str]] = {"restart": [], "stop": [], "start": []}
+    other = 0
+    for line in text.splitlines():
+        key, _, value = line.partition("=")
+        if key in parts and PART.fullmatch(value):
+            parts[key].append(value)
+        elif key == "other" and re.fullmatch(r"[0-9]{1,6}", value):
+            other = int(value)
+    return ApplyPlan(state, tuple(parts["restart"]), tuple(parts["stop"]), tuple(parts["start"]), other)
+
+
 def fields_of(text: str | None) -> dict[str, str]:
     return dict(line.split("=", 1) for line in (text or "").splitlines() if "=" in line)
 
