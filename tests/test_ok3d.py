@@ -13,7 +13,9 @@ import re
 import shutil
 import stat
 import subprocess
+import signal
 import tarfile
+import time
 from pathlib import Path
 
 import pytest
@@ -45,7 +47,7 @@ case "$*" in
 	if [ -n "${FAKE_MANIFEST:-}" ]; then cat "$FAKE_MANIFEST"; else echo "${FAKE_MANIFEST_ERROR:-Error: release: not found}" >&2; exit 1; fi ;;
 *--dry-run=server*)
 	cat "${FAKE_DRY_RUN:-/dev/null}"
-	[ -z "${FAKE_DRY_RUN_ERROR:-}" ] || { echo "$FAKE_DRY_RUN_ERROR" >&2; exit 1; } ;;
+	[ -z "${FAKE_DRY_RUN_ERROR:-}" ] || { echo "WARNING: Kubernetes configuration file is group-readable." >&2; echo "$FAKE_DRY_RUN_ERROR" >&2; exit 1; } ;;
 *cluster-settings.yaml*)
 	cat <<EOF
 ---
@@ -1212,3 +1214,49 @@ def test_apply_takes_only_yes(env: dict[str, str]) -> None:
     result = ok3d(env, "apply", "--yse")
     assert result.returncode == 2 and "Usage: ./ok3d apply [--yes]" in result.stderr
     assert calls(env) == []
+
+
+
+def test_a_0_3_release_makes_apply_ask(env: dict[str, str], tmp_path: Path) -> None:
+    running = deployed(env, tmp_path, 1) | {"FAKE_OLD_RELEASE": "0"}  # still in ok3d-system
+    result = ok3d(running, "check")
+    assert "Apply will move ok3d's 0.3 release, which restarts everything" in result.stdout
+    assert "state=unknown" in (Path(env["FAKE_DATA_ROOT"]) / "helper" / "apply-plan").read_text()
+
+
+def test_the_reason_is_helms_error_not_a_warning_before_it(env: dict[str, str], tmp_path: Path) -> None:
+    running = deployed(env, tmp_path, 1) | {"FAKE_DRY_RUN_ERROR": "Error: the dry run failed"}
+    result = ok3d(running, "check")
+    assert "running cluster: Error: the dry run failed." in result.stdout
+    assert "group-readable" not in result.stdout
+
+
+def test_the_plans_folder_is_removed_when_check_is_stopped(env: dict[str, str], tmp_path: Path) -> None:
+    # Stopped by a signal partway through the dry run (to its whole process group, as Ctrl-C
+    # does), Check still removes its folder. Under dash, Linux's sh, that needs the signal trap;
+    # bash, macOS's sh, runs the EXIT trap either way.
+    running = deployed(env, tmp_path, 1)
+    hang = tmp_path / "hang"
+    hang.mkdir()
+    (hang / "helm").write_text(f'''#!/bin/sh
+case "$*" in *--dry-run=server*) echo started >"{tmp_path}/started"; exec sleep 30 ;; esac
+exec "{tmp_path}/bin/helm" "$@"
+''')
+    (hang / "helm").chmod(0o755)
+    temp = tmp_path / "temp"
+    temp.mkdir()
+    shell = shutil.which("dash") or "sh"  # dash where there is one, so the signal trap is what's tested
+    proc = subprocess.Popen([shell, str(ROOT / "ok3d"), "check"], env=running | {"PATH": f"{hang}:{running['PATH']}",
+                            "TMPDIR": str(temp)}, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                            start_new_session=True)  # fmt: skip
+    try:
+        for _ in range(300):
+            if (tmp_path / "started").exists():
+                break
+            time.sleep(0.1)
+        assert list(temp.iterdir()), "the plan's folder should be there while the dry run runs"
+        os.killpg(proc.pid, signal.SIGTERM)
+        proc.wait(timeout=10)
+    finally:
+        proc.kill()
+    assert list(temp.iterdir()) == []

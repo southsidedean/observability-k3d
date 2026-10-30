@@ -206,17 +206,19 @@ restart=Grafana
 other=2
 ```
 
-`state=new` when there's no cluster or release yet (Apply makes them), `none` when nothing
-running would change, and `unknown` when it couldn't tell: the cluster didn't answer, the
-dry run failed (Helm older than 3.13 has no server-side dry run, and Check warns about
-that), an object in either manifest couldn't be read, or there's no admin password yet.
-`new` only when there's no cluster, or the cluster answered that there's no ok3d release.
-A Check that finds problems after reading your settings leaves the file empty; one whose
-settings can't be read leaves it as it was, which doesn't matter, since Home shows it only
-once a Check has passed. Check says why it couldn't tell, and a part whose name the
-Dashboard can't show is counted, and asked about, all the same. Only the ok3d release is compared; the platform's
-(cert-manager) rarely changes. On the server, `./ok3d apply` asks the same question on a
-terminal (`--yes` skips it); run by another program, such as the helper, it goes ahead.
+`state=new` when there's no cluster yet, or the cluster answered that there's no ok3d
+release; `none` when nothing running would change; and `unknown` when Check couldn't tell.
+That's when the cluster didn't answer, the dry run failed (Helm older than 3.13 has no
+server-side dry run, and Check warns about that), an object in either manifest couldn't be
+read, there's no admin password yet, or Apply would first move a release from 0.3, which
+restarts everything. Check says why, from Helm's own error.
+
+Home shows the plan only once a Check has passed, so a Check that stops partway (on a
+setting it can't read, say) and leaves the file as it was makes no difference. Only the ok3d
+release is compared; the platform's (cert-manager) rarely changes. A part whose name the
+Dashboard can't show is counted, and asked about, all the same. On the server, `./ok3d
+apply` asks the same question on a terminal (`--yes` skips it); run by another program,
+such as the helper, it goes ahead.
 
 ## Setup and its switches
 
