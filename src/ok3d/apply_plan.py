@@ -11,8 +11,10 @@ prints the answer as lines for the helper's folder, where the Dashboard reads it
     other=3
 
 A workload (a Deployment, StatefulSet, or DaemonSet, or the Prometheus and Alertmanager the
-operator runs) whose object changes is restarted; one that's gone is stopped; a new one is
-started. Everything else (alert rules, dashboards, device checks) changes without stopping
+operator runs) is restarted when what Kubernetes rolls on changes: a Deployment's,
+StatefulSet's, or DaemonSet's pod template or replica count, or the operator's spec. A change
+elsewhere in it, such as the chart's label every release changes, restarts nothing, so it's
+counted with the rest. One that's gone is stopped; a new one is started. Everything else (alert rules, dashboards, device checks) changes without stopping
 anything, so it's only counted. state is none when nothing would change.
 
 It uses only the standard library, and runs on the host's own Python (`python3 -I`).
@@ -27,6 +29,8 @@ from pathlib import Path
 
 # The kinds that run something: a change restarts it, and removing one stops it.
 WORKLOADS = ("Deployment", "StatefulSet", "DaemonSet", "Prometheus", "Alertmanager")
+# The ones the Prometheus operator runs: it rolls their pods when their spec changes.
+OPERATED = ("Prometheus", "Alertmanager")
 # Plain names for ok3d's workloads, by object name. Any other is shown as kind/name.
 NAMES = {
     "ok3d-grafana": "Grafana",
@@ -45,6 +49,10 @@ KIND = re.compile(r"^kind: *(\S+)", re.MULTILINE)
 # The name and namespace under metadata, not a name further down in the spec.
 METADATA = re.compile(r"^metadata:\n((?:[ #].*\n?)*)", re.MULTILINE)
 FIELD = r"^  {}: *['\"]?([^'\"\s]+)"
+# The spec, and in it the pod template and the replica count, the way the charts write them.
+SPEC = re.compile(r"^spec:\n((?:[ #].*\n?)*)", re.MULTILINE)
+TEMPLATE = re.compile(r"^  template:\n(?:(?:    |\s*#).*\n?)*", re.MULTILINE)
+REPLICAS = re.compile(r"^  replicas:.*$", re.MULTILINE)
 
 
 @dataclass
@@ -98,6 +106,21 @@ def plain(key: tuple[str, str, str]) -> str:
     return NAMES.get(name, f"{kind}/{name}")
 
 
+def runs(kind: str, doc: str) -> str:
+    """The part of a workload that restarts it when it changes. When this can't find it, the
+    whole object: better to ask first for nothing than to miss a restart."""
+    spec = SPEC.search(doc)
+    if spec is None:
+        return doc
+    if kind in OPERATED:
+        return spec.group(1)
+    template = TEMPLATE.search(spec.group(1))
+    if template is None:
+        return doc
+    replicas = REPLICAS.search(spec.group(1))
+    return template.group(0) + (replicas.group(0) if replicas else "")
+
+
 def compare(now: str, after: str) -> Plan:
     before, next_ = objects(now), objects(after)
     plan = Plan()
@@ -110,6 +133,8 @@ def compare(now: str, after: str) -> Plan:
             plan.stop.append(plain(key))
         elif key not in before:
             plan.start.append(plain(key))
+        elif runs(key[0], before[key]) == runs(key[0], next_[key]):
+            plan.other += 1  # a label, say: nothing restarts
         else:
             plan.restart.append(plain(key))
     return plan

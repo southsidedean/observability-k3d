@@ -2,6 +2,14 @@
 
 ## 0.5.2 (unreleased)
 
+### Changes
+
+- Apply's question no longer says an upgrade restarts the gateway when it doesn't. Check
+  counted any change to a running part as a restart, even the chart's version label, which
+  every release changes and which restarts nothing. It now counts a restart only when the
+  part's pod template (or, for Prometheus and Alertmanager, their spec) changes. So the
+  upgrade from 0.5.0 to 0.5.1 never restarted the gateway, though 0.5.1's notes said it did.
+
 ## 0.5.1 (2026-10-30)
 
 ### Upgrading
