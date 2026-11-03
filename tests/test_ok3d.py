@@ -70,6 +70,7 @@ data:
   METRICS_RETENTION: "30d"
   METRICS_RETENTION_SIZE: "40GB"
   MODULE_UNIFI: "${FAKE_UNIFI:-false}"
+  UNIFI_URL: "${FAKE_UNIFI_URL:-https://192.168.1.1}"
   ALERTS_NTFY: "${FAKE_NTFY:-false}"
   ALERTS_NTFY_SERVER: "https://ntfy.sh"
   ALERTS_NTFY_TOKEN: "${FAKE_NTFY_TOKEN:-false}"
@@ -378,6 +379,18 @@ def test_unifi_on_with_no_key_is_a_problem_check_finds(env: dict[str, str], tmp_
     result = ok3d(env, "check")
     assert result.returncode == 1
     assert "UNIFI_API_KEY in .env is empty" in result.stdout
+
+
+@pytest.mark.parametrize(("url", "warned"), [("http://192.168.1.1", True), ("https://192.168.1.1", False)])
+def test_check_warns_when_the_unifi_key_would_go_unencrypted(env: dict[str, str], tmp_path: Path, url: str,
+                                                            warned: bool) -> None:
+    dotenv = tmp_path / ".env"
+    dotenv.write_text("UNIFI_API_KEY=abc123secret\n")
+    dotenv.chmod(0o600)
+    env.update(OK3D_ENV=str(dotenv), FAKE_UNIFI="true", FAKE_UNIFI_URL=url)
+    result = ok3d(env, "check")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert ("WARN  unifi.url is http://" in result.stdout) is warned
 
 
 def test_check_says_which_python_it_found(env: dict[str, str]) -> None:

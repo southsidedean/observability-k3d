@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -121,6 +122,34 @@ def test_the_schema_refuses_a_bad_device(tmp_path: Path, device: str, why: str) 
     assert result.returncode != 0, f"the schema accepted {why}"
 
 
+@pytest.mark.parametrize(
+    ("devices", "message"),
+    [
+        ("  - {name: nas, address: 192.168.1.5, role: nas}\n  - {name: nas, address: 192.168.1.6, role: nas}",
+         "devices.yaml lists nas twice"),
+        ("  - {name: nas, address: 192.168.1.5, role: nas, behind: swich}", "nas is behind swich, which isn't in"),
+        ("  - {name: nas, address: 192.168.1.5, role: nas, behind: nas}", "nas can't be behind itself"),
+        ("  - {name: nas, address: 192.168.1.5, role: nas, metrics: ['9100', '9100/other']}",
+         "nas lists metrics port 9100 twice"),
+    ],
+    ids=["a name twice", "behind a device that isn't listed", "behind itself", "a metrics port twice"],
+)
+def test_what_the_schema_cant_see_across_devices_is_refused(tmp_path: Path, devices: str, message: str) -> None:
+    path = tmp_path / "devices.yaml"
+    path.write_text(f"devices:\n{devices}\n")
+    result = helm("template", "ok3d", str(CHART), "--values", str(EXAMPLE), "--values", str(path))
+    assert result.returncode != 0 and message in result.stderr, result.stderr
+
+
+def test_a_device_behind_another_and_two_metrics_ports_render(tmp_path: Path) -> None:
+    path = tmp_path / "devices.yaml"
+    path.write_text("devices:\n  - {name: switch, address: 192.168.1.2, role: switch}\n"
+                    "  - {name: nas, address: 192.168.1.5, role: nas, behind: switch, metrics: ['9100', '9101/x']}\n")
+    result = helm("template", "ok3d", str(CHART), "--values", str(EXAMPLE), "--values", str(path))
+    assert result.returncode == 0, result.stderr
+    assert "name: device-nas-9100" in result.stdout and "name: device-nas-9101" in result.stdout
+
+
 def test_the_pages_certificate_covers_the_domain_and_every_name_under_it() -> None:
     rendered = render("--set", "tls.domain=noc.example.org")
     assert "kind: ClusterIssuer" in rendered
@@ -133,9 +162,12 @@ def test_the_cluster_settings_have_every_key_ok3d_reads() -> None:
         "template", "ok3d", str(CHART), "--values", str(EXAMPLE), "--show-only", "templates/cluster-settings.yaml"
     )
     assert result.returncode == 0, result.stderr
-    for key in ("CLUSTER_NAME", "K3S_IMAGE", "NETWORK", "API_PORT", "PUBLISH_ADDRESS", "HTTPS_PORT", "DATA_ROOT",
-                "TLS_MODE", "DOMAIN", "METRICS_RETENTION", "METRICS_RETENTION_SIZE", "MODULE_UNIFI"):
-        assert f"  {key}: " in result.stdout
+    # Every key ok3d insists on (its ${KEY:?} lines, anywhere in it), read from ok3d itself, and
+    # the ones it reads when they're there.
+    required = re.findall(r"\$\{([A-Z][A-Z0-9_]*):\?\}", (ROOT / "ok3d").read_text())
+    assert {"CLUSTER_NAME", "DASHBOARD_PORT", "ALERTS_DEADMAN"} <= set(required)
+    for key in [*required, "SETTINGS_VERSION", "UNIFI_URL"]:
+        assert f"  {key}: " in result.stdout, key
 
 
 @pytest.mark.parametrize(
@@ -155,7 +187,7 @@ def test_the_cluster_settings_have_every_key_ok3d_reads() -> None:
         ("host.uid=0", "running as root"),
         ("metrics.retention=forever", "a retention that isn't a duration"),
         ("metrics.retentionSize=40", "a size with no unit"),
-        ("unifi.url=ftp://192.168.1.1", "a controller address that isn't https"),
+        ("unifi.url=ftp://192.168.1.1", "a controller address that isn't http or https"),
         ("nosuch=1", "a misspelled or unknown setting"),
         ("cluster.nosuch=1", "an unknown setting inside a section"),
     ],
@@ -164,6 +196,14 @@ def test_the_schema_refuses(setting: str, why: str) -> None:
     flag = "--set-string" if setting.startswith("modules.") else "--set"
     result = helm("template", "ok3d", str(CHART), "--values", str(EXAMPLE), flag, setting)
     assert result.returncode != 0, f"the schema accepted {setting} ({why})"
+
+
+@pytest.mark.parametrize("url", ["http://192.168.1.1", "https://192.168.1.1:8443"])
+def test_the_schema_takes_an_http_or_https_controller(url: str) -> None:
+    # http is allowed on purpose: some controllers serve only that, and Check warns.
+    result = helm("template", "ok3d", str(CHART), "--values", str(EXAMPLE), "--set", "modules.unifi=true",
+                  "--set", f"unifi.url={url}")  # fmt: skip
+    assert result.returncode == 0, result.stderr
 
 
 def _undescribed(node: dict[str, Any], path: str = "") -> list[str]:
@@ -298,13 +338,28 @@ def test_the_gateway_serves_https_for_every_name_with_the_pages_certificate(tmp_
     for page in ("prometheus", "alertmanager"):
         assert by_name[page]["policies"]["basicAuth"]["htpasswd"]["file"] == "/auth/htpasswd"
         assert by_name[page]["policies"]["localRateLimit"]
+        # The admin login is the gateway's, so it goes no further.
+        assert by_name[page]["policies"]["requestHeaderModifier"]["remove"] == ["authorization"]
     assert "basicAuth" not in by_name["grafana"]["policies"]
-    for route in by_name.values():
+
+
+def test_every_answer_the_gateway_gives_carries_the_headers(tmp_path: Path) -> None:
+    ca = tmp_path / "ca.crt"
+    ca.write_text(CA_PEM)
+    every = routes(gateway_config(tmp_path, "--set-file", f"tls.caCertificate={ca}"))
+    assert {r["name"] for r in every} >= {"grafana", "prometheus", "alertmanager", "certificate-authority", "not-found"}
+    for route in every:
+        # The gateway's own answers take CEL expressions, so their values are quoted strings:
+        # unquoted, DENY would be a name CEL looks up.
         if "backends" in route:
-            assert route["policies"]["responseHeaderModifier"]["set"]["x-frame-options"] == "DENY"
-            # Not no-referrer: then browsers send "Origin: null", and Grafana refuses its own
-            # requests, so no panel loads (the screenshots found this).
-            assert route["policies"]["responseHeaderModifier"]["set"]["referrer-policy"] == "same-origin"
+            headers, quote = route["policies"]["responseHeaderModifier"]["set"], ""
+        else:
+            headers, quote = route["policies"]["directResponse"]["headers"], '"'
+        assert headers["x-frame-options"] == f"{quote}DENY{quote}", route["name"]
+        assert headers["x-content-type-options"] == f"{quote}nosniff{quote}", route["name"]
+        # Not no-referrer: then browsers send "Origin: null", and Grafana refuses its own
+        # requests, so no panel loads (the screenshots found this).
+        assert headers["referrer-policy"] == f"{quote}same-origin{quote}", route["name"]
 
 
 def test_the_certificate_authority_is_served_only_once_ok3d_passes_it(tmp_path: Path) -> None:
@@ -344,8 +399,9 @@ def test_dashboards_have_their_datasources_and_dpi_stays_out() -> None:
 def test_grafana_sends_nothing_anywhere_and_lets_no_one_sign_up() -> None:
     ini = next(d for d in documents(render(), "ConfigMap") if "grafana.ini:" in d)
     for setting in ("reporting_enabled = false", "check_for_updates = false", "allow_sign_up = false",
-                    "cookie_secure = true"):
+                    "cookie_secure = true", "cookie_samesite = strict", "disable_gravatar = true"):
         assert setting in ini, setting
+    assert "[auth.anonymous]\n    enabled = false" in ini
 
 
 def test_every_ok3d_namespace_turns_away_what_it_doesnt_list() -> None:
@@ -370,6 +426,65 @@ def test_the_gateway_reaches_only_the_pages_web_ports() -> None:
     assert [port["port"] for rule in gateway for port in rule["ports"]] == [8443, 15020]
     # Its metrics are for monitoring only.
     assert gateway[1]["from"][0]["namespaceSelector"]["matchLabels"]["kubernetes.io/metadata.name"] == "monitoring"
+
+
+def test_the_operator_webhook_and_monitoring_policies_open_only_what_they_say() -> None:
+    import yaml
+
+    policies = {p["metadata"]["name"]: p for p in (yaml.safe_load(d) for d in documents(render(), "NetworkPolicy"))}
+    webhook = policies["ok3d-operator-webhook"]["spec"]
+    assert webhook["podSelector"] == {"matchLabels": {"app": "kube-prometheus-stack-operator"}}
+    assert webhook["ingress"] == [{"ports": [{"port": 10250}]}]  # from anywhere, but one port
+    within = policies["ok3d-within-monitoring"]
+    assert within["metadata"]["namespace"] == "monitoring"
+    assert within["spec"]["ingress"] == [{"from": [{"podSelector": {}}]}]  # this namespace's pods only
+
+
+def test_the_pages_certificate_gets_a_new_key_at_each_renewal() -> None:
+    import yaml
+
+    certificate = yaml.safe_load(next(d for d in documents(render(), "Certificate") if "name: ok3d-pages" in d))
+    spec = certificate["spec"]
+    assert spec["privateKey"] == {"algorithm": "ECDSA", "size": 256, "rotationPolicy": "Always"}
+    assert (spec["duration"], spec["renewBefore"]) == ("2160h", "720h")
+
+
+def test_deleting_the_cluster_never_deletes_the_data() -> None:
+    import yaml
+
+    volumes = [yaml.safe_load(d) for d in documents(render(), "PersistentVolume")]
+    assert len(volumes) == 3
+    assert all(v["spec"]["persistentVolumeReclaimPolicy"] == "Retain" for v in volumes)
+
+
+def test_the_dashboards_datasource_is_the_one_grafana_is_given() -> None:
+    import yaml
+
+    provisioned = next(d for d in documents(render(), "ConfigMap") if "datasource.yaml:" in d)
+    sources = yaml.safe_load(yaml.safe_load(provisioned)["data"]["datasource.yaml"])["datasources"]
+    assert [s["uid"] for s in sources if s["type"] == "prometheus"] == ["prometheus"]
+    # Every datasource a panel or variable names, in every dashboard, is that one (other than
+    # Grafana's own, for annotations).
+    named: list[str] = []
+
+    def walk(node: Any) -> None:
+        if isinstance(node, dict):
+            source = node.get("datasource")
+            if isinstance(source, dict) and source.get("type") == "prometheus":
+                named.append(source.get("uid", ""))
+            elif isinstance(source, str) and source != "-- Grafana --":  # the vendored ones' form
+                named.append(source)
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, list):
+            for value in node:
+                walk(value)
+
+    for d in documents(render(), "ConfigMap"):
+        if 'grafana_dashboard: "1"' in d and "ok3d-dashboard-" in d:
+            for text in yaml.safe_load(d)["data"].values():
+                walk(json.loads(text))
+    assert named and set(named) == {"prometheus"}
 
 
 def test_validate_refuses_settings_the_schema_refuses(tmp_path: Path) -> None:

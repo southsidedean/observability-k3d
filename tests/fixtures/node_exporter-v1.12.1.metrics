@@ -1257,7 +1257,3 @@ process_virtual_memory_max_bytes
 promhttp_metric_handler_errors_total
 promhttp_metric_handler_requests_in_flight
 promhttp_metric_handler_requests_total
-testmetric1_1
-testmetric1_2
-testmetric2_1
-testmetric2_2

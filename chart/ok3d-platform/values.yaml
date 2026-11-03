@@ -19,6 +19,7 @@ cert-manager:
     resources:
       requests: { cpu: 10m, memory: 64Mi }
       limits: { memory: 256Mi }
-  # Metrics for Prometheus (from 0.4).
+  # cert-manager serves metrics, but nothing scrapes them yet: there's no ServiceMonitor for
+  # it (docs/roadmap.md, Found in the 0.5.2 review).
   prometheus:
     enabled: true

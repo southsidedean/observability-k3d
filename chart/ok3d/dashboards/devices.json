@@ -156,7 +156,7 @@
       "id": 4,
       "type": "stat",
       "title": "Firing alerts",
-      "description": "Alerts firing now, other than Alertmanager's always-on Watchdog.",
+      "description": "Alerts firing now, other than Alertmanager's always-on Watchdog and the operator's InfoInhibitor, which fires alongside any info alert.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -170,7 +170,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "count(ALERTS{alertstate=\"firing\", alertname!=\"Watchdog\"})",
+          "expr": "count(ALERTS{alertstate=\"firing\", alertname!~\"Watchdog|InfoInhibitor\"})",
           "instant": true,
           "datasource": {
             "type": "prometheus",
@@ -301,7 +301,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Round-trip time of each device's ping check.",
+      "description": "Round-trip time of each device's ping: the echo and its reply, without looking up the name.",
       "gridPos": {
         "h": 12,
         "w": 12,
@@ -311,7 +311,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "probe_duration_seconds{job=\"devices\", check=\"ping\"}",
+          "expr": "probe_icmp_duration_seconds{job=\"devices\", check=\"ping\", phase=\"rtt\"}",
           "legendFormat": "{{device}}",
           "datasource": {
             "type": "prometheus",

@@ -44,12 +44,15 @@ groups:
           description: "{{ $labels.device }} has had less than 5% of its memory free for 15 minutes."
           runbook_url: https://github.com/southsidedean/observability-k3d/blob/main/docs/runbooks/HostMemoryLow.md
 
+      # Degraded counts the disks the array is short of, whether one failed and is still listed
+      # or mdadm already took it out (the usual state after a failure). Counting failed disks
+      # alone misses it: an array that lost a disk often has none marked failed.
       - alert: HostRaidDegraded
-        expr: node_md_disks{state="failed"} > 0
+        expr: node_md_degraded > 0
         for: 5m
         labels:
           severity: critical
         annotations:
-          summary: "A disk failed in {{ $labels.device }}'s RAID."
-          description: "The RAID array {{ $labels.exported_device }} on {{ $labels.device }} has {{ $value }} failed disk(s)."
+          summary: "{{ $labels.device }}'s RAID is missing a disk."
+          description: "The RAID array {{ $labels.exported_device }} on {{ $labels.device }} is short {{ $value }} disk(s), failed or taken out by mdadm."
           runbook_url: https://github.com/southsidedean/observability-k3d/blob/main/docs/runbooks/HostRaidDegraded.md
