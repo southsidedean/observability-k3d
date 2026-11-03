@@ -168,3 +168,21 @@ def test_ending_takes_only_ok3ds_own_windows(tmp_path: Path) -> None:
     assert run("ours", "54c2bf37-5a0a-45d7-91a0-30e0c9b716b6", str(tmp_path / "s.json")).returncode == 0
     assert run("ours", "00000000-0000-0000-0000-000000000000", str(tmp_path / "s.json")).returncode == 2
     assert run("ours", "--all", str(tmp_path / "s.json")).returncode == 2
+
+
+@pytest.mark.parametrize("zone", ["Europe/Paris", "UTC", "Asia/Kolkata", "America/St_Johns", "Pacific/Chatham"])
+def test_the_dashboard_reads_every_line_this_writes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, zone: str) -> None:
+    # The Maintenance page warns when it can't read a window= line, so every line this writes
+    # has to be one it reads, in any time zone the server may have.
+    from ok3d.dashboard import helper_link
+
+    monkeypatch.setenv("TZ", zone)
+    time.tzset()
+    device = [{"isEqual": True, "isRegex": True, "name": "device", "value": "nas|router"}]
+    silences = [silence(), silence(id="64c2bf37-5a0a-45d7-91a0-30e0c9b716b6", matchers=device, comment="ok3d"),
+                silence(id="74c2bf37-5a0a-45d7-91a0-30e0c9b716b6", comment="ok3d: a; b (c) /d:e_f-g")]  # fmt: skip
+    lines = maintenance.windows(silences, NOW)
+    (tmp_path / "maintenance").write_text("checked=2026-11-01T12:00:00Z\n" + "".join(f"{x}\n" for x in lines))
+    found = helper_link.maintenance(tmp_path)
+    assert found is not None and len(lines) == 3
+    assert (len(found[1]), found[2]) == (3, 0)
