@@ -210,8 +210,13 @@ changes nothing to do it:
    Kubernetes' own checks, so a change the cluster would refuse still shows as a change.
 3. `src/ok3d/apply_plan.py` compares the two, one object at a time (by kind, namespace, and
    name). A workload (a Deployment, StatefulSet, or DaemonSet, or the Prometheus and
-   Alertmanager the operator runs) whose object changes would restart; one that's gone would
-   stop; a new one would start. Other changes (alert rules, dashboards, device checks) stop
+   Alertmanager the operator runs) would restart when what Kubernetes rolls on changes: a
+   Deployment's, StatefulSet's, or DaemonSet's pod template (`spec.template`) or replica
+   count, or Prometheus's or Alertmanager's `spec`. A change elsewhere in it, such as the
+   chart's version label that every release changes, restarts nothing. When it can't find
+   the pod template in the shape the charts write it, it counts any change as a restart, so
+   Apply asks first rather than miss one. A workload that's gone would stop; a new one would
+   start. Other changes (alert rules, dashboards, device checks, and those labels) stop
    nothing, so they're only counted.
 
 It writes the answer to `helper/apply-plan`:
