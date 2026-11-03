@@ -289,9 +289,15 @@ def maintenance_page(config: Config, message: str = "") -> str:
             + f' <form class="inline" method="post" action="/maintenance/end"><input type="hidden" name="window" '
             f'value="{html.escape(w.id)}"><button class="plain">End now</button></form></li>'
         )
-    listed = f"<ul class=todo>{''.join(rows)}</ul>" if rows else "<p class=muted>No maintenance windows.</p>"
-    checked = (f"Read from Alertmanager at {html.escape(found[0])}." if found
-               else "Not read from Alertmanager yet.")  # fmt: skip
+    if found is None:
+        # Nothing read yet (a fresh install, say): there may be windows this can't see, so it
+        # doesn't say there are none.
+        listed = ("<p>ok3d hasn't read the windows from Alertmanager yet, so this page can't say "
+                  "whether any are set.</p>")  # fmt: skip
+        checked, read = "Not read from Alertmanager yet.", "Read them now"
+    else:
+        listed = f"<ul class=todo>{''.join(rows)}</ul>" if rows else "<p class=muted>No maintenance windows.</p>"
+        checked, read = f"Read from Alertmanager at {html.escape(found[0])}.", "Read them again"
     devices = DEVICE_NAMES.findall(helper_link.current(config.helper, "devices.yaml") or "")
     boxes = "".join(f'<label><input type="checkbox" name="device-{html.escape(d)}" value="on"> {html.escape(d)}</label> '
                     for d in devices)  # fmt: skip
@@ -301,7 +307,7 @@ def maintenance_page(config: Config, message: str = "") -> str:
         "<p>While a window is on, the alerts it covers don't notify you: for all of ok3d, or for the devices "
         "you choose. They still fire and show in Grafana, and the dead man's switch keeps running.</p>"
         f"{listed}<p class=muted>{checked}</p>"
-        '<form method="post" action="/maintenance/refresh"><button class="plain">Read them again</button></form>'
+        f'<form method="post" action="/maintenance/refresh"><button class="plain">{read}</button></form>'
         "<p class=muted>On the server: <code>./ok3d maintenance</code></p></section>"
         '<section><h2>Add a window</h2><form method="post" action="/maintenance">'
         '<h3>For</h3><p><label><input type="radio" name="scope" value="all" checked> All of ok3d</label></p>'

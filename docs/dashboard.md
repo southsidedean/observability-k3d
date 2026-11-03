@@ -119,13 +119,14 @@ file on the server.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../images/screenshots/dashboard-maintenance-dark.png">
-  <img src="../images/screenshots/dashboard-maintenance-light.png" alt="The Dashboard's Maintenance page: no maintenance windows, not yet read from Alertmanager, a button to read them again, and a form to add one: for all of ok3d or ticked devices from the simulated network, from now for a length or between two times in the server's own time, and why, with the same command on the server." width="700">
+  <img src="../images/screenshots/dashboard-maintenance-light.png" alt="The Dashboard's Maintenance page: ok3d hasn't read the windows from Alertmanager yet, a button to read them now, and a form to add one: for all of ok3d or ticked devices from the simulated network, from now for a length or between two times in the server's own time, and why, with the same command on the server." width="700">
 </picture>
 
 **Maintenance** lists the maintenance windows: times when alerts don't notify you, for all of
 ok3d or for the devices you choose. Add one from now for a length, or between two times in
 the server's own time, with a reason if you like; **End now** ends one early. Home says while
-one is on. [Alerts](alerts.md#maintenance-windows-keeping-alerts-quiet-while-you-work) has the
+one is on. Until ok3d has read the windows from Alertmanager (after a fresh install, say), the
+page says so instead of listing none: **Read them now** reads them. [Alerts](alerts.md#maintenance-windows-keeping-alerts-quiet-while-you-work) has the
 details.
 
 ## Keys

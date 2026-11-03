@@ -2,6 +2,12 @@
 
 ## 0.5.2 (unreleased)
 
+### Changes
+
+- The Maintenance page no longer says "No maintenance windows" before ok3d has read them from
+  Alertmanager, after a fresh install, say. It says it hasn't read them yet, with **Read them
+  now**.
+
 ## 0.5.1 (2026-10-30)
 
 ### Upgrading

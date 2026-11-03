@@ -1156,6 +1156,25 @@ def test_the_maintenance_page_lists_the_windows(ready: Dashboard) -> None:
     assert "Read from Alertmanager at 2026-10-30T09:00:00Z." in page
 
 
+@pytest.mark.parametrize("note", [None, "window=not-checked\n"])
+def test_before_alertmanager_is_read_the_page_doesnt_say_there_are_no_windows(ready: Dashboard,
+                                                                              note: str | None) -> None:
+    # Until ./ok3d maintenance has read Alertmanager, there may be windows the page can't see.
+    if note is not None:
+        (ready.helper / "maintenance").write_text(note)
+    page = body(ready.get("/maintenance", ready.sign_in()))
+    assert "No maintenance windows." not in page
+    assert "ok3d hasn't read the windows from Alertmanager yet" in page
+    assert '<button class="plain">Read them now</button>' in page
+
+
+def test_an_empty_read_says_there_are_no_windows(ready: Dashboard) -> None:
+    windows(ready)
+    page = body(ready.get("/maintenance", ready.sign_in()))
+    assert "No maintenance windows." in page and "Read from Alertmanager at 2026-10-30T09:00:00Z." in page
+    assert '<button class="plain">Read them again</button>' in page
+
+
 def test_home_says_while_a_window_is_on(ready: Dashboard) -> None:
     windows(ready, window("2020-01-01T00:00:00Z", "2099-01-01T00:00:00Z"))
     page = body(ready.get("/", ready.sign_in()))

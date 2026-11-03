@@ -189,8 +189,10 @@ with a note to wait. If the outbox can't be written, the page says so and sends 
   is never sent. The rest is checked on the server, since only it knows its own time zone
   and devices: that the end comes after the start and within 30 days, the devices are in
   `devices.yaml`, and there are fewer than 20 windows. Home shows that answer. Like any
-  request, it turns Apply off until the next Check. The windows come from `helper/maintenance`, which `./ok3d maintenance` writes
-  each time it adds, ends, or reads them: a line the Dashboard can't read whole is left out.
+  request, it turns Apply off until the next Check. The windows come from
+  `helper/maintenance`, which `./ok3d maintenance` writes each time it adds, ends, or reads
+  them: a line the Dashboard can't read whole is left out. Until that file has a `checked=`
+  time, the page says it hasn't read Alertmanager yet, never that there are no windows.
   The page knows a window is on, or has ended, from its times, without asking again.
 - **Keys** checks a value the way the helper will (one line of letters, digits, and symbols,
   with no spaces, quotes, backslashes, `$`, or backticks), so a value the helper would
