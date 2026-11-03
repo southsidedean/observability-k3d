@@ -9,6 +9,9 @@
   every release changes and which restarts nothing. It now counts a restart only when the
   part's pod template (or, for Prometheus and Alertmanager, their spec) changes. So the
   upgrade from 0.5.0 to 0.5.1 never restarted the gateway, though 0.5.1's notes said it did.
+- The Maintenance page no longer says "No maintenance windows" before ok3d has read them from
+  Alertmanager, after a fresh install, say. It says it hasn't read them yet, with **Read them
+  now**.
 
 ## 0.5.1 (2026-10-30)
 
