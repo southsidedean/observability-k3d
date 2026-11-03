@@ -7,7 +7,8 @@ and the ones the vendored UniFi dashboards query (unpoller). When an exporter re
 metric, the version bump that brings it fails here.
 
 promtool's own checks and unit tests (tests/rules/) run when promtool is installed; CI
-installs it. Every alert also needs a severity, a summary, and a runbook that exists.
+installs it. Every alert also needs a severity, a summary, a description, and a runbook
+that exists.
 """
 
 from __future__ import annotations

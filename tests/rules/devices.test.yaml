@@ -54,8 +54,10 @@ tests:
         values: "1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0"
       - series: 'probe_success{job="devices", check="ping", device="printer", role="printer", behind="office-switch"}'
         values: "1 0x15"
+      # The window leaves out the sample at its start, so the camera's three changes are the
+      # 1 to 0, 0 to 1, and 1 to 0 after the first two samples.
       - series: 'probe_success{job="devices", check="ping", device="camera", role="camera", behind="office-switch"}'
-        values: "1 0 1 0x13"
+        values: "1 1 0 1 0x12"
     alert_rule_test:
       - eval_time: 15m
         alertname: DeviceFlapping

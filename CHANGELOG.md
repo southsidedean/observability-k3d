@@ -5,10 +5,10 @@
 ### Upgrading
 
 - Check now refuses a `devices.yaml` with two devices of the same name, a `behind` that names
-  no device in the file, or one device with the same metrics port twice. The upgrade runs
-  Check first, so with any of those it stops and moves back to 0.5.1, saying which device:
-  fix it in `devices.yaml` (on the Dashboard's Devices page, or on the server), then upgrade
-  again.
+  itself or no device in the file, or one device with the same metrics port twice. The
+  upgrade runs Check first, so with any of those it stops and moves back to 0.5.1, saying
+  which device: fix it in `devices.yaml` (on the Dashboard's Devices page, or on the server),
+  then upgrade again.
 
 ### Changes
 
