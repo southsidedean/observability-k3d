@@ -131,3 +131,28 @@ def test_a_workload_whose_pod_template_it_cant_find_restarts() -> None:
     before = obj("Deployment", "ok3d-grafana", "spec:\n  replicas: 1").replace("metadata:\n", "metadata:\n  labels: {a: b}\n")
     plan = apply_plan.compare(manifest(GRAFANA), manifest(before))
     assert plan.restart == ["Grafana"]
+
+
+def test_a_change_after_a_blank_line_in_the_template_restarts() -> None:
+    # Helm keeps a block scalar's blank lines (a script in args: |, say): the template goes on
+    # after them, and so does the spec.
+    def with_script(image: str) -> str:
+        return gateway().replace("      containers: []\n",
+                                 f"      containers:\n        - args: |\n            one\n\n            two\n          image: {image}\n")
+    assert apply_plan.compare(manifest(with_script("a:1")), manifest(with_script("a:2"))).restart == [
+        "the gateway, which serves ok3d's pages"]
+
+
+def test_a_change_after_a_blank_line_in_prometheus_spec_restarts() -> None:
+    def prometheus(replicas: int) -> str:
+        return obj("Prometheus", "ok3d-kube-prometheus-stack-prometheus",
+                   f"spec:\n  additionalArgs: |\n    a\n\n    b\n  replicas: {replicas}")
+    assert apply_plan.compare(manifest(prometheus(1)), manifest(prometheus(2))).restart == ["Prometheus"]
+
+
+def test_a_template_indented_another_way_restarts_on_any_change() -> None:
+    # Valid YAML, but not the way the charts write it: the whole object is compared instead.
+    def odd(image: str) -> str:
+        return gateway().replace("  template:\n    metadata:", f"  template:\n   image: {image}\n   metadata:")
+    assert apply_plan.compare(manifest(odd("a:1")), manifest(odd("a:2"))).restart == [
+        "the gateway, which serves ok3d's pages"]

@@ -210,11 +210,12 @@ changes nothing to do it:
    name). A workload (a Deployment, StatefulSet, or DaemonSet, or the Prometheus and
    Alertmanager the operator runs) would restart when what Kubernetes rolls on changes: a
    Deployment's, StatefulSet's, or DaemonSet's pod template (`spec.template`) or replica
-   count, or the operator's `spec`. A change elsewhere in it, such as the chart's version
-   label that every release changes, restarts nothing. When it can't find the pod template,
-   it counts any change as a restart, so Apply asks first rather than miss one. A workload
-   that's gone would stop; a new one would start. Other changes (alert rules, dashboards,
-   device checks, and those labels) stop nothing, so they're only counted.
+   count, or Prometheus's or Alertmanager's `spec`. A change elsewhere in it, such as the
+   chart's version label that every release changes, restarts nothing. When it can't find
+   the pod template in the shape the charts write it, it counts any change as a restart, so
+   Apply asks first rather than miss one. A workload that's gone would stop; a new one would
+   start. Other changes (alert rules, dashboards, device checks, and those labels) stop
+   nothing, so they're only counted.
 
 It writes the answer to `helper/apply-plan`:
 

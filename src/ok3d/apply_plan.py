@@ -12,10 +12,11 @@ prints the answer as lines for the helper's folder, where the Dashboard reads it
 
 A workload (a Deployment, StatefulSet, or DaemonSet, or the Prometheus and Alertmanager the
 operator runs) is restarted when what Kubernetes rolls on changes: a Deployment's,
-StatefulSet's, or DaemonSet's pod template or replica count, or the operator's spec. A change
-elsewhere in it, such as the chart's label every release changes, restarts nothing, so it's
-counted with the rest. One that's gone is stopped; a new one is started. Everything else (alert rules, dashboards, device checks) changes without stopping
-anything, so it's only counted. state is none when nothing would change.
+StatefulSet's, or DaemonSet's pod template or replica count, or Prometheus's or
+Alertmanager's spec. A change elsewhere in it, such as the chart's label every release
+changes, restarts nothing, so it's counted with the rest. One that's gone is stopped; a new
+one is started. Everything else (alert rules, dashboards, device checks) changes without
+stopping anything, so it's only counted. state is none when nothing would change.
 
 It uses only the standard library, and runs on the host's own Python (`python3 -I`).
 """
@@ -50,8 +51,11 @@ KIND = re.compile(r"^kind: *(\S+)", re.MULTILINE)
 METADATA = re.compile(r"^metadata:\n((?:[ #].*\n?)*)", re.MULTILINE)
 FIELD = r"^  {}: *['\"]?([^'\"\s]+)"
 # The spec, and in it the pod template and the replica count, the way the charts write them.
-SPEC = re.compile(r"^spec:\n((?:[ #].*\n?)*)", re.MULTILINE)
-TEMPLATE = re.compile(r"^  template:\n(?:(?:    |\s*#).*\n?)*", re.MULTILINE)
+# A blank line doesn't end either: Helm keeps a block scalar's (a script in args: |, say).
+SPEC = re.compile(r"^spec:\n((?:(?:[ #].*)?(?:\n|\Z))*)", re.MULTILINE)
+TEMPLATE = re.compile(r"^  template:\n(?:(?:(?:    |[ \t]*#).*)?(?:\n|\Z))*", re.MULTILINE)
+# What may follow the pod template: the spec's end, or the next key beside it.
+AFTER_TEMPLATE = re.compile(r"\Z|  [^ #\n]")
 REPLICAS = re.compile(r"^  replicas:.*$", re.MULTILINE)
 
 
@@ -115,7 +119,8 @@ def runs(kind: str, doc: str) -> str:
     if kind in OPERATED:
         return spec.group(1)
     template = TEMPLATE.search(spec.group(1))
-    if template is None:
+    # Not the shape the charts write (a template indented some other way, say): the whole object.
+    if template is None or not AFTER_TEMPLATE.match(spec.group(1), template.end()):
         return doc
     replicas = REPLICAS.search(spec.group(1))
     return template.group(0) + (replicas.group(0) if replicas else "")

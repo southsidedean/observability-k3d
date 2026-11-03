@@ -495,7 +495,7 @@ on to 0.6.0.dev0 only in the pull request that brings 0.6's first part.
 - Check said the upgrade from 0.5.0 would restart the gateway. On the test VM, a version
   bump alone restarted nothing (same pod, same ReplicaSet): Check counted the Deployment's
   chart label as a restart. Check now counts a restart only when a workload's pod template
-  (or the operator's spec) changes.
+  (or Prometheus's or Alertmanager's spec) changes.
 - Test: an upgrade from 0.5.1 from the Dashboard alone, with no terminal.
 
 ### 0.6: Logs and changes

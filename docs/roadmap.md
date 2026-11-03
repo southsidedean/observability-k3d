@@ -70,5 +70,5 @@ that upgrades from the Dashboard alone. 0.6.0, logs and changes, comes next.
 | Part | Status |
 |---|---|
 | The Maintenance page says it hasn't read Alertmanager yet, instead of "No maintenance windows" | Planned |
-| Check whether the upgrade from 0.5.1 restarts the gateway: it doesn't, and the one from 0.5.0 didn't either; Check said it would because it counted the chart's label as a restart | Done ([#50](https://github.com/southsidedean/observability-k3d/pull/50)) |
+| Check said the upgrade from 0.5.0 would restart the gateway, and it didn't: Check counted the chart's label as a restart, and now counts only a changed pod template | Done ([#50](https://github.com/southsidedean/observability-k3d/pull/50)) |
 | Release 0.5.2, tested with an upgrade from 0.5.1 from the Dashboard alone | Planned |
