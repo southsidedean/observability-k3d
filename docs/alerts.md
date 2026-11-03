@@ -79,16 +79,16 @@ Every alert links to its runbook: what it means and what to check, in order.
 |---|---|---|
 | [DeviceDown](runbooks/DeviceDown.md) | critical | A device hasn't answered ping for 2 minutes. |
 | [DeviceCheckFailing](runbooks/DeviceCheckFailing.md) | warning | One of a device's http, https, or tcp checks has failed for 5 minutes. |
-| [DeviceFlapping](runbooks/DeviceFlapping.md) | warning | A device went up and down four times in 15 minutes. |
+| [DeviceFlapping](runbooks/DeviceFlapping.md) | warning | A device dropped off and came back at least twice in 15 minutes. |
 | [DeviceMetricsDown](runbooks/DeviceMetricsDown.md) | warning | Prometheus can't read a device's metrics. |
-| [DeviceCertificateExpiring](runbooks/DeviceCertificateExpiring.md) | warning | A device's certificate runs out within two weeks. |
+| [DeviceCertificateExpiring](runbooks/DeviceCertificateExpiring.md) | warning | A device's certificate runs out within two weeks, or has run out. |
 | [UniFiControllerUnreachable](runbooks/UniFiControllerUnreachable.md) | warning | ok3d can't read your UniFi controller. |
 | [UniFiDeviceBusy](runbooks/UniFiDeviceBusy.md) | warning | A UniFi device's processor is above 90%. |
 | [UniFiDeviceMemoryFull](runbooks/UniFiDeviceMemoryFull.md) | warning | A UniFi device's memory is above 90%. |
 | [HostDiskFillingUp](runbooks/HostDiskFillingUp.md) | warning | A disk will be full within a day. |
 | [HostDiskAlmostFull](runbooks/HostDiskAlmostFull.md) | critical | A disk has less than 5% free. |
 | [HostMemoryLow](runbooks/HostMemoryLow.md) | warning | A computer is almost out of memory. |
-| [HostRaidDegraded](runbooks/HostRaidDegraded.md) | critical | A disk in a software RAID failed. |
+| [HostRaidDegraded](runbooks/HostRaidDegraded.md) | critical | A software RAID is missing a disk. |
 
 Kubernetes' own alerts (a pod that keeps restarting, a volume filling up) come with
 kube-prometheus-stack and cover ok3d's own parts.

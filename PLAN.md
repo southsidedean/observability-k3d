@@ -497,6 +497,11 @@ on to 0.6.0.dev0 only in the pull request that brings 0.6's first part.
   bump alone restarted nothing (same pod, same ReplicaSet): Check counted the Deployment's
   chart label as a restart. Check now counts a restart only when a workload's pod template
   (or Prometheus's or Alertmanager's spec) changes.
+- A full review of every file before the release (decided 2026-11-03), by five independent
+  reviewers, one per part, with a humanizer pass. Its fixes go in four pull requests by part
+  (charts and alerts; the shell and hooks; the Dashboard and helper; the docs), plus one for
+  the vendored UniFi dashboards' panel descriptions. What's too big for a patch release is
+  listed in docs/roadmap.md for the release that takes it.
 - Test: an upgrade from 0.5.1 from the Dashboard alone, with no terminal.
 
 ### 0.6: Logs and changes

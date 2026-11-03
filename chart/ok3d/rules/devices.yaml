@@ -25,15 +25,15 @@ groups:
           description: "The {{ $labels.check }} check on {{ $labels.device }} has failed for 5 minutes."
           runbook_url: https://github.com/southsidedean/observability-k3d/blob/main/docs/runbooks/DeviceCheckFailing.md
 
-      # Up and down four times in 15 minutes: a loose cable, a failing power supply, or Wi-Fi
-      # at the edge of its range.
+      # Four changes between up and down in 15 minutes (dropping off and coming back twice): a
+      # loose cable, a failing power supply, or Wi-Fi at the edge of its range.
       - alert: DeviceFlapping
         expr: changes(probe_success{job="devices", check="ping"}[15m]) >= 4
         labels:
           severity: warning
         annotations:
           summary: "{{ $labels.device }} keeps dropping off and coming back."
-          description: "{{ $labels.device }}'s ping went up and down {{ $value }} times in 15 minutes."
+          description: "{{ $labels.device }}'s ping changed between up and down {{ $value }} times in 15 minutes."
           runbook_url: https://github.com/southsidedean/observability-k3d/blob/main/docs/runbooks/DeviceFlapping.md
 
       - alert: DeviceMetricsDown
@@ -52,6 +52,7 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "{{ $labels.device }}'s certificate runs out in less than two weeks."
-          description: "The certificate {{ $labels.device }} serves runs out in {{ $value | humanizeDuration }}."
+          # One that has already run out gets its own words, not "runs out in -3d".
+          summary: "{{ $labels.device }}'s certificate {{ if lt $value 0.0 }}has run out{{ else }}runs out in less than two weeks{{ end }}."
+          description: "The certificate {{ $labels.device }} serves {{ if lt $value 0.0 }}has run out: browsers and other devices refuse it now{{ else }}runs out in {{ $value | humanizeDuration }}{{ end }}."
           runbook_url: https://github.com/southsidedean/observability-k3d/blob/main/docs/runbooks/DeviceCertificateExpiring.md

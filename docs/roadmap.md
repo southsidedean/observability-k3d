@@ -73,4 +73,18 @@ that upgrades from the Dashboard alone. 0.6.0, logs and changes, comes next.
 | The Maintenance page says when lines in the helper's note can't be read, instead of "No maintenance windows" | Done ([#51](https://github.com/southsidedean/observability-k3d/pull/51)) |
 | Check said the upgrade from 0.5.0 would restart the gateway, and it didn't: Check counted the chart's label as a restart, and now counts only a changed pod template | Done ([#50](https://github.com/southsidedean/observability-k3d/pull/50)) |
 | A social image for GitHub, with its source in `images/` | Done ([#52](https://github.com/southsidedean/observability-k3d/pull/52)) |
+| Fixes from the 0.5.2 review: the charts and alerts | Done ([#53](https://github.com/southsidedean/observability-k3d/pull/53)) |
 | Release 0.5.2, tested with an upgrade from 0.5.1 from the Dashboard alone | Planned |
+
+## Found in the 0.5.2 review, for later
+
+The full review before 0.5.2 found these. Each is too big for a patch release, so each waits
+for the release named, or for a decision.
+
+| Part | When |
+|---|---|
+| Alerts held back per problem, not per device: a full disk shouldn't hold back the same computer's memory warning | 0.7, with the alerts that know the layout |
+| An alert when unpoller has no target at all (its pod never ready), not only when the controller doesn't answer | 0.7 |
+| cert-manager's metrics scraped, so a certificate it fails to renew raises an alert | 0.6 |
+| NetworkPolicies for cert-manager and kube-system, and between monitoring's own parts | 0.8, with the mesh |
+| A warning when a silence made on Alertmanager's own page covers the Watchdog | 0.7 |

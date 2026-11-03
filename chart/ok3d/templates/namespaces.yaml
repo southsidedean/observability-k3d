@@ -1,9 +1,10 @@
 {{- /*
 ok3d's other namespaces, one per kind of work, so access rules can be written per namespace. Each
 enforces Kubernetes' "restricted" Pod Security Standard: a pod that runs as root, keeps
-capabilities, or allows privilege escalation is refused at the door. A piece that needs more
-(the blackbox exporter's ping, from 0.4) gets an exception in its own namespace, with the
-reason written next to it.
+capabilities, or allows privilege escalation is refused at the door. Nothing needs an
+exception so far: the blackbox exporter's ping uses a sysctl the standard allows
+(values.yaml). A piece that needs more would get one in its own namespace, with the reason
+written next to it.
 
 The monitoring namespace isn't here: it's the release's own namespace, which must exist (with
 the same labels) before Helm installs anything into it, so `ok3d apply` makes it first.

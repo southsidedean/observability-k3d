@@ -13,7 +13,10 @@ Where alerts go:
   alerts.repeatCritical while they fire, warnings every alerts.repeatWarning.
 
 A critical alert holds back the warnings for the same device: when a device is down, you
-hear that, not also that each of its checks failed.
+hear that, not also that each of its checks failed. Both alerts must have a device label:
+Alertmanager counts a label missing from both as equal, so without the matchers any critical
+alert with no device (one of Kubernetes' own, say) would hold back every warning with none,
+UniFi's among them.
 
 tests/test_alertmanager.py checks the routing with amtool.
 */ -}}
@@ -34,7 +37,8 @@ tests/test_alertmanager.py checks the routing with amtool.
       (dict "receiver" "nobody" "matchers" (list "severity = \"info\""))
       (dict "receiver" "you" "matchers" (list "severity = \"critical\"") "repeat_interval" $a.repeatCritical)))
   "inhibit_rules" (list
-    (dict "source_matchers" (list "severity = \"critical\"") "target_matchers" (list "severity = \"warning\"")
+    (dict "source_matchers" (list "severity = \"critical\"" "device =~ \".+\"")
+      "target_matchers" (list "severity = \"warning\"" "device =~ \".+\"")
       "equal" (list "device")))
 }}
 {{- if $a.email.enabled }}
