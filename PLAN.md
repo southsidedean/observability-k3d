@@ -491,7 +491,8 @@ little. The Dashboard offers each module from the version it comes in, so the ve
 on to 0.6.0.dev0 only in the pull request that brings 0.6's first part.
 
 - The Maintenance page says it hasn't read Alertmanager yet, instead of "No maintenance
-  windows", until the helper has.
+  windows", until the helper has. Likewise when lines in the helper's note can't be read: it
+  says how many, never that there are none.
 - Check said the upgrade from 0.5.0 would restart the gateway. On the test VM, a version
   bump alone restarted nothing (same pod, same ReplicaSet): Check counted the Deployment's
   chart label as a restart. Check now counts a restart only when a workload's pod template

@@ -165,28 +165,38 @@ class Window:
 HERE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}(?: [A-Za-z0-9+-]{1,10})?")
 
 
-def maintenance(helper: Path) -> tuple[str, list[Window]] | None:
-    """When ./ok3d last read the windows from Alertmanager, and the windows; None before it has.
-    A line that isn't one it wrote is left out."""
+def maintenance(helper: Path) -> tuple[str, list[Window], int] | None:
+    """When ./ok3d last read the windows from Alertmanager, the windows, and how many window=
+    lines were left out because they aren't ones it writes; None before it has read them."""
     text = read(helper / "maintenance")
     checked = fields_of(text).get("checked", "")
     if text is None or not TIME.fullmatch(checked):
         return None
-    found = []
+    found, unreadable = [], 0
     for line in text.splitlines():
+        if not line.startswith("window="):
+            continue
         parts = line.removeprefix("window=").split(";")
-        if not line.startswith("window=") or len(parts) != 7:
-            continue
-        window_id, what, start, end, start_here, end_here, reason = parts
-        try:
-            begins = datetime.strptime(start, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC)
-            ends = datetime.strptime(end, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC)
-        except ValueError:
-            continue
-        if (rules.SILENCE_ID.fullmatch(window_id) and rules.WHAT.fullmatch(what) and HERE.fullmatch(start_here)
-                and HERE.fullmatch(end_here) and rules.REASON.fullmatch(reason)):  # fmt: skip
-            found.append(Window(window_id, what, begins, ends, start_here, end_here, reason))
-    return checked, found
+        window = _window(parts) if len(parts) == 7 else None
+        if window is None:
+            unreadable += 1  # it might have been a window, so the page can't say there are none
+        else:
+            found.append(window)
+    return checked, found, unreadable
+
+
+def _window(parts: list[str]) -> Window | None:
+    """A window= line's seven fields as a Window, or None if they aren't what ./ok3d writes."""
+    window_id, what, start, end, start_here, end_here, reason = parts
+    try:
+        begins = datetime.strptime(start, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC)
+        ends = datetime.strptime(end, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC)
+    except ValueError:
+        return None
+    if (rules.SILENCE_ID.fullmatch(window_id) and rules.WHAT.fullmatch(what) and HERE.fullmatch(start_here)
+            and HERE.fullmatch(end_here) and rules.REASON.fullmatch(reason)):  # fmt: skip
+        return Window(window_id, what, begins, ends, start_here, end_here, reason)
+    return None
 
 
 def fields_of(text: str | None) -> dict[str, str]:

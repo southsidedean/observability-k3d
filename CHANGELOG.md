@@ -11,7 +11,8 @@
   upgrade from 0.5.0 to 0.5.1 never restarted the gateway, though 0.5.1's notes said it did.
 - The Maintenance page no longer says "No maintenance windows" before ok3d has read them from
   Alertmanager, after a fresh install, say. It says it hasn't read them yet, with **Read them
-  now**.
+  now**. And when lines in the helper's note can't be read (a damaged file, say), it says how
+  many, instead of saying there are none.
 
 ## 0.5.1 (2026-10-30)
 
