@@ -37,7 +37,8 @@ runcmd:
   - curl -fsSL https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | TAG=v5.9.0 bash
   # Helm 4, the version the charts are tested with, and kubectl for the cluster's Kubernetes,
   # each for this VM's processor (Multipass makes an arm64 VM on an arm64 host) and checked
-  # against its published checksum before it's installed, as CI does with its tools.
+  # against the checksum published beside it before it's installed. (CI keeps its tools'
+  # checksums in the repository instead; Renovate doesn't track these two versions.)
   - >-
     cd /tmp && arch=$(dpkg --print-architecture) &&
     curl -fsSLO "https://get.helm.sh/helm-v4.3.1-linux-$arch.tar.gz" &&

@@ -316,7 +316,8 @@ def test_the_unifi_key_goes_to_kubectl_on_stdin_only(env: dict[str, str], tmp_pa
 
 
 @pytest.mark.parametrize(("line", "value"), [("KEY='abc'", "abc"), ('KEY="abc"', "abc"), ("KEY=abc'", "abc'"),
-                                             ("KEY=\"abc'", "\"abc'"), ("KEY=", "")])  # fmt: skip
+                                             ("KEY=\"abc'", "\"abc'"), ("KEY=\"'abc'\"", "'abc'"),
+                                             ("KEY=", "")])  # fmt: skip
 def test_only_a_matching_pair_of_quotes_is_taken_off(env: dict[str, str], tmp_path: Path, line: str,
                                                      value: str) -> None:
     # Through the UniFi key, the one secret Apply hands on as it reads it (on stdin).
@@ -342,14 +343,19 @@ def test_a_dotenv_that_is_a_link_is_judged_by_its_file(env: dict[str, str], tmp_
     result = ok3d(env, "apply")
     assert result.returncode == 0, result.stdout + result.stderr
     real.chmod(0o644)
-    assert "chmod 600" in ok3d(env, "apply").stderr
+    unsafe = ok3d(env, "apply")
+    assert unsafe.returncode == 1 and "FAIL  " in unsafe.stdout and "chmod 600" in unsafe.stdout
 
 
-def test_a_missing_dotenv_is_said_once_not_as_every_secret_being_empty(env: dict[str, str], tmp_path: Path) -> None:
-    env.update(OK3D_ENV=str(tmp_path / "missing.env"), FAKE_NTFY="true", FAKE_DEADMAN="true")
+@pytest.mark.parametrize("on", [{"FAKE_NTFY": "true", "FAKE_DEADMAN": "true"}, {"FAKE_UNIFI": "true"},
+                                {"FAKE_UNIFI": "true", "FAKE_NTFY": "true"}], ids=["alerts", "unifi", "both"])
+def test_a_missing_dotenv_is_said_once_not_as_every_secret_being_empty(env: dict[str, str], tmp_path: Path,
+                                                                       on: dict[str, str]) -> None:
+    env.update(OK3D_ENV=str(tmp_path / "missing.env"), **on)
     result = ok3d(env, "check")
     assert result.returncode == 1
-    assert result.stdout.count("No .env at") == 1
+    assert result.stdout.count("FAIL  No .env at") == 1
+    assert "No .env" not in result.stderr
     assert "in .env is empty" not in result.stdout
 
 
@@ -367,7 +373,8 @@ def test_a_dotenv_others_can_read_is_refused(env: dict[str, str], tmp_path: Path
     env.update(OK3D_ENV=str(dotenv), FAKE_UNIFI="true")
     result = ok3d(env, "apply")
     assert result.returncode == 1
-    assert "chmod 600" in result.stderr
+    # Check, which Apply runs first, says so as one of its problems.
+    assert "chmod 600" in result.stdout
     assert not any(line.startswith("helm upgrade") for line in calls(env))
 
 
@@ -404,8 +411,24 @@ def test_check_says_which_python_it_found(env: dict[str, str]) -> None:
 def test_install_refuses_a_python_too_old_for_the_helper(linux: dict[str, str]) -> None:
     result = ok3d({**linux, "FAKE_PYTHON": "3.10"}, "install")
     assert result.returncode == 1
-    assert "The helper needs Python 3.12 or newer, and this server has 3.10" in result.stderr
+    assert "The helper needs Python 3.12 or newer at " in result.stderr and "that's 3.10" in result.stderr
     assert not any(line.startswith("systemctl") for line in calls(linux))
+
+
+def test_install_checks_the_python_the_helper_runs_not_the_one_on_path(linux: dict[str, str],
+                                                                         tmp_path: Path) -> None:
+    # A new python3 first on PATH (pyenv, say) doesn't make an old system one fit the helper.
+    old = tmp_path / "old-python3"
+    old.write_text('#!/bin/sh\necho 3.10\n')
+    old.chmod(0o755)
+    result = ok3d({**linux, "FAKE_PYTHON": "3.13", "OK3D_HELPER_PYTHON": str(old)}, "install")
+    assert result.returncode == 1
+    assert f"at {old}, and that's 3.10" in result.stderr
+
+
+def test_the_helpers_service_runs_the_systems_own_python_by_default() -> None:
+    assert "ExecStart=@PYTHON@ -I @DIR@/src/ok3d/helper.py" in (ROOT / "deploy" / "ok3d-helper.service").read_text()
+    assert 'helper_python=${OK3D_HELPER_PYTHON:-/usr/bin/python3}' in (ROOT / "ok3d").read_text()
 
 
 def test_apply_moves_a_0_3_release_out_of_ok3d_system(env: dict[str, str]) -> None:
@@ -609,8 +632,10 @@ def test_check_reads_settings_and_devices_through_the_section_check(env: dict[st
 
 @pytest.fixture
 def linux(env: dict[str, str], tmp_path: Path) -> dict[str, str]:
-    """A Linux machine with systemd, its user config under tmp_path."""
-    return {**env, "FAKE_UNAME": "Linux", "XDG_CONFIG_HOME": str(tmp_path / "config")}
+    """A Linux machine with systemd, its user config under tmp_path, and the python3 stand-in
+    as the helper's (the real /usr/bin/python3 may be any version)."""
+    return {**env, "FAKE_UNAME": "Linux", "XDG_CONFIG_HOME": str(tmp_path / "config"),
+            "OK3D_HELPER_PYTHON": str(tmp_path / "bin" / "python3")}
 
 
 def test_install_sets_up_the_helper_and_the_dashboard(linux: dict[str, str], tmp_path: Path) -> None:
@@ -620,7 +645,8 @@ def test_install_sets_up_the_helper_and_the_dashboard(linux: dict[str, str], tmp
     for folder in ("dashboard", "dashboard/outbox", "dashboard/tls", "helper"):
         assert stat.S_IMODE((data / folder).stat().st_mode) == 0o700, folder
     unit = (tmp_path / "config" / "systemd" / "user" / "ok3d-helper.service").read_text()
-    assert f"ExecStart=/usr/bin/python3 -I {ROOT}/src/ok3d/helper.py watch --ok3d-dir {ROOT} --data-root {data}" in unit
+    python = linux["OK3D_HELPER_PYTHON"]
+    assert f"ExecStart={python} -I {ROOT}/src/ok3d/helper.py watch --ok3d-dir {ROOT} --data-root {data}" in unit
     for placeholder in ("@DIR@", "@DATA_ROOT@", "@PATH@"):
         assert placeholder not in unit
     log = calls(linux)

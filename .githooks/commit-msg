@@ -29,6 +29,8 @@ fi
 # a name out. Only git's own form of that line, with any comment string before it, and only
 # when git's own next line follows it ("Do not modify or remove the line above."), so a
 # lookalike typed into a message, even an exact copy of the line, doesn't hide what follows.
+# git translates that next line, so in another language git commit -v checks the diff too,
+# and a commit that takes a name out is refused: it fails closed (use -m there).
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 awk '

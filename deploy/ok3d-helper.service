@@ -7,6 +7,7 @@
 #                with spaces, which this file can't hold)
 #   @DATA_ROOT@  host.dataRoot from settings.yaml
 #   @PATH@       your PATH, so ok3d finds docker, k3d, helm, and kubectl
+#   @PYTHON@     the system's own /usr/bin/python3, which install checks is 3.12 or newer
 #
 #   systemctl --user status ok3d-helper      is it running?
 #   journalctl --user -u ok3d-helper -f      what it has done
@@ -18,7 +19,7 @@ Type=simple
 WorkingDirectory=@DIR@
 Environment="PATH=@PATH@"
 # -I: the host's own Python, isolated from any Python settings and from the folder it runs in.
-ExecStart=/usr/bin/python3 -I @DIR@/src/ok3d/helper.py watch --ok3d-dir @DIR@ --data-root @DATA_ROOT@
+ExecStart=@PYTHON@ -I @DIR@/src/ok3d/helper.py watch --ok3d-dir @DIR@ --data-root @DATA_ROOT@
 Restart=on-failure
 RestartSec=30
 NoNewPrivileges=yes

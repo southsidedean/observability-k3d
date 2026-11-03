@@ -66,9 +66,12 @@ envfile=${OK3D_ENV:-$root/.env}
 # needs.
 min_k3d=5.9.0
 min_helm=3.0.0
-# The helper and Check's helpers (apply_plan, maintenance) run on the server's own python3,
-# and use what 3.12 brought (Ubuntu 24.04's).
+# The helper, apply_plan (for Check), and maintenance run on the server's python3, and use
+# what 3.12 brought (Ubuntu 24.04's). The helper's service runs the system's own,
+# /usr/bin/python3 (OK3D_HELPER_PYTHON names another, for a test), so install checks that
+# one, and Check the one on your PATH, which the others use.
 min_python=3.12
+helper_python=${OK3D_HELPER_PYTHON:-/usr/bin/python3}
 # The inotify limits two k3d clusters on one machine need (the defaults run out).
 min_instances=1024
 min_watches=1048576
@@ -200,13 +203,15 @@ env_value() {
 		echo "$envfile can be read by others. Make it yours alone: chmod 600 $envfile" >&2
 		exit 1
 	fi
-	# Only a matching pair of quotes is taken off: KEY=abc' keeps its last character.
-	sed -n "s/^$1=//p" "$envfile" | tail -n 1 | sed -e "s/^\"\(.*\)\"\$/\1/" -e "s/^'\(.*\)'\$/\1/"
+	# Only one matching pair of quotes is taken off: KEY=abc' keeps its last character, and
+	# KEY="'abc'" keeps the inner pair (t ends the script after the first that's taken off).
+	sed -n "s/^$1=//p" "$envfile" | tail -n 1 | sed -e "s/^\"\(.*\)\"\$/\1/;t" -e "s/^'\(.*\)'\$/\1/"
 }
 
-# python_version: the server's python3 as MAJOR.MINOR, or nothing without one.
+# python_version [PYTHON]: that python's version (python3 on PATH by default) as MAJOR.MINOR,
+# or nothing without one.
 python_version() {
-	python3 -I -c 'import sys; print("%d.%d" % sys.version_info[:2])' 2>/dev/null || true
+	"${1:-python3}" -I -c 'import sys; print("%d.%d" % sys.version_info[:2])' 2>/dev/null || true
 }
 
 check_tools() {
@@ -294,10 +299,11 @@ check_data_root() {
 	pass "the data root $DATA_ROOT"
 }
 
-# Each alert destination that's on needs its secret in .env. A .env that's missing or that
-# others can read is said once, instead of as each secret being empty.
-check_alert_secrets() {
-	if [ "$ALERTS_NTFY" = true ] || [ "$ALERTS_EMAIL" = true ] || [ "$ALERTS_DEADMAN" = true ]; then
+# The UniFi module and each alert destination that's on need their secret in .env. A .env
+# that's missing or that others can read is said once, instead of as each secret being empty.
+check_secrets() {
+	if [ "$MODULE_UNIFI" = true ] || [ "$ALERTS_NTFY" = true ] || [ "$ALERTS_EMAIL" = true ] ||
+		[ "$ALERTS_DEADMAN" = true ]; then
 		problem=$(env_value OK3D_NO_SUCH_KEY 2>&1 >/dev/null) || true
 		if [ -n "$problem" ]; then
 			fail "$problem"
@@ -307,13 +313,11 @@ check_alert_secrets() {
 	need_secret() {
 		if [ -z "$(env_value "$2")" ]; then fail "$1 is on, but $2 in .env is empty"; fi
 	}
+	[ "$MODULE_UNIFI" != true ] || need_secret modules.unifi UNIFI_API_KEY
 	[ "$ALERTS_NTFY" != true ] || need_secret alerts.ntfy NTFY_TOPIC
 	[ "$ALERTS_NTFY" != true ] || [ "$ALERTS_NTFY_TOKEN" != true ] || need_secret alerts.ntfy.useToken NTFY_TOKEN
 	[ "$ALERTS_EMAIL" != true ] || need_secret alerts.email SMTP_PASSWORD
 	[ "$ALERTS_DEADMAN" != true ] || need_secret alerts.deadman DEADMAN_URL
-	if [ "$ALERTS_NTFY" != true ] && [ "$ALERTS_EMAIL" != true ]; then
-		warn "no alert destination is on: alerts won't reach you (docs/alerts.md sets one up)"
-	fi
 }
 
 cmd_check() {
@@ -329,15 +333,15 @@ cmd_check() {
 	else
 		warn "no devices.yaml: ok3d will watch only itself (start from devices.example.yaml)"
 	fi
-	if [ "$MODULE_UNIFI" = true ] && [ -z "$(env_value UNIFI_API_KEY)" ]; then
-		fail "modules.unifi is on, but UNIFI_API_KEY in .env is empty"
-	fi
 	# Allowed, since some controllers only serve http, but the key then crosses the network as
 	# it is, where anything on it can read it.
 	case "$MODULE_UNIFI ${UNIFI_URL:-}" in
 	"true http://"*) warn "unifi.url is http://, so the UniFi API key goes over your network unencrypted: use https:// if the controller serves it" ;;
 	esac
-	check_alert_secrets
+	check_secrets
+	if [ "$ALERTS_NTFY" != true ] && [ "$ALERTS_EMAIL" != true ]; then
+		warn "no alert destination is on: alerts won't reach you (docs/alerts.md sets one up)"
+	fi
 	check_tools
 	check_linux_limits
 	check_data_root
@@ -805,7 +809,7 @@ install_helper() {
 	# Each value with what sed would read as special (\, &, and the # it's split on) escaped.
 	esc() { printf '%s' "$1" | sed 's/[\\&#]/\\&/g'; }
 	sed -e "s#@DIR@#$(esc "$root")#g" -e "s#@DATA_ROOT@#$(esc "$DATA_ROOT")#g" -e "s#@PATH@#$(esc "$unit_path")#g" \
-		deploy/ok3d-helper.service >"$units/.ok3d-helper.service.tmp"
+		-e "s#@PYTHON@#$(esc "$helper_python")#g" deploy/ok3d-helper.service >"$units/.ok3d-helper.service.tmp"
 	mv -f "$units/.ok3d-helper.service.tmp" "$units/ok3d-helper.service"
 	systemctl --user daemon-reload
 	systemctl --user enable ok3d-helper >/dev/null 2>&1
@@ -873,13 +877,13 @@ cmd_install() {
 		echo "Run ok3d as yourself, not as root: the helper runs as you, and what it keeps should be yours." >&2
 		exit 1
 	fi
-	have=$(python_version)
+	have=$(python_version "$helper_python")
 	if [ -z "$have" ] || ! version_at_least "$have.0" "$min_python.0"; then
-		echo "The helper needs Python $min_python or newer, and this server has ${have:-none}. Install it (Ubuntu 24.04's is 3.12), then run this again." >&2
+		echo "The helper needs Python $min_python or newer at $helper_python, and that's ${have:-not there}. Install it (Ubuntu 24.04's is 3.12), then run this again." >&2
 		exit 1
 	fi
 	# The service file holds these paths, so they're kept to characters it reads plainly.
-	case "$root$DATA_ROOT" in
+	case "$root$DATA_ROOT$helper_python" in
 	*[!A-Za-z0-9._/-]*)
 		echo "The ok3d folder ($root) and the data root ($DATA_ROOT) may have only letters, digits, and . _ / -." >&2
 		exit 1

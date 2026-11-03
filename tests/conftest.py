@@ -5,9 +5,10 @@ that tries to connect or send anywhere else fails at once with a clear message, 
 depends on the machine it runs on or talks to a real device. Connections to this machine
 itself (a test server on 127.0.0.1, say) are allowed.
 
-It can't fence the programs tests run (./ok3d, git, sh install.sh): those reach only the
-stand-ins and the local repositories each test sets up, and every subprocess gets a proxy
-that leads nowhere and git limited to local repositories, so one that tried would fail too.
+It can't fence the programs tests run (./ok3d, git, sh install.sh) the same way: those reach
+only the stand-ins and the local repositories each test sets up. Every subprocess also gets
+a proxy that leads nowhere and git limited to local repositories, so most that tried would
+fail too, though a program that ignores proxies (or looks up a name) wouldn't be stopped.
 """
 
 from __future__ import annotations

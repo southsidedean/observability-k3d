@@ -50,11 +50,12 @@
 - Keeping the certificate authority now needs its domain to match exactly. Changing the
   domain to a shorter one it contains (noc.example from noc.example.org, say) used to keep an
   authority that can't vouch for the new names.
-- Check looks for Python 3.12 or newer, which the helper needs, and `./ok3d install` refuses
-  without it. Check also refuses a settings or devices path with a space or `*` in it, which
-  broke Check and Apply.
+- Check looks for Python 3.12 or newer, and `./ok3d install` refuses unless the system's own
+  `/usr/bin/python3`, which the helper runs, is 3.12 or newer. ok3d also refuses a checkout,
+  settings, or devices path with a space or `*`, `?`, or `[` in it, which broke Check and
+  Apply.
 - When openssl can't make the certificate authority, Apply says why. A missing or unsafe
-  `.env` is said once, not as every secret being empty, and a `.env` that's a link is judged by
+  `.env` is said once among Check's problems, not as every secret being empty, and a `.env` that's a link is judged by
   the file it leads to. A value in `.env` loses its quotes only when they match. Install says
   when Docker isn't running.
 - When an upgrade's install fails and installing the old release again fails too, the
