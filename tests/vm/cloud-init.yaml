@@ -35,11 +35,19 @@ runcmd:
   - usermod -aG docker ubuntu
   # k3d 5.9 or newer runs the Kubernetes 1.37 kagent 1.0 needs.
   - curl -fsSL https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | TAG=v5.9.0 bash
-  # Helm 4, the version the charts are tested with.
-  - curl -fsSL https://get.helm.sh/helm-v4.3.1-linux-amd64.tar.gz | tar -xz -C /tmp linux-amd64/helm
-  - install -m 0755 /tmp/linux-amd64/helm /usr/local/bin/helm
-  # kubectl, the current stable release.
-  - curl -fsSLo /usr/local/bin/kubectl "https://dl.k8s.io/release/$(curl -fsSL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-  - chmod 0755 /usr/local/bin/kubectl
+  # Helm 4, the version the charts are tested with, and kubectl for the cluster's Kubernetes,
+  # each for this VM's processor (Multipass makes an arm64 VM on an arm64 host) and checked
+  # against its published checksum before it's installed, as CI does with its tools.
+  - >-
+    cd /tmp && arch=$(dpkg --print-architecture) &&
+    curl -fsSLO "https://get.helm.sh/helm-v4.3.1-linux-$arch.tar.gz" &&
+    curl -fsSL "https://get.helm.sh/helm-v4.3.1-linux-$arch.tar.gz.sha256sum" | sha256sum -c &&
+    tar -xzf "helm-v4.3.1-linux-$arch.tar.gz" "linux-$arch/helm" &&
+    install -m 0755 "linux-$arch/helm" /usr/local/bin/helm
+  - >-
+    cd /tmp && arch=$(dpkg --print-architecture) &&
+    curl -fsSLO "https://dl.k8s.io/release/v1.37.1/bin/linux/$arch/kubectl" &&
+    echo "$(curl -fsSL "https://dl.k8s.io/release/v1.37.1/bin/linux/$arch/kubectl.sha256")  kubectl" | sha256sum -c &&
+    install -m 0755 kubectl /usr/local/bin/kubectl
   # The data root, empty, on the VM's own disk (not overlay).
   - install -d -o ubuntu -g ubuntu -m 0755 /srv/ok3d

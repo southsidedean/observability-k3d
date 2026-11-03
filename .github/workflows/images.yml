@@ -68,6 +68,9 @@ jobs:
       # and the image pushed should be built on the one the scans saw.
       - id: base
         name: Pin the base image for this run
+        # bash, which GitHub runs with pipefail: a failed inspect stops here, instead of giving
+        # the digest of nothing.
+        shell: bash
         env:
           BASE: cgr.dev/chainguard/wolfi-base:latest
         run: |

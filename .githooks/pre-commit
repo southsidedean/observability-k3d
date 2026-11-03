@@ -58,9 +58,9 @@ fi
 # 4. Private names, from the list (scripts/private-names.sh, which also matches a name written
 # with other separators), in everything the commit would hold, as staged, and in the names of
 # the files it adds or changes. git grep reads the staged content itself, whatever a file is
-# called, and takes a file for binary only when it holds a NUL byte (or .gitattributes marks it
-# binary; tests/test_privacy.py reads those as text, and pre-push runs it). It says which files, not
-# the text, so the name isn't shown wherever this output goes. No list, no check: a fresh
+# called, and takes a file for binary only when it holds a NUL byte (or .gitattributes marks
+# it binary; tests/test_privacy.py reads those as text, and pre-push runs it). It says which
+# files, not the text, so the name isn't shown wherever this output goes. No list, no check: a fresh
 # clone or CI has none, and the tests' own checks still run. Anything else that goes wrong
 # stops the commit, so the check can't be skipped by mistake.
 names=$(dirname "$0")/../scripts/private-names.sh

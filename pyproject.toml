@@ -52,7 +52,7 @@ target-version = "py312"
 [tool.ruff.lint]
 # Rules that find bugs and risky code rather than style: pyflakes, pycodestyle errors,
 # bugbear, pyupgrade, simplify, perflint, async, security (bandit's rules), and pylint's
-# errors and warnings. The same set kia uses.
+# errors and warnings.
 select = ["E4", "E7", "E9", "F", "B", "UP", "SIM", "PERF", "ASYNC", "S", "PLE", "PLW", "RUF"]
 ignore = [
     "S603",  # subprocess calls with argument lists (no shell) are how the scripts run tools

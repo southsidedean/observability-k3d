@@ -208,6 +208,36 @@ def test_a_list_the_check_cant_read_stops_the_commit(repo: Path) -> None:
     assert "valid regex" in result.stderr
 
 
+@pytest.mark.parametrize("text", ["", "# only comments\n\n"], ids=["emptied", "all comments"])
+def test_a_list_with_no_pattern_stops_the_commit(repo: Path, text: str) -> None:
+    # A list that's there but says nothing would otherwise turn the check off without a word.
+    private_names(repo, text)
+    add(repo, "notes.md", "Nothing private here.\n")
+    result = commit(repo)
+    assert result.returncode == 1
+    assert "no pattern in it" in result.stderr
+    # The message hook too, on its own.
+    message = repo / "message.txt"
+    message.write_text("A plain message\n")
+    hook = subprocess.run(["sh", str(repo.parent / "hooks" / "commit-msg"), str(message)], cwd=repo,
+                          capture_output=True, text=True, check=False)  # fmt: skip
+    assert hook.returncode == 1 and "no pattern in it" in hook.stderr
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root reads any file")
+def test_a_list_that_cant_be_read_stops_the_commit(repo: Path) -> None:
+    private_names(repo, "myrealhost\n")
+    names = Path(git(repo, "rev-parse", "--absolute-git-dir").stdout.strip()) / "hooks" / "private-names"
+    names.chmod(0)
+    try:
+        add(repo, "notes.md", "Nothing private here.\n")
+        result = commit(repo)
+        assert result.returncode == 1
+        assert "can't be read" in result.stderr
+    finally:
+        names.chmod(0o600)
+
+
 def test_a_list_with_windows_line_endings_still_matches(repo: Path) -> None:
     private_names(repo, "myrealhost\r\nother  \r\n")
     add(repo, "notes.md", "Grafana runs on myrealhost.\n")
@@ -245,6 +275,7 @@ def test_the_name_check_passes_only_clean_text(repo: Path) -> None:
     assert name_check(repo, "check", "clean.md").returncode == 2  # it can't check, so it doesn't pass
     private_names(repo, "# only a comment\n\n")
     assert name_check(repo, "check", "clean.md").returncode == 2  # nor with a list of no patterns
+    assert name_check(repo, "patterns").returncode == 2  # which is broken, not missing
     private_names(repo, "my-real-host\n")
     assert name_check(repo, "check", "clean.md").returncode == 0
     named = name_check(repo, "check", "named.md")
@@ -306,6 +337,11 @@ def test_a_scissors_line_typed_into_a_message_hides_nothing(repo: Path) -> None:
     private_names(repo, "media-box\n")
     add(repo, "notes.md", "Nothing private here.\n")
     result = subprocess.run(["git", "commit", "-q", "-m", "title", "-m", "# --- >8 ---", "-m", "MediaBox"],
+                            cwd=repo, capture_output=True, text=True, check=False)  # fmt: skip
+    assert result.returncode == 1
+    # Even an exact copy of git's line: without git's own next line under it, it's only text.
+    exact = "# " + "-" * 24 + " >8 " + "-" * 24
+    result = subprocess.run(["git", "commit", "-q", "-m", "title", "-m", exact, "-m", "MediaBox"],
                             cwd=repo, capture_output=True, text=True, check=False)  # fmt: skip
     assert result.returncode == 1
 

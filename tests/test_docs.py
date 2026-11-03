@@ -19,6 +19,7 @@ VENDORED = "chart/ok3d/dashboards/unifi-"
 LINK = re.compile(r"(!?)\[([^\]]*)\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
 HTML_IMG = re.compile(r"<img\b[^>]*>", re.IGNORECASE)
 HTML_ALT = re.compile(r"\balt=\"([^\"]*)\"", re.IGNORECASE)
+HTML_SOURCE = re.compile(r"\b(?:src|srcset)=\"([^\"\s]+)", re.IGNORECASE)
 HEADING = re.compile(r"^(#{1,6})\s+(.*?)\s*#*\s*$")
 # The em dash and the en dash, built from their code points so this file doesn't contain them.
 DASHES = re.compile(f"[{chr(0x2014)}{chr(0x2013)}]")
@@ -73,6 +74,21 @@ def test_every_link_leads_somewhere() -> None:
             elif fragment and dest.suffix == ".md" and fragment not in anchors(dest):
                 broken.append(f"{name}: {target} (no such heading)")
     assert not broken, f"links that lead nowhere: {broken}"
+
+
+def test_every_html_image_leads_somewhere() -> None:
+    # The diagrams and screenshots are shown with <picture>, whose src and srcset paths the
+    # Markdown link check above doesn't see.
+    broken = []
+    for name in tracked("*.md"):
+        source = ROOT / name
+        text = re.sub(r"```.*?```", "", source.read_text(encoding="utf-8"), flags=re.DOTALL)
+        for target in HTML_SOURCE.findall(text):
+            if re.match(r"^[a-z][a-z0-9+.-]*:", target):
+                continue
+            if not (source.parent / target).resolve().is_file():
+                broken.append(f"{name}: {target}")
+    assert not broken, f"images that lead nowhere: {broken}"
 
 
 def test_every_image_says_what_it_shows() -> None:

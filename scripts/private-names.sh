@@ -9,8 +9,10 @@
 # check says only which file and line matched, never the text, so a match isn't shown
 # wherever the output goes. It exits 1 on a match, and 2 when it couldn't check (no list, a
 # list with no patterns, a pattern that isn't a valid regex, or a file it can't read), so
-# anything but 0 means don't post. patterns exits 3 when there's no list or no pattern in it
-# (a fresh clone, or CI), and 2 when a pattern isn't valid.
+# anything but 0 means don't post. patterns exits 3 only when there's no list at all (a fresh
+# clone, or CI), and 2 when there's one it can't use: it can't be read, it has no pattern in it
+# (emptied, or all comments), or a pattern isn't valid. The hooks skip the check on 3 and
+# refuse the commit on 2, so a list that's there but broken never turns the check off.
 #
 # A line in the list is a pattern (grep -E, case ignored), and lines starting with # are
 # comments. A line that's a plain name (letters, digits, spaces, - and _) also matches the
@@ -28,13 +30,17 @@ usage() {
 	exit 2
 }
 
-# The main repository's list, from a worktree too, where .git is a file. Windows line endings
-# and trailing blanks are dropped, so a list edited anywhere matches the same.
-list() {
+# Where the main repository's list is, from a worktree too, where .git is a file. Outside a
+# git repository there's none.
+list_file() {
 	common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 0
-	[ -f "$common/hooks/private-names" ] || return 0
-	tr -d '\r' <"$common/hooks/private-names" | sed 's/[[:space:]]*$//' |
-		grep -v -e '^#' -e '^[[:space:]]*$' || true
+	printf '%s\n' "$common/hooks/private-names"
+}
+
+# The list's lines, without comments and blanks. Windows line endings and trailing blanks are
+# dropped, so a list edited anywhere matches the same.
+list() {
+	tr -d '\r' <"$1" | sed 's/[[:space:]]*$//' | grep -v -e '^#' -e '^[[:space:]]*$' || true
 }
 
 # Each plain name, with room for up to three other characters between its parts. The class is
@@ -60,8 +66,20 @@ expand() {
 # The patterns, each checked as a regex first: grep says 2 for one it can't read, and a
 # pattern that can't be read matches nothing, so it would pass everything.
 patterns() {
-	found=$(list | expand)
-	[ -n "$found" ] || return 3
+	file=$(list_file)
+	if [ -z "$file" ] || { [ ! -e "$file" ] && [ ! -L "$file" ]; }; then
+		return 3
+	fi
+	if [ ! -f "$file" ] || [ ! -r "$file" ]; then
+		echo "Your private-names list (.git/hooks/private-names) can't be read, so nothing was checked." >&2
+		return 2
+	fi
+	found=$(list "$file" | expand)
+	if [ -z "$found" ]; then
+		echo "Your private-names list (.git/hooks/private-names) has no pattern in it, so nothing was" >&2
+		echo "checked. Put your names back in it, or delete it if you mean to have none." >&2
+		return 2
+	fi
 	while IFS= read -r pattern; do
 		valid=0
 		printf '' | grep -E -e "$pattern" >/dev/null 2>&1 || valid=$?
@@ -88,7 +106,7 @@ check)
 	status=0
 	found=$(patterns) || status=$?
 	if [ "$status" -eq 3 ]; then
-		echo "There's no private-names list with a pattern in it, so nothing was checked." >&2
+		echo "There's no private-names list (.git/hooks/private-names), so nothing was checked." >&2
 		exit 2
 	fi
 	[ "$status" -eq 0 ] || exit 2

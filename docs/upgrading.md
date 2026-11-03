@@ -105,7 +105,9 @@ curl -fsSL https://raw.githubusercontent.com/southsidedean/observability-k3d/mai
 
 It brings `~/ok3d` to the latest release, keeps your settings, devices, `.env`, and the
 certificate authority, and starts the new release's Dashboard. From 0.4, this is also what
-first sets up the Dashboard. It stops if you changed ok3d's own files. Back up `grafana/` and
+first sets up the Dashboard. It stops if you changed ok3d's own files. (From 0.5.1 on, the
+installer won't move a checkout to a newer release: it sends you to `./ok3d upgrade`, which
+checks the release's signature.) Back up `grafana/` and
 `certs/` in the data root first. Then, on the Dashboard, **Check**, then **Apply**, which
 brings the cluster up to date with the new release.
 

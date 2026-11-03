@@ -240,8 +240,10 @@ def test_demo_fail_and_fix_stop_and_start_a_device_and_tell_the_controller(env: 
     assert failed.read_text().split() == []
 
 
-def test_demo_fail_refuses_a_device_that_isnt_in_the_demo(env: dict[str, str]) -> None:
-    result = demo(env, "fail", "toaster")
+@pytest.mark.parametrize("name", ["toaster", ".*", "-v"])
+def test_demo_fail_refuses_a_device_that_isnt_in_the_demo(env: dict[str, str], name: str) -> None:
+    # A name is matched as written: never as a pattern (.*) or an option (-v).
+    result = demo(env, "fail", name)
     assert result.returncode == 2
     assert "router" in result.stderr
     assert not any(line.startswith("docker stop") for line in calls(env))
