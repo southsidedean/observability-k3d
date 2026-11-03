@@ -4,7 +4,7 @@
 # values.yaml.
 apiVersion: v2
 name: ok3d
-description: A home network operations center on k3d, with AI agents.
+description: A home network operations center on k3d.
 type: application
 # The chart's version follows ok3d's own.
 version: 0.5.2-dev0
@@ -14,9 +14,8 @@ home: https://github.com/southsidedean/observability-k3d
 # committed) at the versions in Chart.lock. `ok3d apply` does that for you. Renovate proposes
 # newer versions. Their settings are under their names in values.yaml.
 dependencies:
-  # Prometheus and its operator, and kube-state-metrics. Grafana and Alertmanager come from
-  # here too, as later 0.4 changes switch them on. The operator's definitions come from the
-  # platform chart, for the same operator version (v0.94.1).
+  # Prometheus and its operator, kube-state-metrics, Grafana, and Alertmanager. The operator's
+  # definitions come from the platform chart, for the same operator version (v0.94.1).
   - name: kube-prometheus-stack
     version: 92.13.1
     repository: https://prometheus-community.github.io/helm-charts

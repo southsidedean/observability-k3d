@@ -18,7 +18,8 @@ tests:
         values: "50e9x120"
       - series: 'node_filesystem_size_bytes{device="nas", exported_device="/dev/sdb1", mountpoint="/srv", fstype="ext4"}'
         values: "100e9x120"
-      # A filesystem in memory never counts.
+      # A steady filesystem in memory: it can't fill up, so it shows nothing here either way.
+      # The case below, where a full one would fire, is the one that tests the filter.
       - series: 'node_filesystem_avail_bytes{device="nas", exported_device="tmpfs", mountpoint="/run", fstype="tmpfs"}'
         values: "1e6x120"
       - series: 'node_filesystem_size_bytes{device="nas", exported_device="tmpfs", mountpoint="/run", fstype="tmpfs"}'
@@ -39,6 +40,16 @@ tests:
         values: "4e9x15"
       - series: 'node_filesystem_size_bytes{device="nas", exported_device="/dev/sda1", mountpoint="/", fstype="ext4"}'
         values: "100e9x15"
+      # Filesystems in memory or in containers never count, however full: these would fire
+      # without the fstype filter.
+      - series: 'node_filesystem_avail_bytes{device="nas", exported_device="tmpfs", mountpoint="/run", fstype="tmpfs"}'
+        values: "1e6x15"
+      - series: 'node_filesystem_size_bytes{device="nas", exported_device="tmpfs", mountpoint="/run", fstype="tmpfs"}'
+        values: "1e9x15"
+      - series: 'node_filesystem_avail_bytes{device="nas", exported_device="overlay", mountpoint="/var/lib/docker/overlay2/x/merged", fstype="overlay"}'
+        values: "1e6x15"
+      - series: 'node_filesystem_size_bytes{device="nas", exported_device="overlay", mountpoint="/var/lib/docker/overlay2/x/merged", fstype="overlay"}'
+        values: "1e9x15"
     alert_rule_test:
       - eval_time: 12m
         alertname: HostDiskAlmostFull
@@ -65,18 +76,24 @@ tests:
               description: "nas has had less than 5% of its memory free for 15 minutes."
               runbook_url: https://github.com/southsidedean/observability-k3d/blob/main/docs/runbooks/HostMemoryLow.md
 
+  # md0 lost a disk that mdadm took out, so none is marked failed: only degraded shows it.
+  # md1 is whole.
   - interval: 1m
     input_series:
-      - series: 'node_md_disks{device="nas", exported_device="md0", state="failed"}'
+      - series: 'node_md_degraded{device="nas", exported_device="md0"}'
         values: "0 0 1x10"
-      - series: 'node_md_disks{device="nas", exported_device="md0", state="active"}'
-        values: "2 2 1x10"
+      - series: 'node_md_disks{device="nas", exported_device="md0", state="failed"}'
+        values: "0x12"
+      - series: 'node_md_degraded{device="nas", exported_device="md1"}'
+        values: "0x12"
     alert_rule_test:
+      - eval_time: 5m
+        alertname: HostRaidDegraded
       - eval_time: 8m
         alertname: HostRaidDegraded
         exp_alerts:
-          - exp_labels: { severity: critical, device: nas, exported_device: md0, state: failed }
+          - exp_labels: { severity: critical, device: nas, exported_device: md0 }
             exp_annotations:
-              summary: "A disk failed in nas's RAID."
-              description: "The RAID array md0 on nas has 1 failed disk(s)."
+              summary: "nas's RAID is missing a disk."
+              description: "The RAID array md0 on nas is short 1 disk(s): one failed or was taken out."
               runbook_url: https://github.com/southsidedean/observability-k3d/blob/main/docs/runbooks/HostRaidDegraded.md

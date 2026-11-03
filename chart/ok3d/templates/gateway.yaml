@@ -14,7 +14,9 @@ Service in the cluster is reachable only from inside it.
 - Any other name: a plain 404.
 
 Every response carries headers that stop it being framed by another site, sniffed as another
-type, or leaking its address in a Referer to another site. The referrer policy is same-origin,
+type, or leaking its address in a Referer to another site. The two answers the gateway makes
+itself (the certificate and the 404) set them in their own headers, as CEL strings, since they
+never reach a backend. The referrer policy is same-origin,
 not no-referrer: with no-referrer, browsers send "Origin: null" on Grafana's own requests, and
 Grafana refuses them all ("origin not allowed"), so no panel loads.
 */ -}}
@@ -25,6 +27,10 @@ Grafana refuses them all ("origin not allowed"), so no panel loads.
   "x-content-type-options" "nosniff"
   "referrer-policy" "same-origin"
 }}
+{{- $direct := dict }}
+{{- range $name, $value := $headers }}
+{{- $_ := set $direct $name (printf "%q" $value) }}
+{{- end }}
 {{- $login := dict
   "basicAuth" (dict "htpasswd" (dict "file" "/auth/htpasswd") "realm" "ok3d" "mode" "strict")
   "localRateLimit" (list (dict "maxTokens" 20 "tokensPerFill" 5 "fillInterval" "1s"))
@@ -47,12 +53,12 @@ Grafana refuses them all ("origin not allowed"), so no panel loads.
 {{- $routes = append $routes (dict "name" "certificate-authority" "hostnames" (list (printf "ca.%s" $domain))
   "policies" (dict "directResponse" (dict "status" 200
     "bodyExpression" (printf "'''%s\n'''" (trim .))
-    "headers" (dict
+    "headers" (merge (dict
       "content-type" "\"application/x-x509-ca-cert\""
-      "content-disposition" "\"attachment; filename=ok3d-ca.crt\"")))) }}
+      "content-disposition" "\"attachment; filename=ok3d-ca.crt\"") $direct)))) }}
 {{- end }}
 {{- $routes = append $routes (dict "name" "not-found"
-  "policies" (dict "directResponse" (dict "status" 404 "bodyExpression" "\"Not found\\n\""))) }}
+  "policies" (dict "directResponse" (dict "status" 404 "bodyExpression" "\"Not found\\n\"" "headers" $direct))) }}
 {{- $config := dict
   "config" (dict
     "statsAddr" "0.0.0.0:15020"

@@ -29,10 +29,10 @@ devices:
 
 | Field | What it's for |
 |---|---|
-| `name` | What you call it, shown on the board and in alerts: lowercase letters, digits, and dashes. |
-| `address` | Its IP address or host name. |
+| `name` | What you call it, shown in alerts and on Grafana's Devices dashboard: lowercase letters, digits, and dashes. |
+| `address` | Its IPv4 address or host name (not IPv6 yet). |
 | `role` | `gateway`, `switch`, `access-point`, `server`, `nas`, `ups`, `camera`, `printer`, `controller`, or `other`. |
-| `behind` | The device it connects through, by name. When that one fails, you get one alert for it instead of one for every device behind it. UniFi gear reports this by itself. |
+| `behind` | The device it connects through, by name. It's carried on the device's alerts. From 0.7, when that one fails, you'll get one alert for it instead of one for every device behind it. |
 | `checks` | What to check, every 30 seconds (below). |
 | `metrics` | Ports where it serves Prometheus metrics, such as `9100` for node_exporter, or `9100/metrics` with a path. |
 | `protected` | `true` means no action may ever touch it, even with your approval (from 0.9). |
@@ -50,7 +50,7 @@ anything changes. Then `./ok3d apply`.
 | `tcp:<port>` | The port accepts a connection, such as `tcp:22` for SSH. |
 
 Each result carries the device's name, role, and the device it's behind, which the alerts
-and the NOC board use.
+and Grafana's Devices dashboard use.
 
 ## Your servers' own numbers
 

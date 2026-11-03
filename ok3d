@@ -298,6 +298,11 @@ cmd_check() {
 	if [ "$MODULE_UNIFI" = true ] && [ -z "$(env_value UNIFI_API_KEY)" ]; then
 		fail "modules.unifi is on, but UNIFI_API_KEY in .env is empty"
 	fi
+	# Allowed, since some controllers only serve http, but the key then crosses the network as
+	# it is, where anything on it can read it.
+	case "$MODULE_UNIFI ${UNIFI_URL:-}" in
+	"true http://"*) warn "unifi.url is http://, so the UniFi API key goes over your network unencrypted: use https:// if the controller serves it" ;;
+	esac
 	check_alert_secrets
 	check_tools
 	check_linux_limits

@@ -2,7 +2,7 @@
 
 **Severity:** warning
 
-A device's HTTPS certificate runs out in less than two weeks.
+A device's HTTPS certificate runs out in less than two weeks, or has already run out.
 
 ## What to check
 

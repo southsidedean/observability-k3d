@@ -9,7 +9,8 @@ new version is the reminder.
   (`collector/fixtures/e2e-output.txt` at tag v1.12.1, which covers collectors such as mdadm
   that need special hardware), together with the names a live
   `quay.io/prometheus/node-exporter:v1.12.1` served (which add the filesystem and memory
-  collectors the test output leaves out).
+  collectors the test output leaves out). The test output's own `testmetric*` names, from its
+  textfile collector's samples, are left out: no host serves them.
 - `blackbox_exporter-v0.29.0.metrics`: the names a live
   `quay.io/prometheus/blackbox-exporter:v0.29.0` served for an HTTPS check, a TCP check, and a
   ping.

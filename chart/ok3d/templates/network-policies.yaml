@@ -1,8 +1,11 @@
 {{- /*
-Who may connect to what, inside the cluster. Each ok3d namespace turns away every incoming
-connection it doesn't list here, so a pod that's been taken over can't reach the rest. (From
-outside, k3d publishes only the gateway already.) Outgoing connections aren't limited yet:
-Prometheus and the blackbox exporter reach every device on your network by design.
+Who may connect to what, inside the cluster. Each ok3d namespace (monitoring, gateway, auth,
+and agents) turns away every incoming connection it doesn't list here, so a pod that's been
+taken over elsewhere can't reach them. (From outside, k3d publishes only the gateway already.)
+What this doesn't do yet: inside monitoring, every part may reach every other, so a taken-over
+exporter could reach Alertmanager's API; the cert-manager and kube-system namespaces have no
+policy; and outgoing connections aren't limited, since Prometheus and the blackbox exporter
+reach every device on your network by design.
 
 - monitoring: its own parts talk to each other (Prometheus scrapes the exporters, Grafana
   reads Prometheus, Prometheus sends to Alertmanager). The gateway may reach Grafana's,
@@ -72,7 +75,7 @@ spec:
 ---
 # Kubernetes' API server calls the operator's admission webhook (which checks PrometheusRules
 # before they're stored) from the node, outside any namespace, so this one port takes calls
-# from anywhere. It serves only that webhook, over TLS.
+# from anywhere. It serves that webhook and the operator's own metrics, over TLS.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

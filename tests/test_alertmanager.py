@@ -79,7 +79,11 @@ def test_secrets_are_files_never_values(tmp_path: Path) -> None:
     assert hooks and all("url_file" in hook and "url" not in hook for hook in hooks)
 
 
-def test_a_device_being_down_holds_back_its_warnings(tmp_path: Path) -> None:
+def test_a_device_being_down_holds_back_its_warnings_and_nothing_else(tmp_path: Path) -> None:
+    # amtool can't test inhibition, so this checks the rule itself. Alertmanager counts a
+    # label missing from both alerts as equal, so without the device matchers a critical alert
+    # with no device would hold back every warning with none (UniFi's, Kubernetes' own).
     rules = yaml.safe_load(config(tmp_path).read_text())["inhibit_rules"]
-    assert {"source_matchers": ['severity = "critical"'], "target_matchers": ['severity = "warning"'],
-            "equal": ["device"]} in rules
+    assert rules == [{"source_matchers": ['severity = "critical"', 'device =~ ".+"'],
+                      "target_matchers": ['severity = "warning"', 'device =~ ".+"'],
+                      "equal": ["device"]}]

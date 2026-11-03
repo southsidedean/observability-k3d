@@ -13,6 +13,25 @@
   Alertmanager, after a fresh install, say. It says it hasn't read them yet, with **Read them
   now**. And when lines in the helper's note can't be read (a damaged file, say), it says how
   many, instead of saying there are none.
+- A critical alert without a device (one of Kubernetes' own, say) no longer holds back every
+  warning without one, UniFi's among them. Holding back warnings now needs both alerts to
+  name the same device.
+- HostRaidDegraded now fires for an array that's missing a disk, the usual state after a
+  failure. It used to wait for a disk marked failed, which mdadm often takes out first.
+- DeviceFlapping's text counts what it measures: "changed between up and down 14 times", not
+  "went up and down 14 times" for seven drops. An expired device certificate says it has run
+  out, instead of "runs out in -3d".
+- The Devices dashboard's ping panel shows each ping's round trip, as it says, instead of the
+  whole probe (with the name lookup), and its count of firing alerts leaves out
+  InfoInhibitor.
+- Check refuses two devices with one name, a `behind` that names no listed device, and a
+  metrics port listed twice on one device, instead of making objects that clash.
+- Check warns when `unifi.url` is `http://`, since the UniFi API key then crosses your
+  network unencrypted.
+- The certificate and 404 answers from the gateway carry the same security headers as every
+  page.
+- The docs no longer say `behind` turns a failed switch into one alert: that comes in 0.7.
+  Until then it's carried on the device's alerts. `protected` is marked as coming in 0.9.
 
 ## 0.5.1 (2026-10-30)
 

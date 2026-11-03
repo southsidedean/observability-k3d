@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -121,6 +122,34 @@ def test_the_schema_refuses_a_bad_device(tmp_path: Path, device: str, why: str) 
     assert result.returncode != 0, f"the schema accepted {why}"
 
 
+@pytest.mark.parametrize(
+    ("devices", "message"),
+    [
+        ("  - {name: nas, address: 192.168.1.5, role: nas}\n  - {name: nas, address: 192.168.1.6, role: nas}",
+         "devices.yaml lists nas twice"),
+        ("  - {name: nas, address: 192.168.1.5, role: nas, behind: swich}", "nas is behind swich, which isn't in"),
+        ("  - {name: nas, address: 192.168.1.5, role: nas, behind: nas}", "nas can't be behind itself"),
+        ("  - {name: nas, address: 192.168.1.5, role: nas, metrics: ['9100', '9100/other']}",
+         "nas lists metrics port 9100 twice"),
+    ],
+    ids=["a name twice", "behind a device that isn't listed", "behind itself", "a metrics port twice"],
+)
+def test_what_the_schema_cant_see_across_devices_is_refused(tmp_path: Path, devices: str, message: str) -> None:
+    path = tmp_path / "devices.yaml"
+    path.write_text(f"devices:\n{devices}\n")
+    result = helm("template", "ok3d", str(CHART), "--values", str(EXAMPLE), "--values", str(path))
+    assert result.returncode != 0 and message in result.stderr, result.stderr
+
+
+def test_a_device_behind_another_and_two_metrics_ports_render(tmp_path: Path) -> None:
+    path = tmp_path / "devices.yaml"
+    path.write_text("devices:\n  - {name: switch, address: 192.168.1.2, role: switch}\n"
+                    "  - {name: nas, address: 192.168.1.5, role: nas, behind: switch, metrics: ['9100', '9101/x']}\n")
+    result = helm("template", "ok3d", str(CHART), "--values", str(EXAMPLE), "--values", str(path))
+    assert result.returncode == 0, result.stderr
+    assert "name: device-nas-9100" in result.stdout and "name: device-nas-9101" in result.stdout
+
+
 def test_the_pages_certificate_covers_the_domain_and_every_name_under_it() -> None:
     rendered = render("--set", "tls.domain=noc.example.org")
     assert "kind: ClusterIssuer" in rendered
@@ -133,9 +162,12 @@ def test_the_cluster_settings_have_every_key_ok3d_reads() -> None:
         "template", "ok3d", str(CHART), "--values", str(EXAMPLE), "--show-only", "templates/cluster-settings.yaml"
     )
     assert result.returncode == 0, result.stderr
-    for key in ("CLUSTER_NAME", "K3S_IMAGE", "NETWORK", "API_PORT", "PUBLISH_ADDRESS", "HTTPS_PORT", "DATA_ROOT",
-                "TLS_MODE", "DOMAIN", "METRICS_RETENTION", "METRICS_RETENTION_SIZE", "MODULE_UNIFI"):
-        assert f"  {key}: " in result.stdout
+    # Every key load_settings insists on (its ${KEY:?} lines), read from ok3d itself, and the
+    # ones it reads when they're there.
+    required = re.findall(r"\$\{([A-Z][A-Z0-9_]*):\?\}", (ROOT / "ok3d").read_text())
+    assert {"CLUSTER_NAME", "DASHBOARD_PORT", "ALERTS_DEADMAN"} <= set(required)
+    for key in [*required, "SETTINGS_VERSION", "UNIFI_URL"]:
+        assert f"  {key}: " in result.stdout, key
 
 
 @pytest.mark.parametrize(
@@ -155,7 +187,7 @@ def test_the_cluster_settings_have_every_key_ok3d_reads() -> None:
         ("host.uid=0", "running as root"),
         ("metrics.retention=forever", "a retention that isn't a duration"),
         ("metrics.retentionSize=40", "a size with no unit"),
-        ("unifi.url=ftp://192.168.1.1", "a controller address that isn't https"),
+        ("unifi.url=ftp://192.168.1.1", "a controller address that isn't http or https"),
         ("nosuch=1", "a misspelled or unknown setting"),
         ("cluster.nosuch=1", "an unknown setting inside a section"),
     ],
@@ -298,13 +330,27 @@ def test_the_gateway_serves_https_for_every_name_with_the_pages_certificate(tmp_
     for page in ("prometheus", "alertmanager"):
         assert by_name[page]["policies"]["basicAuth"]["htpasswd"]["file"] == "/auth/htpasswd"
         assert by_name[page]["policies"]["localRateLimit"]
+        # The admin login is the gateway's, so it goes no further.
+        assert by_name[page]["policies"]["requestHeaderModifier"]["remove"] == ["authorization"]
     assert "basicAuth" not in by_name["grafana"]["policies"]
-    for route in by_name.values():
+
+
+def test_every_answer_the_gateway_gives_carries_the_headers(tmp_path: Path) -> None:
+    ca = tmp_path / "ca.crt"
+    ca.write_text(CA_PEM)
+    every = routes(gateway_config(tmp_path, "--set-file", f"tls.caCertificate={ca}"))
+    assert {r["name"] for r in every} >= {"grafana", "prometheus", "alertmanager", "certificate-authority", "not-found"}
+    for route in every:
         if "backends" in route:
-            assert route["policies"]["responseHeaderModifier"]["set"]["x-frame-options"] == "DENY"
-            # Not no-referrer: then browsers send "Origin: null", and Grafana refuses its own
-            # requests, so no panel loads (the screenshots found this).
-            assert route["policies"]["responseHeaderModifier"]["set"]["referrer-policy"] == "same-origin"
+            headers = route["policies"]["responseHeaderModifier"]["set"]
+        else:
+            # The gateway's own answers take CEL strings, quoted.
+            headers = {k: v.strip('"') for k, v in route["policies"]["directResponse"]["headers"].items()}
+        assert headers["x-frame-options"] == "DENY", route["name"]
+        assert headers["x-content-type-options"] == "nosniff", route["name"]
+        # Not no-referrer: then browsers send "Origin: null", and Grafana refuses its own
+        # requests, so no panel loads (the screenshots found this).
+        assert headers["referrer-policy"] == "same-origin", route["name"]
 
 
 def test_the_certificate_authority_is_served_only_once_ok3d_passes_it(tmp_path: Path) -> None:
@@ -344,8 +390,9 @@ def test_dashboards_have_their_datasources_and_dpi_stays_out() -> None:
 def test_grafana_sends_nothing_anywhere_and_lets_no_one_sign_up() -> None:
     ini = next(d for d in documents(render(), "ConfigMap") if "grafana.ini:" in d)
     for setting in ("reporting_enabled = false", "check_for_updates = false", "allow_sign_up = false",
-                    "cookie_secure = true"):
+                    "cookie_secure = true", "cookie_samesite = strict", "disable_gravatar = true"):
         assert setting in ini, setting
+    assert "[auth.anonymous]\n    enabled = false" in ini
 
 
 def test_every_ok3d_namespace_turns_away_what_it_doesnt_list() -> None:

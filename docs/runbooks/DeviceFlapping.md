@@ -2,7 +2,7 @@
 
 **Severity:** warning
 
-A device's ping went up and down at least four times in 15 minutes.
+A device's ping changed between up and down at least four times in 15 minutes: it dropped off and came back at least twice.
 
 ## What to check
 

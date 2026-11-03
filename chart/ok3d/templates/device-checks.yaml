@@ -5,8 +5,38 @@ Each check becomes a Probe, which Prometheus runs through the blackbox exporter 
 seconds: ping (icmp), http and https (a page that answers 2xx), and tcp:<port> (the port
 accepts a connection). Each metrics port becomes a ScrapeConfig, which Prometheus scrapes
 directly. Every result carries the device's name, role, and the device it's behind, which the
-alerts and the NOC board use.
+alerts and Grafana's Devices dashboard use.
+
+The schema checks each device on its own; what it can't see across devices is checked here
+first. Two devices with one name, or one device with a metrics port twice (9100 and
+9100/other), would make two objects with the same name, and a behind that names no device is
+a typo nobody would notice.
 */ -}}
+{{- $names := list }}
+{{- range $device := .Values.devices }}
+{{- if has $device.name $names }}
+{{- fail (printf "devices.yaml lists %s twice: each device needs a name of its own" $device.name) }}
+{{- end }}
+{{- $names = append $names $device.name }}
+{{- end }}
+{{- range $device := .Values.devices }}
+{{- with $device.behind }}
+{{- if not (has . $names) }}
+{{- fail (printf "%s is behind %s, which isn't in devices.yaml" $device.name .) }}
+{{- end }}
+{{- if eq . $device.name }}
+{{- fail (printf "%s can't be behind itself" $device.name) }}
+{{- end }}
+{{- end }}
+{{- $ports := list }}
+{{- range $endpoint := $device.metrics | default list }}
+{{- $port := regexReplaceAll "/.*$" $endpoint "" }}
+{{- if has $port $ports }}
+{{- fail (printf "%s lists metrics port %s twice: one path per port" $device.name $port) }}
+{{- end }}
+{{- $ports = append $ports $port }}
+{{- end }}
+{{- end }}
 {{- $prober := printf "%s-prometheus-blackbox-exporter.%s.svc:9115" .Release.Name .Release.Namespace }}
 {{- range $device := .Values.devices }}
 {{- $labels := dict "device" $device.name "role" $device.role "behind" ($device.behind | default "") }}
