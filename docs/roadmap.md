@@ -69,6 +69,6 @@ that upgrades from the Dashboard alone. 0.6.0, logs and changes, comes next.
 
 | Part | Status |
 |---|---|
-| The Maintenance page says it hasn't read Alertmanager yet, instead of "No maintenance windows" | Planned |
+| The Maintenance page says it hasn't read Alertmanager yet, instead of "No maintenance windows" | Done ([#49](https://github.com/southsidedean/observability-k3d/pull/49)) |
 | Check whether the upgrade from 0.5.1 restarts the gateway, as the one from 0.5.0 did | Planned |
 | Release 0.5.2, tested with an upgrade from 0.5.1 from the Dashboard alone | Planned |
