@@ -2,12 +2,17 @@
 <!--
 The source of images/social-preview.png, the picture GitHub shows when a link to the repository
 is shared (Settings, General, Social preview). It's 1280 by 640, GitHub's size. To make it again
-after a change, render it with Chrome and strip its metadata:
+after a change, render it on a Mac with Chrome (the text is laid out for the Mac's system font;
+another font is wider and may not fit), from the checkout:
 
-  chrome --headless=new --hide-scrollbars --force-device-scale-factor=1 --window-size=1280,640 \
-    --screenshot=social-preview.png images/social-preview.html
+  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --hide-scrollbars \
+    --force-device-scale-factor=1 --window-size=1280,640 \
+    --screenshot="$PWD/images/social-preview.png" "file://$PWD/images/social-preview.html"
 
-then keep only the picture with scripts/screenshots.py's strip(), and upload it on GitHub again.
+then keep only the picture, and upload it on GitHub again:
+
+  python3 -c "import sys; sys.path.insert(0, 'scripts'); from screenshots import strip; \
+    from pathlib import Path; p = Path('images/social-preview.png'); p.write_bytes(strip(p.read_bytes()))"
 The logo is images/ok3d-logo.svg's, a shade lighter so it shows on the dark background.
 -->
 <html><head><meta charset="utf-8"><style>
