@@ -1163,7 +1163,8 @@ def test_before_alertmanager_is_read_the_page_doesnt_say_there_are_no_windows(re
     if note is not None:
         (ready.helper / "maintenance").write_text(note)
     page = body(ready.get("/maintenance", ready.sign_in()))
-    assert "No maintenance windows." not in page
+    assert "No maintenance windows." not in page and "Read from Alertmanager at" not in page
+    assert page.count("Alertmanager yet") == 1  # said once, not twice
     assert "ok3d hasn't read the windows from Alertmanager yet" in page
     assert '<button class="plain">Read them now</button>' in page
 

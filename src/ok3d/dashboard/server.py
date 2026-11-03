@@ -294,10 +294,11 @@ def maintenance_page(config: Config, message: str = "") -> str:
         # doesn't say there are none.
         listed = ("<p>ok3d hasn't read the windows from Alertmanager yet, so this page can't say "
                   "whether any are set.</p>")  # fmt: skip
-        checked, read = "Not read from Alertmanager yet.", "Read them now"
+        read = "Read them now"
     else:
         listed = f"<ul class=todo>{''.join(rows)}</ul>" if rows else "<p class=muted>No maintenance windows.</p>"
-        checked, read = f"Read from Alertmanager at {html.escape(found[0])}.", "Read them again"
+        listed += f"<p class=muted>Read from Alertmanager at {html.escape(found[0])}.</p>"
+        read = "Read them again"
     devices = DEVICE_NAMES.findall(helper_link.current(config.helper, "devices.yaml") or "")
     boxes = "".join(f'<label><input type="checkbox" name="device-{html.escape(d)}" value="on"> {html.escape(d)}</label> '
                     for d in devices)  # fmt: skip
@@ -306,7 +307,7 @@ def maintenance_page(config: Config, message: str = "") -> str:
         f"<section><h2>Maintenance windows</h2>{note}"
         "<p>While a window is on, the alerts it covers don't notify you: for all of ok3d, or for the devices "
         "you choose. They still fire and show in Grafana, and the dead man's switch keeps running.</p>"
-        f"{listed}<p class=muted>{checked}</p>"
+        f"{listed}"
         f'<form method="post" action="/maintenance/refresh"><button class="plain">{read}</button></form>'
         "<p class=muted>On the server: <code>./ok3d maintenance</code></p></section>"
         '<section><h2>Add a window</h2><form method="post" action="/maintenance">'
