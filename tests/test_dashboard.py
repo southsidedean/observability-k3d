@@ -1189,11 +1189,26 @@ def test_a_window_that_has_ended_isnt_shown(ready: Dashboard) -> None:
     assert "Maintenance:" not in body(ready.get("/", session))
 
 
-def test_a_line_that_isnt_ok3ds_is_left_out(ready: Dashboard) -> None:
+def test_a_line_that_isnt_ok3ds_is_left_out_and_the_page_says_so(ready: Dashboard) -> None:
+    # Lines ./ok3d maintenance would never write: they're left out, and since they might have
+    # been windows, the page doesn't say there are none.
     windows(ready, window("2099-11-03T01:00:00Z", "2099-11-03T03:00:00Z", reason="<script>x</script>"),
             "window=not-an-id;all;x;y;z;w;r")  # fmt: skip
     page = body(ready.get("/maintenance", ready.sign_in()))
-    assert "<script>" not in page and "No maintenance windows." in page
+    assert "<script>" not in page and "No maintenance windows." not in page
+    assert "2 lines in the helper's note couldn't be read" in page
+
+
+def test_one_unreadable_line_beside_a_good_window_is_said_too(ready: Dashboard) -> None:
+    windows(ready, window("2099-11-03T01:00:00Z", "2099-11-03T03:00:00Z"), "window=broken")
+    page = body(ready.get("/maintenance", ready.sign_in()))
+    assert "starts later" in page and "1 line in the helper's note couldn't be read" in page
+
+
+def test_lines_that_arent_windows_arent_counted(ready: Dashboard) -> None:
+    windows(ready, "something=else", "")
+    page = body(ready.get("/maintenance", ready.sign_in()))
+    assert "No maintenance windows." in page and "couldn't be read" not in page
 
 
 @pytest.mark.parametrize(("form", "fields"), [

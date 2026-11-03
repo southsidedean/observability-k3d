@@ -191,9 +191,10 @@ with a note to wait. If the outbox can't be written, the page says so and sends 
   `devices.yaml`, and there are fewer than 20 windows. Home shows that answer. Like any
   request, it turns Apply off until the next Check. The windows come from
   `helper/maintenance`, which `./ok3d maintenance` writes each time it adds, ends, or reads
-  them: a line the Dashboard can't read whole is left out. Until that file has a valid
-  `checked=` time, the page says it hasn't read Alertmanager yet, never that there are no windows.
-  The page knows a window is on, or has ended, from its times, without asking again.
+  them. Until that file has a valid `checked=` time, the page says it hasn't read
+  Alertmanager yet, never that there are no windows. A `window=` line the Dashboard can't
+  read whole is left out, and the page says how many were, again instead of saying there are
+  none, since any of them might have been a window. The page knows a window is on, or has ended, from its times, without asking again.
 - **Keys** checks a value the way the helper will (one line of letters, digits, and symbols,
   with no spaces, quotes, backslashes, `$`, or backticks), so a value the helper would
   refuse is never sent. A value is never shown back, not even in an error.
