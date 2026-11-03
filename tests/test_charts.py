@@ -162,8 +162,8 @@ def test_the_cluster_settings_have_every_key_ok3d_reads() -> None:
         "template", "ok3d", str(CHART), "--values", str(EXAMPLE), "--show-only", "templates/cluster-settings.yaml"
     )
     assert result.returncode == 0, result.stderr
-    # Every key load_settings insists on (its ${KEY:?} lines), read from ok3d itself, and the
-    # ones it reads when they're there.
+    # Every key ok3d insists on (its ${KEY:?} lines, anywhere in it), read from ok3d itself, and
+    # the ones it reads when they're there.
     required = re.findall(r"\$\{([A-Z][A-Z0-9_]*):\?\}", (ROOT / "ok3d").read_text())
     assert {"CLUSTER_NAME", "DASHBOARD_PORT", "ALERTS_DEADMAN"} <= set(required)
     for key in [*required, "SETTINGS_VERSION", "UNIFI_URL"]:
@@ -196,6 +196,14 @@ def test_the_schema_refuses(setting: str, why: str) -> None:
     flag = "--set-string" if setting.startswith("modules.") else "--set"
     result = helm("template", "ok3d", str(CHART), "--values", str(EXAMPLE), flag, setting)
     assert result.returncode != 0, f"the schema accepted {setting} ({why})"
+
+
+@pytest.mark.parametrize("url", ["http://192.168.1.1", "https://192.168.1.1:8443"])
+def test_the_schema_takes_an_http_or_https_controller(url: str) -> None:
+    # http is allowed on purpose: some controllers serve only that, and Check warns.
+    result = helm("template", "ok3d", str(CHART), "--values", str(EXAMPLE), "--set", "modules.unifi=true",
+                  "--set", f"unifi.url={url}")  # fmt: skip
+    assert result.returncode == 0, result.stderr
 
 
 def _undescribed(node: dict[str, Any], path: str = "") -> list[str]:
@@ -341,16 +349,17 @@ def test_every_answer_the_gateway_gives_carries_the_headers(tmp_path: Path) -> N
     every = routes(gateway_config(tmp_path, "--set-file", f"tls.caCertificate={ca}"))
     assert {r["name"] for r in every} >= {"grafana", "prometheus", "alertmanager", "certificate-authority", "not-found"}
     for route in every:
+        # The gateway's own answers take CEL expressions, so their values are quoted strings:
+        # unquoted, DENY would be a name CEL looks up.
         if "backends" in route:
-            headers = route["policies"]["responseHeaderModifier"]["set"]
+            headers, quote = route["policies"]["responseHeaderModifier"]["set"], ""
         else:
-            # The gateway's own answers take CEL strings, quoted.
-            headers = {k: v.strip('"') for k, v in route["policies"]["directResponse"]["headers"].items()}
-        assert headers["x-frame-options"] == "DENY", route["name"]
-        assert headers["x-content-type-options"] == "nosniff", route["name"]
+            headers, quote = route["policies"]["directResponse"]["headers"], '"'
+        assert headers["x-frame-options"] == f"{quote}DENY{quote}", route["name"]
+        assert headers["x-content-type-options"] == f"{quote}nosniff{quote}", route["name"]
         # Not no-referrer: then browsers send "Origin: null", and Grafana refuses its own
         # requests, so no panel loads (the screenshots found this).
-        assert headers["referrer-policy"] == "same-origin", route["name"]
+        assert headers["referrer-policy"] == f"{quote}same-origin{quote}", route["name"]
 
 
 def test_the_certificate_authority_is_served_only_once_ok3d_passes_it(tmp_path: Path) -> None:
@@ -417,6 +426,65 @@ def test_the_gateway_reaches_only_the_pages_web_ports() -> None:
     assert [port["port"] for rule in gateway for port in rule["ports"]] == [8443, 15020]
     # Its metrics are for monitoring only.
     assert gateway[1]["from"][0]["namespaceSelector"]["matchLabels"]["kubernetes.io/metadata.name"] == "monitoring"
+
+
+def test_the_operator_webhook_and_monitoring_policies_open_only_what_they_say() -> None:
+    import yaml
+
+    policies = {p["metadata"]["name"]: p for p in (yaml.safe_load(d) for d in documents(render(), "NetworkPolicy"))}
+    webhook = policies["ok3d-operator-webhook"]["spec"]
+    assert webhook["podSelector"] == {"matchLabels": {"app": "kube-prometheus-stack-operator"}}
+    assert webhook["ingress"] == [{"ports": [{"port": 10250}]}]  # from anywhere, but one port
+    within = policies["ok3d-within-monitoring"]
+    assert within["metadata"]["namespace"] == "monitoring"
+    assert within["spec"]["ingress"] == [{"from": [{"podSelector": {}}]}]  # this namespace's pods only
+
+
+def test_the_pages_certificate_gets_a_new_key_at_each_renewal() -> None:
+    import yaml
+
+    certificate = yaml.safe_load(next(d for d in documents(render(), "Certificate") if "name: ok3d-pages" in d))
+    spec = certificate["spec"]
+    assert spec["privateKey"] == {"algorithm": "ECDSA", "size": 256, "rotationPolicy": "Always"}
+    assert (spec["duration"], spec["renewBefore"]) == ("2160h", "720h")
+
+
+def test_deleting_the_cluster_never_deletes_the_data() -> None:
+    import yaml
+
+    volumes = [yaml.safe_load(d) for d in documents(render(), "PersistentVolume")]
+    assert len(volumes) == 3
+    assert all(v["spec"]["persistentVolumeReclaimPolicy"] == "Retain" for v in volumes)
+
+
+def test_the_dashboards_datasource_is_the_one_grafana_is_given() -> None:
+    import yaml
+
+    provisioned = next(d for d in documents(render(), "ConfigMap") if "datasource.yaml:" in d)
+    sources = yaml.safe_load(yaml.safe_load(provisioned)["data"]["datasource.yaml"])["datasources"]
+    assert [s["uid"] for s in sources if s["type"] == "prometheus"] == ["prometheus"]
+    # Every datasource a panel or variable names, in every dashboard, is that one (other than
+    # Grafana's own, for annotations).
+    named: list[str] = []
+
+    def walk(node: Any) -> None:
+        if isinstance(node, dict):
+            source = node.get("datasource")
+            if isinstance(source, dict) and source.get("type") == "prometheus":
+                named.append(source.get("uid", ""))
+            elif isinstance(source, str) and source != "-- Grafana --":  # the vendored ones' form
+                named.append(source)
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, list):
+            for value in node:
+                walk(value)
+
+    for d in documents(render(), "ConfigMap"):
+        if 'grafana_dashboard: "1"' in d and "ok3d-dashboard-" in d:
+            for text in yaml.safe_load(d)["data"].values():
+                walk(json.loads(text))
+    assert named and set(named) == {"prometheus"}
 
 
 def test_validate_refuses_settings_the_schema_refuses(tmp_path: Path) -> None:

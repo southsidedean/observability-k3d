@@ -75,9 +75,10 @@ def test_every_metric_a_rule_uses_really_exists(rule: dict[str, Any]) -> None:
 
 
 @pytest.mark.parametrize("rule", rules(), ids=lambda rule: rule["alert"])
-def test_every_alert_has_a_severity_a_summary_and_a_runbook(rule: dict[str, Any]) -> None:
+def test_every_alert_has_a_severity_a_summary_a_description_and_a_runbook(rule: dict[str, Any]) -> None:
     assert rule["labels"]["severity"] in {"critical", "warning", "info"}
     assert rule["annotations"]["summary"].strip()
+    assert rule["annotations"]["description"].strip()
     runbook = rule["annotations"]["runbook_url"]
     prefix = "https://github.com/southsidedean/observability-k3d/blob/main/"
     assert runbook == f"{prefix}docs/runbooks/{rule['alert']}.md"

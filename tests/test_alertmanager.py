@@ -67,6 +67,30 @@ def test_each_kind_of_alert_goes_where_it_should(tmp_path: Path) -> None:
     assert receiver(path, "alertname=KubeletTooManyPods", "severity=info") == "nobody"
 
 
+def test_the_watchdog_is_routed_first_every_minute_and_stops_there(tmp_path: Path) -> None:
+    # First and without continue, so no later route (critical alerts to you, say) can take it
+    # or send it on to you as well.
+    routes = yaml.safe_load(config(tmp_path, *EVERYTHING_ON).read_text())["route"]["routes"]
+    assert routes[0]["matchers"] == ['alertname = "Watchdog"']
+    assert routes[0]["repeat_interval"] == "1m" and not routes[0].get("continue", False)
+
+
+def test_critical_and_warning_alerts_repeat_at_their_own_pace(tmp_path: Path) -> None:
+    settings = yaml.safe_load(config(tmp_path, "alerts.repeatCritical=2h", "alerts.repeatWarning=24h").read_text())
+    assert settings["route"]["repeat_interval"] == "24h"  # warnings, and anything else to you
+    critical = next(r for r in settings["route"]["routes"] if r["matchers"] == ['severity = "critical"'])
+    assert critical["receiver"] == "you" and critical["repeat_interval"] == "2h"
+
+
+def test_an_emails_subject_names_the_cluster_and_whether_it_cleared(tmp_path: Path) -> None:
+    settings = yaml.safe_load(config(tmp_path, *EVERYTHING_ON, "cluster.name=noc2").read_text())
+    you = next(r for r in settings["receivers"] if r["name"] == "you")
+    subject = you["email_configs"][0]["headers"]["Subject"]
+    assert subject.startswith("[noc2] ")
+    assert '{{ if eq .Status "resolved" }}Cleared: {{ end }}' in subject
+    assert "{{ .CommonLabels.alertname }}" in subject and ".CommonAnnotations.summary" in subject
+
+
 def test_without_a_dead_mans_switch_the_watchdog_goes_nowhere(tmp_path: Path) -> None:
     assert receiver(config(tmp_path), "alertname=Watchdog", "severity=none") == "nobody"
 

@@ -81,7 +81,7 @@ Every alert links to its runbook: what it means and what to check, in order.
 | [DeviceCheckFailing](runbooks/DeviceCheckFailing.md) | warning | One of a device's http, https, or tcp checks has failed for 5 minutes. |
 | [DeviceFlapping](runbooks/DeviceFlapping.md) | warning | A device dropped off and came back at least twice in 15 minutes. |
 | [DeviceMetricsDown](runbooks/DeviceMetricsDown.md) | warning | Prometheus can't read a device's metrics. |
-| [DeviceCertificateExpiring](runbooks/DeviceCertificateExpiring.md) | warning | A device's certificate runs out within two weeks. |
+| [DeviceCertificateExpiring](runbooks/DeviceCertificateExpiring.md) | warning | A device's certificate runs out within two weeks, or has run out. |
 | [UniFiControllerUnreachable](runbooks/UniFiControllerUnreachable.md) | warning | ok3d can't read your UniFi controller. |
 | [UniFiDeviceBusy](runbooks/UniFiDeviceBusy.md) | warning | A UniFi device's processor is above 90%. |
 | [UniFiDeviceMemoryFull](runbooks/UniFiDeviceMemoryFull.md) | warning | A UniFi device's memory is above 90%. |

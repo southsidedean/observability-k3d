@@ -51,6 +51,9 @@ tests:
       - series: 'node_filesystem_size_bytes{device="nas", exported_device="overlay", mountpoint="/var/lib/docker/overlay2/x/merged", fstype="overlay"}'
         values: "1e9x15"
     alert_rule_test:
+      # Not before its 10 minutes.
+      - eval_time: 9m
+        alertname: HostDiskAlmostFull
       - eval_time: 12m
         alertname: HostDiskAlmostFull
         exp_alerts:
@@ -67,6 +70,9 @@ tests:
       - series: 'node_memory_MemTotal_bytes{device="nas"}'
         values: "8e9x20"
     alert_rule_test:
+      # Not before its 15 minutes.
+      - eval_time: 14m
+        alertname: HostMemoryLow
       - eval_time: 17m
         alertname: HostMemoryLow
         exp_alerts:
@@ -95,5 +101,5 @@ tests:
           - exp_labels: { severity: critical, device: nas, exported_device: md0 }
             exp_annotations:
               summary: "nas's RAID is missing a disk."
-              description: "The RAID array md0 on nas is short 1 disk(s): one failed or was taken out."
+              description: "The RAID array md0 on nas is short 1 disk(s), failed or taken out by mdadm."
               runbook_url: https://github.com/southsidedean/observability-k3d/blob/main/docs/runbooks/HostRaidDegraded.md

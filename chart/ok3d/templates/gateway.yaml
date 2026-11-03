@@ -16,9 +16,9 @@ Service in the cluster is reachable only from inside it.
 Every response carries headers that stop it being framed by another site, sniffed as another
 type, or leaking its address in a Referer to another site. The two answers the gateway makes
 itself (the certificate and the 404) set them in their own headers, as CEL strings, since they
-never reach a backend. The referrer policy is same-origin,
-not no-referrer: with no-referrer, browsers send "Origin: null" on Grafana's own requests, and
-Grafana refuses them all ("origin not allowed"), so no panel loads.
+never reach a backend. The referrer policy is same-origin, not no-referrer: with no-referrer,
+browsers send "Origin: null" on Grafana's own requests, and Grafana refuses them all ("origin
+not allowed"), so no panel loads.
 */ -}}
 {{- $domain := .Values.tls.domain }}
 {{- $monitoring := .Release.Namespace }}

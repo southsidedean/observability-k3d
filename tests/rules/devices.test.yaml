@@ -48,11 +48,14 @@ tests:
 
   - interval: 1m
     input_series:
-      # Up and down every minute: flapping. Down for good: not flapping.
+      # Up and down every minute: flapping. Down for good: not flapping. Three changes (down,
+      # up, down) is one short of flapping.
       - series: 'probe_success{job="devices", check="ping", device="living-room-ap", role="access-point", behind="office-switch"}'
         values: "1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0"
       - series: 'probe_success{job="devices", check="ping", device="printer", role="printer", behind="office-switch"}'
         values: "1 0x15"
+      - series: 'probe_success{job="devices", check="ping", device="camera", role="camera", behind="office-switch"}'
+        values: "1 0 1 0x13"
     alert_rule_test:
       - eval_time: 15m
         alertname: DeviceFlapping
@@ -71,6 +74,9 @@ tests:
       - series: 'up{job="kube-state-metrics", instance="192.0.2.5:8080"}'
         values: "0x10"
     alert_rule_test:
+      # Not before its 5 minutes.
+      - eval_time: 4m
+        alertname: DeviceMetricsDown
       - eval_time: 6m
         alertname: DeviceMetricsDown
         exp_alerts:
@@ -83,7 +89,7 @@ tests:
   - interval: 1m
     input_series:
       # Runs out 10 days after the start of the test: inside the two weeks. The router's runs
-      # out in 60 days: fine. The printer's ran out before the test began.
+      # out in 60 days: fine. The printer's ran out as the test began.
       - series: 'probe_ssl_earliest_cert_expiry{job="devices", check="https", device="nas", role="nas", behind="office-switch"}'
         values: "864000x80"
       - series: 'probe_ssl_earliest_cert_expiry{job="devices", check="https", device="router", role="gateway", behind=""}'

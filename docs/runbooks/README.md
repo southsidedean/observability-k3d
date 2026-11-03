@@ -8,7 +8,7 @@ One page for each alert ok3d sends: what it means, what to check, in order, and 
 | [DeviceCheckFailing](DeviceCheckFailing.md) | warning | A device answers ping, but one of its other checks (http, https, or tcp:<port>) has failed for 5 minutes. |
 | [DeviceFlapping](DeviceFlapping.md) | warning | A device dropped off and came back at least twice in 15 minutes. |
 | [DeviceMetricsDown](DeviceMetricsDown.md) | warning | Prometheus hasn't been able to read a device's metrics port (from `metrics` in `devices.yaml`) for 5 minutes. |
-| [DeviceCertificateExpiring](DeviceCertificateExpiring.md) | warning | A device's HTTPS certificate runs out in less than two weeks. |
+| [DeviceCertificateExpiring](DeviceCertificateExpiring.md) | warning | A device's HTTPS certificate runs out in less than two weeks, or has run out. |
 | [UniFiControllerUnreachable](UniFiControllerUnreachable.md) | warning | unpoller hasn't been able to read your UniFi controller for 10 minutes, so UniFi's graphs and alerts have stopped. |
 | [UniFiDeviceBusy](UniFiDeviceBusy.md) | warning | A UniFi device's processor has been above 90% for 15 minutes. |
 | [UniFiDeviceMemoryFull](UniFiDeviceMemoryFull.md) | warning | A UniFi device's memory has been above 90% for 15 minutes. |
