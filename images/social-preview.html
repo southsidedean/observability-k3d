@@ -1,0 +1,45 @@
+<!doctype html>
+<!--
+The source of images/social-preview.png, the picture GitHub shows when a link to the repository
+is shared (Settings, General, Social preview). It's 1280 by 640, GitHub's size. To make it again
+after a change, render it on a Mac with Chrome (the text is laid out for the Mac's system font;
+another font is wider and may not fit), from the checkout:
+
+  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --hide-scrollbars \
+    --force-device-scale-factor=1 --window-size=1280,640 \
+    --screenshot="$PWD/images/social-preview.png" "file://$PWD/images/social-preview.html"
+
+then keep only the picture, and upload it on GitHub again:
+
+  python3 -c "import sys; sys.path.insert(0, 'scripts'); from screenshots import strip; \
+    from pathlib import Path; p = Path('images/social-preview.png'); p.write_bytes(strip(p.read_bytes()))"
+The logo is images/ok3d-logo.svg's, a shade lighter so it shows on the dark background.
+-->
+<html><head><meta charset="utf-8"><style>
+  html, body { margin: 0; width: 1280px; height: 640px; overflow: hidden; }
+  body {
+    background: radial-gradient(circle at 18% 40%, #26345c 0%, #161f3a 55%, #10172c 100%);
+    font-family: -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif;
+    color: #eef2fb; position: relative;
+  }
+  .pulse { position: absolute; left: 0; top: 528px; width: 1280px; height: 80px; opacity: 0.16; }
+  .wrap { position: absolute; left: 96px; top: 0; bottom: 70px; display: flex; align-items: center; gap: 64px; }
+  .logo { width: 300px; height: 300px; filter: drop-shadow(0 18px 40px rgba(0,0,0,0.45)); }
+  h1 { margin: 0; font-size: 156px; font-weight: 800; letter-spacing: -5px; line-height: 1; }
+  h1 span { color: #e5a52e; }
+  .tag { margin: 22px 0 0; font-size: 37px; font-weight: 600; color: #cfd8f0; line-height: 1.2; }
+  .sub { margin: 18px 0 0; font-size: 27px; color: #9aa8cc; line-height: 1.4; max-width: 740px; }
+</style></head><body>
+  <svg class="pulse" viewBox="0 0 1280 120" preserveAspectRatio="none">
+    <path d="M0 46 H900 L928 10 L956 74 L984 22 L1004 46 H1280" fill="none" stroke="#e5a52e" stroke-width="4"
+      stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>
+  <div class="wrap">
+    <svg class="logo" viewBox="0 0 64 64"><rect x="4" y="8" width="56" height="42" rx="9" fill="#2b3a66"/><path d="M11 26 H21 L25 17 L30 33 L34 21 L37 26 H53" fill="none" stroke="#e5a52e" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/><rect x="12" y="37" width="12" height="6" rx="3" fill="#cfd8f0" opacity="0.9"/><rect x="26" y="37" width="12" height="6" rx="3" fill="#cfd8f0" opacity="0.55"/><rect x="40" y="37" width="12" height="6" rx="3" fill="#cfd8f0" opacity="0.9"/><rect x="24" y="53" width="16" height="4" rx="2" fill="#2b3a66"/></svg>
+    <div>
+      <h1>ok<span>3d</span></h1>
+      <p class="tag">A network operations center for your home</p>
+      <p class="sub">Watches every device on your network and tells you when something breaks. Runs on one Linux server, in k3d.</p>
+    </div>
+  </div>
+</body></html>
