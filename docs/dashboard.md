@@ -126,8 +126,8 @@ file on the server.
 ok3d or for the devices you choose. Add one from now for a length, or between two times in
 the server's own time, with a reason if you like; **End now** ends one early. Home says while
 one is on. Until ok3d has read the windows from Alertmanager (after a fresh install, say), the
-page says so instead of listing none: **Read them now** reads them. [Alerts](alerts.md#maintenance-windows-keeping-alerts-quiet-while-you-work) has the
-details.
+page says so instead of listing none: **Read them now** reads them.
+[Alerts](alerts.md#maintenance-windows-keeping-alerts-quiet-while-you-work) has the details.
 
 ## Keys
 

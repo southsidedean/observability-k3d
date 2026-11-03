@@ -296,7 +296,8 @@ def maintenance_page(config: Config, message: str = "") -> str:
                   "whether any are set.</p>")  # fmt: skip
         read = "Read them now"
     else:
-        listed = f"<ul class=todo>{''.join(rows)}</ul>" if rows else "<p class=muted>No maintenance windows.</p>"
+        listed = (f"<ul class=todo>{''.join(rows)}</ul>" if rows
+                  else "<p class=muted>No maintenance windows.</p>")  # fmt: skip
         listed += f"<p class=muted>Read from Alertmanager at {html.escape(found[0])}.</p>"
         read = "Read them again"
     devices = DEVICE_NAMES.findall(helper_link.current(config.helper, "devices.yaml") or "")
