@@ -126,20 +126,61 @@
       "description": "The dashboard's heading."
     },
     {
-      "aliasColors": {
-        "Channel 11": "#37872D",
-        "Channel 36": "#1F60C4",
-        "Channel 44": "#8F3BB8"
-      },
       "cacheTimeout": null,
       "datasource": "${DS_PROMETHEUS}",
       "decimals": 0,
-      "description": "Visualize wireless channel usage w/ wired client counts.",
+      "description": "Wireless clients on each channel.",
       "fieldConfig": {
         "defaults": {
           "custom": {}
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Channel 11"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#37872D",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Channel 36"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#1F60C4",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Channel 44"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#8F3BB8",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "format": "short",
       "gridPos": {
@@ -190,12 +231,6 @@
       }
     },
     {
-      "aliasColors": {
-        "ac": "#37872D",
-        "g": "#E0B400",
-        "na": "#1F60C4",
-        "ng": "#8F3BB8"
-      },
       "cacheTimeout": null,
       "datasource": "${DS_PROMETHEUS}",
       "decimals": 0,
@@ -204,7 +239,68 @@
         "defaults": {
           "custom": {}
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ac"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#37872D",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "g"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#E0B400",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "na"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#1F60C4",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ng"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#8F3BB8",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "format": "short",
       "gridPos": {
@@ -246,8 +342,11 @@
           "placement": "right",
           "showLegend": true,
           "values": [
+            "value",
             "percent"
-          ]
+          ],
+          "sortBy": "Value",
+          "sortDesc": true
         },
         "tooltip": {
           "mode": "single"
@@ -255,7 +354,6 @@
       }
     },
     {
-      "aliasColors": {},
       "cacheTimeout": null,
       "datasource": "${DS_PROMETHEUS}",
       "decimals": 0,
@@ -306,6 +404,7 @@
           "placement": "right",
           "showLegend": true,
           "values": [
+            "value",
             "percent"
           ]
         },
@@ -342,7 +441,7 @@
         "thresholdMarkers": true
       },
       "gridPos": {
-        "h": 4,
+        "h": 7,
         "w": 2,
         "x": 0,
         "y": 3
@@ -426,7 +525,7 @@
         "thresholdMarkers": true
       },
       "gridPos": {
-        "h": 4,
+        "h": 7,
         "w": 2,
         "x": 2,
         "y": 3
@@ -1659,7 +1758,7 @@
         "align": false,
         "alignLevel": null
       },
-      "description": "Each access point's load average: how much work its processor has waiting, averaged over 1, 5, and 15 minutes."
+      "description": "Each access point's load average: how many tasks are running or waiting for the processor, averaged over 1, 5, and 15 minutes."
     },
     {
       "aliasColors": {},
@@ -1767,7 +1866,7 @@
         "align": false,
         "alignLevel": null
       },
-      "description": "How many clients each access point has."
+      "description": "Clients on each access point, with users and guests as separate lines."
     },
     {
       "aliasColors": {},
@@ -2005,7 +2104,7 @@
         "align": false,
         "alignLevel": null
       },
-      "description": "Clients on each access point, by radio (ng is 2.4 GHz, na is 5 GHz), with users and guests apart."
+      "description": "Clients on each access point, by band, with users and guests apart."
     },
     {
       "aliasColors": {},
@@ -2195,7 +2294,7 @@
       "yaxes": [
         {
           "decimals": 0,
-          "format": "dBm",
+          "format": "dB",
           "label": "Average Client RSSI",
           "logBase": 1,
           "max": null,
@@ -2319,7 +2418,7 @@
         "align": false,
         "alignLevel": null
       },
-      "description": "How many frames get through on each access point's 5 GHz radio without being sent again (client connection quality)."
+      "description": "The share of frames that reach each client on the first try, by network, on the 5 GHz band: UniFi's client connection quality."
     },
     {
       "aliasColors": {},
@@ -2424,7 +2523,7 @@
         "align": false,
         "alignLevel": null
       },
-      "description": "How many frames get through on each access point's 2.4 GHz radio without being sent again (client connection quality)."
+      "description": "The share of frames that reach each client on the first try, by network, on the 2.4 GHz band: UniFi's client connection quality."
     },
     {
       "aliasColors": {},
@@ -3018,7 +3117,7 @@
       "dashes": false,
       "datasource": "${DS_PROMETHEUS}",
       "decimals": 0,
-      "description": "PPS on the ng band calculated in 30 second buckets. In is on the negative Axis.",
+      "description": "Packets a second on the access points' 2.4 GHz radios; received is on the negative axis.",
       "editable": true,
       "error": false,
       "fieldConfig": {

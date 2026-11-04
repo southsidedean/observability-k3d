@@ -181,7 +181,7 @@
         }
       ],
       "valueName": "current",
-      "description": "How many UniFi switches the site has."
+      "description": "How many UniFi switches there are, across every site the controller has."
     },
     {
       "cacheTimeout": null,
@@ -270,7 +270,7 @@
         }
       ],
       "valueName": "current",
-      "description": "How many UniFi access points the site has."
+      "description": "How many UniFi access points there are, across every site the controller has."
     },
     {
       "cacheTimeout": null,
@@ -359,7 +359,7 @@
         }
       ],
       "valueName": "current",
-      "description": "How many UniFi gateways the site has."
+      "description": "How many UniFi gateways there are, across every site the controller has."
     },
     {
       "cacheTimeout": null,
@@ -448,10 +448,10 @@
         }
       ],
       "valueName": "current",
-      "description": "How many clients are connected to the site now."
+      "description": "How many clients are connected now, across every site the controller has."
     },
     {
-      "content": "Each site reports five subsystems: wan, lan, wlan, www, and vpn. All but vpn report a data rate; vpn reports data transferred. Most of this is also on the other UniFi dashboards.\nThe row below starts collapsed, since a controller with hundreds of sites can't load them all at once.\n",
+      "content": "Each site reports five subsystems: wan, lan, wlan, www, and vpn. All but vpn report a data rate; vpn reports data transferred. Most of this is also on the other UniFi dashboards.\nThe row below starts collapsed, since some controllers have hundreds of sites, too many to load at once.\n",
       "gridPos": {
         "h": 4,
         "w": 12,
@@ -1135,7 +1135,7 @@
           "dashes": false,
           "datasource": "${DS_PROMETHEUS}",
           "decimals": 0,
-          "description": "This graphs shows clients connected to the site.",
+          "description": "Data a second that VPN users send and receive; received is on the negative axis.",
           "fill": 0,
           "fillGradient": 0,
           "gridPos": {
@@ -1250,7 +1250,7 @@
           "dashes": false,
           "datasource": "${DS_PROMETHEUS}",
           "decimals": 0,
-          "description": "Empty in ok3d, which turns UniFi's DPI collection off. With DPI on in the controller and in unpoller, it shows data by category; received is on the negative axis.",
+          "description": "Empty in ok3d, which has unpoller leave DPI out. With DPI collected, it shows data by category; received is on the negative axis.",
           "fill": 0,
           "fillGradient": 0,
           "gridPos": {

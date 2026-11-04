@@ -1431,7 +1431,7 @@
             "align": false,
             "alignLevel": null
           },
-          "description": "The gateway's load average: how much work its processor has waiting, averaged over 1, 5, and 15 minutes."
+          "description": "The gateway's load average: how many tasks are running or waiting for the processor, averaged over 1, 5, and 15 minutes."
         },
         {
           "aliasColors": {

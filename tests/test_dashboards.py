@@ -13,14 +13,16 @@ import pytest
 
 DASHBOARDS = sorted((Path(__file__).resolve().parent.parent / "chart" / "ok3d" / "dashboards").glob("*.json"))
 
-# The panel types Grafana itself ships. graph, singlestat, and table-old are its old Angular
-# panels, which it turns into timeseries, stat, and table as it loads them. Any other type is
+# Core panel types, the ones Grafana ships, that these dashboards use: add any other core
+# type when a dashboard needs it. graph, singlestat, and table-old are its old Angular panels,
+# which it turns into timeseries, stat, and table as it loads them. A type that isn't core is
 # a plugin, which ok3d's Grafana doesn't install, so the panel would say "plugin not found".
 CORE = {"row", "text", "stat", "gauge", "bargauge", "timeseries", "table", "piechart", "heatmap",
         "graph", "singlestat", "table-old"}  # fmt: skip
 # The old pie chart plugin's own settings. Grafana's core pie chart ignores them, and moves
 # them over only for a panel whose type is still the plugin's.
-OLD_PIE = {"pieType", "legendType", "breakPoint", "combine", "valueName", "strokeWidth", "fontSize"}
+OLD_PIE = {"pieType", "legendType", "breakPoint", "combine", "valueName", "strokeWidth", "fontSize", "legend",
+           "aliasColors"}  # fmt: skip
 
 
 def panels(within: list[dict[str, Any]]) -> Iterator[dict[str, Any]]:
@@ -61,6 +63,29 @@ def test_pie_charts_use_the_core_pie_charts_settings() -> None:
         if panel.get("type") == "piechart":
             assert not OLD_PIE & set(panel), f"{name}: {panel.get('title')!r} still has the old plugin's settings"
             assert panel.get("options", {}).get("pieType") in ("pie", "donut"), f"{name}: {panel.get('title')!r}"
+
+
+def test_smoothing_never_draws_nothing() -> None:
+    # unpoller is scraped every 30 seconds, so a 30s rate() window holds one sample and draws
+    # nothing: the smallest choice is 1m, and the one shown first is one of the choices.
+    for path in DASHBOARDS:
+        for variable in json.loads(path.read_text()).get("templating", {}).get("list", []):
+            if variable["name"] == "Smooth":
+                choices = [o["value"] for o in variable["options"]]
+                assert "30s" not in choices and "30s" not in variable["query"].split(","), path.name
+                assert variable["current"]["value"] in choices, path.name
+
+
+def test_the_site_latency_gauges_read_in_their_units() -> None:
+    # unpoller_site_latency_seconds is in seconds, so the thresholds are too (100 ms is 0.1);
+    # unpoller_site_speedtest_ping is the controller's milliseconds, passed through.
+    site = json.loads(next(p for p in DASHBOARDS if p.name == "unifi-11311.json").read_text())
+    gauges = {panel["targets"][0]["expr"].split("{")[0]: panel["options"]["fieldOptions"]["defaults"]
+              for panel in panels(site["panels"]) if panel.get("type") == "gauge"}  # fmt: skip
+    latency = gauges["unpoller_site_latency_seconds"]
+    assert latency["unit"] == "s" and latency["max"] < 1
+    assert [step["value"] for step in latency["thresholds"]["steps"][1:]] == [0.1, 0.2]
+    assert gauges["unpoller_site_speedtest_ping"]["unit"] == "ms"
 
 
 def test_links_go_to_unpollers_own_site() -> None:
