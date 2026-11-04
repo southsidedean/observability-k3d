@@ -67,25 +67,18 @@
       "type": "dashboards"
     },
     {
-      "icon": "question",
-      "tags": [],
-      "title": "Help",
-      "type": "link",
-      "url": "https://golift.io/unifi-poller/issues"
-    },
-    {
       "icon": "doc",
       "tags": [],
-      "title": "Wiki",
+      "title": "ok3d: UniFi",
       "type": "link",
-      "url": "https://golift.io/unifi-poller/wiki"
+      "url": "https://github.com/southsidedean/observability-k3d/blob/main/docs/devices.md#unifi"
     },
     {
-      "icon": "bolt",
+      "icon": "external link",
       "tags": [],
-      "title": "Discord",
+      "title": "unpoller",
       "type": "link",
-      "url": "https://discord.gg/KnyKYt2"
+      "url": "https://unpoller.com/"
     }
   ],
   "panels": [
@@ -406,7 +399,7 @@
       "dashes": false,
       "datasource": "${DS_PROMETHEUS}",
       "decimals": 1,
-      "description": "",
+      "description": "Each switch's temperature sensors, in Celsius and Fahrenheit. Only switches with sensors report one.",
       "fieldConfig": {
         "defaults": {
           "custom": {}
@@ -495,7 +488,7 @@
           "$$hashKey": "object:11514",
           "decimals": 1,
           "format": "celsius",
-          "label": "Celcius",
+          "label": "Celsius",
           "logBase": 1,
           "max": null,
           "min": null,
@@ -505,7 +498,7 @@
           "$$hashKey": "object:11515",
           "decimals": 1,
           "format": "fahrenheit",
-          "label": "Farenheit",
+          "label": "Fahrenheit",
           "logBase": 1,
           "max": null,
           "min": null,
@@ -527,7 +520,7 @@
       "dashes": false,
       "datasource": "${DS_PROMETHEUS}",
       "decimals": 0,
-      "description": "",
+      "description": "The share of each switch's memory in use.",
       "fieldConfig": {
         "defaults": {
           "custom": {}
@@ -755,7 +748,8 @@
       "yaxis": {
         "align": false,
         "alignLevel": null
-      }
+      },
+      "description": "Each switch's load average: how much work its processor has waiting, averaged over 1, 5, and 15 minutes."
     },
     {
       "aliasColors": {
@@ -767,7 +761,7 @@
       "dashes": false,
       "datasource": "${DS_PROMETHEUS}",
       "decimals": 0,
-      "description": "",
+      "description": "The share of each switch's processor in use.",
       "fieldConfig": {
         "defaults": {
           "custom": {}
@@ -2803,11 +2797,6 @@
         "options": [
           {
             "selected": false,
-            "text": "30s",
-            "value": "30s"
-          },
-          {
-            "selected": false,
             "text": "1m",
             "value": "1m"
           },
@@ -2837,7 +2826,7 @@
             "value": "30m"
           }
         ],
-        "query": "30s,1m,2m,5m,10m,15m,30m",
+        "query": "1m,2m,5m,10m,15m,30m",
         "skipUrlSync": false,
         "type": "custom"
       }
