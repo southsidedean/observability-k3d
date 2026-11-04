@@ -886,10 +886,12 @@ def test_an_upgrade_that_stopped_partway_is_marked_stopped(h: helper.Opened, sys
 def test_an_upgrade_cut_off_with_no_step_says_partway(h: helper.Opened) -> None:
     (h.folders.own / "upgrade").write_text("from=0.5.1\nto=v0.5.2\nstate=running\n")
     helper.publish(h)
-    assert "step=it was cut off partway (the server restarted, say)." in (h.folders.own / "upgrade").read_text()
+    text = (h.folders.own / "upgrade").read_text()
+    assert "step=it was cut off partway (the server restarted, say)." in text
 
 
-def test_a_file_the_check_cant_read_keeps_apply_off(h: helper.Opened, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_file_the_check_cant_read_keeps_apply_off(h: helper.Opened,
+                                                    monkeypatch: pytest.MonkeyPatch) -> None:
     # An error reading it (EIO, say) still gets the request an answer, with a value no copy matches.
     def read_own_file(path: Path, limit: int) -> bytes | None:
         raise OSError("EIO")

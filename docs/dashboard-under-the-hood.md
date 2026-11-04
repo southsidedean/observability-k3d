@@ -1,9 +1,9 @@
 # The Dashboard under the hood
 
-How the Dashboard is built, as the code stands. So far it has its sign-in, five pages
-(Home, with Check, Apply, and releases; Setup; Settings; Devices; and Keys), and the Upgrade
-page Home leads to. The
-installer (`./ok3d install`, and `install.sh` for `curl | sh`) sets it all up. To see how a request reaches the server, read
+How the Dashboard is built, as the code stands. So far it has its sign-in, six pages (Home,
+with Check, Apply, and releases; Setup; Settings; Devices; Keys; and Maintenance), and the
+Upgrade page Home leads to. The installer (`./ok3d install`, and `install.sh` for
+`curl | sh`) sets it all up. To see how a request reaches the server, read
 [the helper under the hood](helper-under-the-hood.md).
 
 ## Where it runs
@@ -19,7 +19,7 @@ docker run --detach --name ok3d-dashboard --restart unless-stopped \
   --publish 0.0.0.0:8444:8444 \
   --volume /srv/ok3d/dashboard:/state \
   --volume /srv/ok3d/helper:/helper:ro \
-  ghcr.io/southsidedean/ok3d-dashboard:0.5.0 --origin https://dashboard.noc.home.arpa:8444
+  ghcr.io/southsidedean/ok3d-dashboard:<version> --origin https://dashboard.noc.home.arpa:8444
 ```
 
 Its address is `https://dashboard.<domain>:<cluster.ports.dashboard>`, a name under the same
@@ -160,11 +160,12 @@ with a note to wait. If the outbox can't be written, the page says so and sends 
   is a Check that found no problems. Anything sent since (a save, a key) turns it off again,
   as does a failed Check. So does a change to `settings.yaml` or `devices.yaml` on the
   server after the Check: the Check's answer has a fingerprint of each file as the helper
-  read it when the Check started (`settings=` and `devices=`, the SHA-256 of its text, or
-  `none` when there's none or it's a link or over 64 KB, whose changes aren't seen), and
-  Apply stays on only while they match the helper's copies. A change to `.env` isn't seen, since the Dashboard
-  never sees its values. The server checks all of this too, not only the button. The helper
-  doesn't enforce it: Apply is something you could run yourself anyway.
+  read it when the Check started (`settings=` and `devices=`: the SHA-256 of its text;
+  `none` when there's none, or it's a link or over 64 KB, and then a change isn't seen; or
+  `unreadable`), and Apply stays on only while they match the helper's copies. A change to
+  `.env` isn't seen, since the Dashboard never sees its values. The server checks all of
+  this too, not only the button. The helper doesn't enforce it: Apply is something you could
+  run yourself anyway.
 - **Apply asks first** when the Check said it would restart or stop part of the running
   cluster, or couldn't tell. `./ok3d check` works that out (below) and writes it to
   `helper/apply-plan`; Home lists it under Apply once that Check has passed. Pressing Apply
@@ -262,10 +263,10 @@ switches and the setups.
   `alerts.deadman.enabled`. Each shows its setting as it's written in `settings.yaml`, and
   which `.env` lines it needs. A value Setup can't read as true or false (`yes`, say, which
   Helm reads as true) shows as "can't tell", and the switch can set it. A module that comes
-  in a later release says which, with no button. The mesh, remote access, and agents are changed only on the server, like the other
-  settings a save from the Dashboard can't change. A switch that needs a setting the
-  Dashboard can't set (UniFi needs `unifi.url`, email needs `alerts.email.smarthost`) says so
-  until it's there.
+  in a later release says which, with no button. The mesh, remote access, and agents are
+  changed only on the server, like the other settings a save from the Dashboard can't
+  change. A switch that needs a setting the Dashboard can't set (UniFi needs `unifi.url`,
+  email needs `alerts.email.smarthost`) says so until it's there.
 - **The setups** are Basic NOC (no modules), Network NOC (UniFi), NOC with logs (0.6), and
   NOC with agents (0.9). Choosing one sets every module switch the Dashboard may change: on
   if the setup has it, off if not. The one your settings match now is marked.
@@ -344,7 +345,8 @@ For trying a change without building the image:
 mkdir -p /tmp/dash/state/tls /tmp/dash/helper
 openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 1 -subj /CN=localhost \
   -keyout /tmp/dash/state/tls/dashboard.key -out /tmp/dash/state/tls/dashboard.crt
-.venv/bin/python -m ok3d.dashboard --state /tmp/dash/state --helper /tmp/dash/helper --port 8444
+.venv/bin/python -m ok3d.dashboard --state /tmp/dash/state --helper /tmp/dash/helper --port 8444 \
+  --cert /tmp/dash/state/tls/dashboard.crt --key /tmp/dash/state/tls/dashboard.key
 ```
 
 Then open `https://localhost:8444/` and sign in with the password in

@@ -445,16 +445,17 @@ latest release when it does.
 - The simulated network and `ok3d demo`, which the smoke test and the screenshots use from
   here on.
 - Metrics: kube-prometheus-stack with volumes bound to the data root's folders by label, the
-  k3s scrapes off, the blackbox exporter with `icmp` through unprivileged ping (no `NET_RAW`), and unpoller with DPI
-  metrics off by default. Probes and scrape targets from `devices.yaml`.
+  k3s scrapes off, the blackbox exporter with `icmp` through unprivileged ping (no
+  `NET_RAW`), and unpoller with DPI metrics off by default. Probes and scrape targets from
+  `devices.yaml`.
 - Alerts reach you: Alertmanager to ntfy and email, and the dead man's switch. Rules for
-  devices (down, a check failing, flapping, metrics down, a certificate expiring), hosts (disk
-  filling up, with `predict_linear`, and almost full; memory; RAID), and UniFi (the
+  devices (down, a check failing, flapping, metrics down, a certificate expiring), hosts
+  (disk filling up, with `predict_linear`, and almost full; memory; RAID), and UniFi (the
   controller unreachable, a device busy or out of memory): the twelve 0.4.0 shipped, with
-  the dead man's switch watching the NOC itself. Moved out of 0.4 (decided 2026-11-04): the internet link's
-  alerts go to 0.7, with its targets; temperature, SMART, UniFi port errors, and client
-  experience have no release yet. Each alert links
-  to a runbook in `docs/runbooks/`.
+  the dead man's switch watching the NOC itself. Moved out of 0.4 (decided 2026-11-04): the
+  internet link's alerts go to 0.7, with its targets; temperature, SMART, UniFi port errors,
+  and client experience have no release yet. Each alert links to a runbook in
+  `docs/runbooks/`.
 - The front door, part one: agentgateway with TLS from the stack's certificate authority,
   security headers, and routes to Grafana (its own login, with a generated password),
   Prometheus, and Alertmanager (both behind basic auth until 0.8). The authority's

@@ -633,8 +633,9 @@ def handle_once(opened: Opened, now: float | None = None) -> str | None:
 
 def checked_files(opened: Opened) -> dict[str, str]:
     """For a Check's answer: the settings.yaml and devices.yaml it reads, as fingerprints the
-    Dashboard can match against the copies publish() leaves it (the SHA-256 of the text, or
-    none), so Apply turns off when either changes on the server after the Check."""
+    Dashboard can match against the copies publish() leaves it (the SHA-256 of the text, none,
+    or unreadable when reading it failed), so Apply turns off when either changes on the
+    server after the Check."""
     found = {}
     for name in ("settings.yaml", "devices.yaml"):
         try:

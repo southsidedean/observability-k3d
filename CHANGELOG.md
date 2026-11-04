@@ -94,7 +94,9 @@
   `main`, and name Helm 3.13. Upgrading from 0.5.0 or 0.4 backs up first, before the
   installer runs. `SECURITY.md` says which protections hold now and which come later, and
   that the ping checks need no extra capability. Smaller fixes in the architecture, demo,
-  certificate, AI install, and runbook pages, the bug report form, and the setup diagram.
+  certificate, AI install, alerts, and runbook pages, both under-the-hood pages (running the
+  Dashboard from the checkout now works as written), the bug report form, and the setup
+  diagram. The Settings page's screenshot, which no page showed, is no longer taken.
 - The install message for a path the helper's service can't hold names the helper's Python
   too.
 - For contributors: an emptied or unreadable private-names list now stops a commit instead of

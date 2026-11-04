@@ -144,7 +144,7 @@ NAV = (
 # (helper.py's read_own_file).
 NO_SETTINGS = (
     "The Dashboard can't show your <code>settings.yaml</code>: there's none on the server yet, or "
-    "it's a link, or it's over 64 KB, which the Dashboard doesn't read. If there's none, make one "
+    "it's a link, or it's over 64 KB. If there's none, make one "
     "there from <code>settings.example.yaml</code>"
 )
 
