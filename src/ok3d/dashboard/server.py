@@ -3,8 +3,8 @@
 It has the sign-in and six pages: Home (what's left to do, Check and Apply, releases and
 upgrades, and What's next), Setup (ready-made setups and switches, switches.py), Settings,
 Devices, Keys, and Maintenance (times when alerts don't notify you), plus the Upgrade page
-that Home leads to. Each page reads what the helper
-publishes, and each button leaves a request for it (helper_link.py).
+that Home leads to. Each page reads what the helper publishes, and each button leaves a
+request for it (helper_link.py).
 
 Every page is made here, with every value escaped, and carries headers that keep it out of
 frames, stop other sites' scripts, and keep it out of caches. A form is accepted only from
@@ -89,8 +89,10 @@ h2 { font-size: 16px; margin: 0 0 8px; }
 .good { color: var(--good); }
 pre { overflow-x: auto; font-size: 13px; background: var(--bg); border: 1px solid var(--line);
   border-radius: 6px; padding: 8px; }
-input[type=password] { font: inherit; padding: 8px; width: 100%; box-sizing: border-box;
+input, select { font: inherit; padding: 8px; box-sizing: border-box;
   border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); }
+input[type=checkbox], input[type=radio] { padding: 0; }
+input[type=password] { width: 100%; max-width: 420px; }
 button { font: inherit; padding: 8px 14px; border-radius: 6px; border: 1px solid var(--accent);
   background: var(--accent); color: #fff; cursor: pointer; }
 button.plain { background: none; color: var(--fg); border-color: var(--line); }
@@ -100,7 +102,6 @@ nav a { margin-right: 12px; color: var(--fg); }
 h3 { font-size: 15px; margin: 12px 0 4px; }
 textarea { font: 13px/1.4 ui-monospace, monospace; width: 100%; box-sizing: border-box; padding: 8px;
   border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); }
-input[type=password] { max-width: 420px; }
 button[disabled] { opacity: 0.5; cursor: not-allowed; }
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
 .card { border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
@@ -139,11 +140,32 @@ NAV = (
     '<a href="/devices">Devices</a> <a href="/keys">Keys</a> <a href="/maintenance">Maintenance</a></nav>'
 )
 
+# When the helper publishes no settings.yaml: there's none, or it's one the helper won't copy
+# (helper.py's read_own_file).
+NO_SETTINGS = (
+    "There's no <code>settings.yaml</code> the Dashboard can show: there's none on the server yet, "
+    "or it's a link or over 64 KB. Make one there from <code>settings.example.yaml</code>"
+)
+
 # What each page says about saving: the helper checks first, and keeps your old file.
 SAVE_NOTE = (
     "<p class=muted>Saving sends this to the helper, which checks it with <code>./ok3d validate</code> "
     "and saves it only if it passes, keeping a copy of the old one. Home shows the answer.</p>"
 )
+
+# The helper's action ids (helper.py's ACTIONS) in words, for the last answer.
+ACTION_WORDS = {
+    "check": "Check",
+    "apply": "Apply",
+    "save-settings": "Saving settings.yaml",
+    "save-devices": "Saving devices.yaml",
+    "set-env": "Setting a line in .env",
+    "look-for-release": "Looking for a new release",
+    "upgrade": "Starting the upgrade",
+    "maintenance-add": "Adding a maintenance window",
+    "maintenance-end": "Ending a maintenance window",
+    "maintenance-list": "Reading the maintenance windows",
+}
 
 
 def answer_section(config: Config) -> str:
@@ -158,9 +180,10 @@ def answer_section(config: Config) -> str:
         "refused": f"was refused: {last.fields.get('reason', '')}",
         "failed": f"couldn't run: {last.fields.get('reason', '')}",
     }
-    what = last.action or "a request"
-    if last.fields.get("name"):
-        what += f" {last.fields['name']}"
+    if last.action == "set-env" and last.fields.get("name"):
+        what = f"Setting {last.fields['name']} in .env"
+    else:
+        what = ACTION_WORDS.get(last.action or "", "A request")
     when = f" at {last.fields['finished']}" if "finished" in last.fields else ""
     return (
         "<section><h2>The helper's last answer</h2>"
@@ -205,16 +228,22 @@ def home(config: Config, message: str = "") -> str:
     )
 
 
+def count(n: int, thing: str) -> str:
+    """1 more part, 3 more parts."""
+    return f"{n} {thing}" + ("" if n == 1 else "s")
+
+
 def plan_list(plan: helper_link.ApplyPlan) -> str:
     """What Apply would change, as a list, each part already escaped."""
     items = [f"<li>Restart {html.escape(p)}</li>" for p in plan.restart]
     items += [f"<li>Stop {html.escape(p)}</li>" for p in plan.stop]
     items += [f"<li>Start {html.escape(p)}</li>" for p in plan.start]
     if plan.hidden:
-        items.append(f"<li>Restart, stop, or start {plan.hidden} more part(s), whose names can't be shown here: "
-                     "<code>./ok3d check</code> on the server names them</li>")  # fmt: skip
+        items.append(f"<li>Restart, stop, or start {count(plan.hidden, 'more part')}, whose names can't be shown "
+                     "here: <code>./ok3d check</code> on the server names them</li>")  # fmt: skip
     if plan.other:
-        items.append(f"<li>{plan.other} other change(s), such as alert rules or dashboards, which stop nothing</li>")
+        items.append(f"<li>{count(plan.other, 'other change')}, such as alert rules or dashboards, which stop "
+                     "nothing</li>")  # fmt: skip
     return f"<ul class=todo>{''.join(items)}</ul>" if items else ""
 
 
@@ -283,11 +312,12 @@ def maintenance_page(config: Config, message: str = "") -> str:
         if w.end <= now:
             continue
         state = "<span class=bad>on now</span>" if w.on(now) else "<span class=muted>starts later</span>"
+        end = "End now" if w.on(now) else "Cancel"  # both end it: one that hasn't started never does
         rows.append(
             f"<li>{who(w.what)}, {html.escape(w.start_here)} to {html.escape(w.end_here)}: {state}"
             + (f" ({html.escape(w.reason)})" if w.reason else "")
             + f' <form class="inline" method="post" action="/maintenance/end"><input type="hidden" name="window" '
-            f'value="{html.escape(w.id)}"><button class="plain">End now</button></form></li>'
+            f'value="{html.escape(w.id)}"><button class="plain">{end}</button></form></li>'
         )
     if found is None:
         # Nothing read yet (a fresh install, say): there may be windows this can't see, so it
@@ -429,8 +459,7 @@ def todo(config: Config) -> list[str]:
     switched-on part needs, somewhere for alerts to go, and devices to watch."""
     settings = helper_link.current(config.helper, "settings.yaml")
     if settings is None:
-        return ["There's no <code>settings.yaml</code> on the server yet. Make it there from "
-                "<code>settings.example.yaml</code> (the installer does this for you)."]  # fmt: skip
+        return [NO_SETTINGS + " (the installer makes it for you)."]
     have = helper_link.env_set(config.helper)
     left = []
     for switch in switches.MODULES + switches.ALERTS:
@@ -464,14 +493,14 @@ def todo_section(config: Config) -> str:
 
 # What a domain or a port may look like before it goes into a link.
 DOMAIN = re.compile(r"[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?")
-PORT = re.compile(r"[1-9][0-9]{0,4}")
+PORT = re.compile(r"[1-9][0-9]{0,4}")  # and at most 65535, which pages_address checks
 
 
 def pages_address(settings: str | None, name: str) -> str:
     """The address of one of ok3d's pages, such as https://grafana.noc.home.arpa:8443/."""
     domain = (switches.read(settings, ("tls", "domain")) or "noc.home.arpa").lower()
     port = switches.read(settings, ("cluster", "ports", "https")) or "8443"
-    if not DOMAIN.fullmatch(domain) or not PORT.fullmatch(port):
+    if not DOMAIN.fullmatch(domain) or not PORT.fullmatch(port) or int(port) > 65535:
         domain, port = "noc.home.arpa", "8443"
     return f"https://{name}.{domain}" + ("" if port == "443" else f":{port}") + "/"
 
@@ -486,13 +515,17 @@ def next_section(config: Config) -> str:
     ca = html.escape(pages_address(settings, "ca"))
     grafana = html.escape(pages_address(settings, "grafana"))
     domain = html.escape(pages_address(settings, "x")[len("https://x."):].split(":")[0].rstrip("/"))
+    # ok3d makes admin-password only when .env doesn't set the password itself.
+    password = ("your <code>OK3D_ADMIN_PASSWORD</code> from <code>.env</code>"
+                if "OK3D_ADMIN_PASSWORD" in helper_link.env_set(config.helper)
+                else "in <code>admin-password</code> in the data root")  # fmt: skip
     return (
         f"<section><h2>What's next</h2><p class=good>The last Apply that worked finished at {html.escape(when)}.</p><ol>"
         f"<li>Point <code>*.{domain}</code> at this server, in your router or local DNS server "
         "(docs/certificate.md has the steps).</li>"
         f"<li>Trust ok3d's certificate authority on each device you'll use: download it from <a href=\"{ca}\">{ca}</a>.</li>"
         f'<li>Open Grafana at <a href="{grafana}">{grafana}</a>. Its user is <code>admin</code>, and its password '
-        "is in <code>admin-password</code> in the data root.</li>"
+        f"is {password}.</li>"
         "<li>Send yourself a test alert: <code>./ok3d test-alert</code> on the server.</li>"
         '<li>Add the rest of your devices on <a href="/devices">Devices</a>, then Check and Apply again.</li>'
         "</ol></section>"
@@ -564,8 +597,7 @@ def setup_page(config: Config, message: str = "") -> str:
     settings = helper_link.current(config.helper, "settings.yaml")
     note = f"<p class=bad>{html.escape(message)}</p>" if message else ""
     if settings is None:
-        return (f"<section><h2>Setup</h2>{note}<p class=bad>There's no settings.yaml on the server yet. "
-                "Make it there first, from settings.example.yaml.</p></section>")  # fmt: skip
+        return f"<section><h2>Setup</h2>{note}<p class=bad>{NO_SETTINGS}.</p></section>"
     base = helper_link.fingerprint(settings)
     have = helper_link.env_set(config.helper)
     cards = "".join(card_html(c, settings, base) for c in switches.CARDS)
@@ -601,8 +633,7 @@ def file_page(config: Config, name: str, message: str = "") -> str:
     base = helper_link.fingerprint(text)
     if text is None:
         if name == "settings.yaml":
-            return (f"<section><h2>{title}</h2>{about}<p class=bad>There's no settings.yaml on the "
-                    "server yet. Make it there first, from settings.example.yaml; after that you can "
+            return (f"<section><h2>{title}</h2>{about}<p class=bad>{NO_SETTINGS}; after that you can "
                     "change it here.</p></section>")  # fmt: skip
         text = "devices: []\n"
     note = f"<p class=bad>{html.escape(message)}</p>" if message else ""
@@ -806,8 +837,12 @@ class Handler(BaseHTTPRequestHandler):
         path = urllib.parse.urlsplit(self.path).path
         if not self.same_origin():
             self.discard_body()
+            # Forms work only at the Dashboard's own address, so name it: opened by an IP
+            # address or another name, every form (sign-in too) ends here.
+            where = "".join(f' Open the Dashboard at <a href="{html.escape(o)}/">{html.escape(o)}/</a> to use its forms.'
+                            for o in self.config.origins[:1])  # fmt: skip
             self.send(403, page("Refused", "<section><h2>Refused</h2><p>That form didn't come from "
-                                "this Dashboard.</p></section>"))  # fmt: skip
+                                f"this Dashboard.{where}</p></section>"))  # fmt: skip
             return
         if path == "/sign-in":
             self.sign_in()
@@ -866,6 +901,7 @@ class Handler(BaseHTTPRequestHandler):
         self.redirect(back)
 
     def post_check(self) -> None:
+        self.discard_body()
         self.ask_helper("/", home, "Home", "check")
 
     def post_apply(self) -> None:
@@ -901,7 +937,10 @@ class Handler(BaseHTTPRequestHandler):
     def post_maintenance(self) -> None:
         """Adds a window: all of ok3d or the devices ticked, from now for a length or between two
         times, checked as ./ok3d maintenance will check them before anything is sent."""
-        form = self.read_form(fields=60)
+        # One field for each device ticked, plus six others. devices.yaml may list more devices
+        # than a window covers, so the form takes as many as fit in 16 KB (the shortest field,
+        # device-a=on&, is 12 bytes), and a window over the limit is told so.
+        form = self.read_form(limit=16 * 1024, fields=16 * 1024 // 12)
 
         def refuse(message: str) -> None:
             self.send(400, page("Maintenance", maintenance_page(self.config, message), True))
@@ -910,10 +949,14 @@ class Handler(BaseHTTPRequestHandler):
             refuse("That didn't arrive in one piece. Try again.")
             return
         if form.get("scope") == "devices":
-            what = ",".join(sorted(k.removeprefix("device-") for k in form if k.startswith("device-")))
-            if not what:
+            ticked = sorted(k.removeprefix("device-") for k in form if k.startswith("device-"))
+            if not ticked:
                 refuse("Tick at least one device, or choose all of ok3d.")
                 return
+            if len(ticked) > rules.MOST_DEVICES:
+                refuse(f"A window covers at most {rules.MOST_DEVICES} devices: choose all of ok3d, or fewer devices.")
+                return
+            what = ",".join(ticked)
         else:
             what = "all"
         if form.get("timing") == "later":

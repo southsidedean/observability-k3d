@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import fcntl
 import os
+import signal
 import stat
 import subprocess
 import sys
@@ -18,7 +19,7 @@ import time
 from pathlib import Path
 
 import pytest
-from hypothesis import given, settings
+from hypothesis import example, given, settings
 from hypothesis import strategies as st
 
 from ok3d import helper
@@ -341,6 +342,39 @@ def test_a_command_that_runs_too_long_is_stopped_with_everything_it_started(
         pytest.fail("the command's own child was left running")
 
 
+def test_what_a_command_that_finished_left_running_is_stopped(h: helper.Opened) -> None:
+    # A kubectl port-forward, say, that ./ok3d started in the background and didn't stop.
+    pid_file = h.folders.ok3d_dir / "child"
+    (h.folders.ok3d_dir / "ok3d").write_text(f"#!/bin/sh\nsleep 60 &\necho $! > {pid_file}\nexit 0\n")
+    send(h)
+    helper.handle_once(h)
+    assert result(h)["exit"] == "0"
+    child = int(pid_file.read_text())
+    for _ in range(50):
+        try:
+            os.kill(child, 0)
+        except ProcessLookupError:
+            break
+        time.sleep(0.1)
+    else:
+        os.kill(child, signal.SIGKILL)
+        pytest.fail("a child of a command that had finished was left running")
+
+
+def test_a_checks_answer_names_the_files_as_the_dashboard_sees_them(h: helper.Opened) -> None:
+    from ok3d.dashboard import helper_link
+
+    # Not UTF-8 throughout, and no devices.yaml: the fingerprints still match the copies.
+    (h.folders.ok3d_dir / "settings.yaml").write_bytes(b"settingsVersion: 1\n# caf\xe9\n")
+    send(h)
+    helper.handle_once(h)
+    helper.publish(h)
+    for name in ("settings", "devices"):
+        assert result(h)[name] == helper_link.fingerprint(helper_link.current(h.folders.own, f"{name}.yaml"))
+    assert result(h)["devices"] == "none"
+    assert result(h)["settings"] != "none"
+
+
 def test_a_second_helper_will_not_start(h: helper.Opened) -> None:
     lock = os.open(h.folders.own / "lock", os.O_WRONLY | os.O_CREAT, 0o600)
     fcntl.flock(lock, fcntl.LOCK_EX)
@@ -381,6 +415,9 @@ def test_any_bytes_are_either_a_valid_request_or_refused(data: bytes, age: float
     request_id=st.text(max_size=80),
     extra=st.lists(st.tuples(st.text(max_size=10), st.text(max_size=10)), max_size=3),
 )
+# Valid requests with lines of their own, which random text almost never makes.
+@example(action="upgrade", request_id="3f9a0c51d2e8b746", extra=[("version", "v1.2.3")])
+@example(action="maintenance-add", request_id="3f9a0c51d2e8b746", extra=[("what", "all"), ("when", "2h")])
 def test_only_known_actions_and_ids_get_through(action: str, request_id: str, extra: list[tuple[str, str]]) -> None:
     lines = [f"id={request_id}", f"action={action}"] + [f"{k}={v}" for k, v in extra]
     data = ("\n".join(lines) + "\n").encode("utf-8")
@@ -388,7 +425,14 @@ def test_only_known_actions_and_ids_get_through(action: str, request_id: str, ex
         request = helper.parse_request(data, 0.0, 0.0)
     except helper.Refused:
         return
-    assert not extra
+    # Only a line this action takes gets through: name for set-env, base for a save, version
+    # for an upgrade, and a maintenance window's fields.
+    required, optional = helper.MAINTENANCE_FIELDS.get(request.action, ((), ()))
+    allowed = {*required, *optional}
+    allowed |= {"name"} if request.action == "set-env" else set()
+    allowed |= {"base"} if request.action in helper.SAVES else set()
+    allowed |= {"version"} if request.action == "upgrade" else set()
+    assert {k for k, _ in extra} <= allowed
     assert request.action in helper.ACTIONS
     assert helper.ID.fullmatch(request.id)
 
@@ -673,6 +717,18 @@ def test_the_heartbeat_goes_on_while_a_long_command_runs(h: helper.Opened, monke
     assert (h.folders.own / "alive").exists()
 
 
+def test_an_error_nobody_expected_still_gets_an_answer(h: helper.Opened, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Left saying running, the answer would keep the Dashboard busy until the helper restarted.
+    def carry_out(opened: helper.Opened, request: helper.Request) -> tuple[int, str]:
+        raise ValueError("unexpected")
+
+    monkeypatch.setattr(helper, "carry_out", carry_out)
+    send(h)
+    assert "ValueError" in (helper.handle_once(h) or "")
+    assert result(h)["state"] == "failed"
+    assert result(h)["reason"] == "the helper hit an error it didn't expect"
+
+
 def test_an_answer_left_running_is_marked_failed_when_the_helper_starts(h: helper.Opened) -> None:
     (h.folders.own / "result").write_text(f"id={ID}\naction=apply\nstate=running\n\n")
     helper.clear_unfinished(h)
@@ -707,6 +763,21 @@ def test_a_save_based_on_an_older_file_is_refused(h: helper.Opened) -> None:
     assert result(h)["exit"] == "1"
     assert "changed on the server since the page showed it" in (h.folders.own / "result").read_text()
     assert ran(h) == []
+
+
+def test_an_edit_on_the_server_while_validate_runs_is_kept(h: helper.Opened) -> None:
+    import hashlib
+
+    (h.folders.ok3d_dir / "devices.yaml").write_text("devices: []\n")
+    base = hashlib.sha256(b"devices: []\n").hexdigest()
+    # This validate passes, but someone edits devices.yaml over SSH while it runs.
+    command = h.folders.ok3d_dir / "ok3d"
+    command.write_text('#!/bin/sh\necho "devices: [] # edited meanwhile" > "$(dirname "$0")/devices.yaml"\n'
+                       'echo "PASS  the $2 in $3"\n')  # fmt: skip
+    ask(h, f"id={ID}\naction=save-devices\nbase={base}\n", "devices: [] # from the page\n")
+    assert (h.folders.ok3d_dir / "devices.yaml").read_text() == "devices: [] # edited meanwhile\n"
+    assert result(h)["exit"] == "1"
+    assert "changed on the server since the page showed it" in (h.folders.own / "result").read_text()
 
 
 def test_base_none_means_there_was_no_file(h: helper.Opened) -> None:
@@ -808,7 +879,8 @@ def test_an_upgrade_that_stopped_partway_is_marked_stopped(h: helper.Opened, sys
     (systemd / "upgrading").unlink()
     helper.publish(h)
     text = (h.folders.own / "upgrade").read_text()
-    assert "state=failed" in text and "to=v0.5.2" in text and "stopped partway, at Deleting the cluster" in text
+    assert "state=failed" in text and "to=v0.5.2" in text
+    assert "step=it was cut off while deleting the cluster (the server restarted, say). docs/upgrading.md" in text
 
 
 def test_an_upgrade_that_finishes_while_its_checked_isnt_marked_stopped(h: helper.Opened, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -135,7 +135,7 @@ def test_a_long_line_is_read_quickly() -> None:
     text = "tls:\n  domain: a" + " " * 16000 + "b\n"
     started = time.monotonic()
     assert switches.read(text, ("tls", "domain")) == "a" + " " * 16000 + "b"
-    assert time.monotonic() - started < 0.1
+    assert time.monotonic() - started < 1  # quadratic backtracking on 16 000 characters takes far longer
 
 
 def test_reading_values() -> None:

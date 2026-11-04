@@ -307,8 +307,7 @@ class Card:
 
 CARDS = (
     Card("basic", "Basic NOC",
-         "Watches your devices and your internet link: up or down, slow, or losing packets, with "
-         "the metrics in Grafana and alerts sent to you.",
+         "Watches your devices: up or down, with the metrics in Grafana and alerts sent to you.",
          "Your devices, listed on the Devices page."),
     Card("network", "Network NOC",
          "The basic NOC, and your UniFi network too: every UniFi device and port, and the clients "

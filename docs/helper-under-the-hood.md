@@ -14,8 +14,9 @@ running on the server as you, carries it out.
 
 The helper assumes someone may have taken over the Dashboard's container. The most they can
 do through it is run `./ok3d check` or `./ok3d apply`, change the settings the Dashboard is
-allowed to change, change your devices, set four lines of `.env`, or move ok3d to a newer
-release that's signed with ok3d's release key. They can't change where
+allowed to change, change your devices, set four lines of `.env`, add or end maintenance
+windows (up to 20, each at most 30 days, never covering the dead man's switch), or move ok3d
+to a newer release that's signed with ok3d's release key. They can't change where
 ok3d keeps its data, where it sends your keys, tokens, and passwords, or how far it's open to
 the outside; can't reach the chart's own sections (which choose images and how pods run);
 can't choose the admin password; and can't read a secret back.
@@ -87,6 +88,8 @@ The helper's checks hold only with the right mounts, which the installer sets up
    ```ini
    id=3f9a0c51d2e8b746
    action=check
+   settings=9b1c7e2f...
+   devices=4d07a8e1...
    state=finished
    exit=0
    finished=2026-10-28T18:05:12Z
@@ -95,12 +98,16 @@ The helper's checks hold only with the right mounts, which the installer sets up
    ...
    ```
 
+   A Check's answer also has `settings` and `devices`: the SHA-256 of each file's text as
+   the Check read it, or `none`. The Dashboard turns Apply off once its copies stop matching.
+
    A refused request gets `state=refused` and a `reason`, from a fixed list, and one that
    couldn't run gets `state=failed`. If the helper stops partway through (a restart, a
    reboot), it marks that answer `failed` when it starts again, so the page doesn't wait
-   for it forever. Every request taken gets an answer. The answer repeats
-   nothing the request said except its id, and only when the id is valid (16 to 64 hex
-   digits), so the page knows which request was refused.
+   for it forever. Every request taken gets an answer. A refused request's answer repeats
+   nothing it said but its id, and only when the id is valid (16 to 64 hex digits), so the
+   page knows which request was refused. Any other answer also names its action (and, for
+   `set-env`, the line), both checked against fixed lists first.
 6. The page reads `helper/result` every few seconds, and shows it when the id matches.
 
 ## Saving settings and devices
@@ -127,7 +134,8 @@ devices:
 3. Only if that passes does it copy your current file to `local/backups/` in the ok3d
    checkout and put the new one in its place, readable only by you, through a temporary file
    renamed into place. If it fails, your file is unchanged, and the answer says what was
-   wrong.
+   wrong. The `base` is checked again first, since the validation can take a couple of
+   minutes: a change you make on the server meanwhile is kept, and the save is refused.
 
 `save-settings` does the same for `settings.yaml`, with `./ok3d validate settings
 --from-dashboard`. The file may hold only your own sections, never the chart's own

@@ -30,6 +30,7 @@ import pytest
 
 from ok3d import __version__
 from ok3d.dashboard import auth as auth_module
+from ok3d.dashboard import helper_link, server
 from ok3d.dashboard.auth import Auth
 from ok3d.dashboard.server import COOKIE, Config, make_server
 
@@ -257,9 +258,27 @@ def test_the_home_page_shows_the_helpers_last_answer_escaped(dash: Dashboard) ->
         "FAIL  <script>alert(1)</script> & more\n"
     )
     page = body(dash.get("/", dash.sign_in()))
-    assert "check finished with exit status 1 at 2026-10-28T18:05:12Z." in page
+    assert "Check finished with exit status 1 at 2026-10-28T18:05:12Z." in page
     assert "&lt;script&gt;alert(1)&lt;/script&gt; &amp; more" in page
     assert "<script>" not in page
+
+
+def test_the_last_answer_names_each_action_in_words(dash: Dashboard) -> None:
+    from ok3d import helper
+
+    # Every action the helper takes has words, so an id like save-settings never shows.
+    assert set(server.ACTION_WORDS) == set(helper.ACTIONS)
+    cases = [
+        ("action=save-settings\n", "Saving settings.yaml finished"),
+        ("action=set-env\nname=NTFY_TOPIC\n", "Setting NTFY_TOPIC in .env finished"),
+        ("action=maintenance-add\n", "Adding a maintenance window finished"),
+        ("action=look-for-release\n", "Looking for a new release finished"),
+    ]
+    for fields, words in cases:
+        (dash.helper / "result").write_text(f"id=3f9a0c51d2e8b746\n{fields}state=finished\nexit=0\n\n")
+        page = body(dash.get("/", dash.sign_in()))
+        assert words in page
+        assert "save-settings" not in page and "maintenance-add" not in page
 
 
 def test_the_home_page_without_an_answer(dash: Dashboard) -> None:
@@ -296,11 +315,19 @@ def test_connections_beyond_the_limit_are_closed(dash: Dashboard, monkeypatch: p
 
     idle = [socket.create_connection(("127.0.0.1", dash.port)) for _ in range(server_module.MAX_CONNECTIONS)]
     try:
-        time.sleep(0.3)
-        extra = socket.create_connection(("127.0.0.1", dash.port))
-        extra.settimeout(5)
-        assert extra.recv(1) == b""  # closed straight away
-        extra.close()
+        # Until the server has taken all of them, one more may still get a slot: try again.
+        for _ in range(20):
+            extra = socket.create_connection(("127.0.0.1", dash.port))
+            extra.settimeout(0.5)
+            try:
+                closed = extra.recv(1) == b""  # closed straight away
+            except TimeoutError:
+                closed = False
+            extra.close()
+            if closed:
+                break
+        else:
+            pytest.fail("a connection beyond the limit was kept open")
     finally:
         for s in idle:
             s.close()
@@ -527,6 +554,14 @@ def test_nothing_is_sent_while_the_helper_isnt_running(ready: Dashboard) -> None
     assert not (ready.state / "outbox" / "request").exists()
 
 
+def check_passed(dash: Dashboard, sent: str) -> None:
+    """The helper's answer to a Check that passed, naming the files it read, as checked_files does."""
+    read = {name: helper_link.fingerprint(helper_link.current(dash.helper, f"{name}.yaml"))
+            for name in ("settings", "devices")}  # fmt: skip
+    (dash.helper / "result").write_text(f"id={sent}\naction=check\nstate=finished\nexit=0\n"
+                                        f"settings={read['settings']}\ndevices={read['devices']}\n\nReady.\n")  # fmt: skip
+
+
 def test_apply_waits_for_a_check_that_passed(ready: Dashboard) -> None:
     session = ready.sign_in()
     assert "<button disabled>Apply</button>" in body(ready.get("/", session))
@@ -536,7 +571,7 @@ def test_apply_waits_for_a_check_that_passed(ready: Dashboard) -> None:
     (ready.state / "outbox" / "request").unlink()
     (ready.helper / "result").write_text(f"id={sent}\naction=check\nstate=finished\nexit=1\n\nFAIL  x\n")
     assert ready.post("/apply", session=session).status == 409
-    (ready.helper / "result").write_text(f"id={sent}\naction=check\nstate=finished\nexit=0\n\nReady.\n")
+    check_passed(ready, sent)
     (ready.helper / "apply-plan").write_text("checked=2026-10-30T09:00:00Z\nstate=none\nother=0\n")
     assert "<button>Apply</button>" in body(ready.get("/", session))
     assert ready.post("/apply", session=session).status == 303
@@ -544,7 +579,7 @@ def test_apply_waits_for_a_check_that_passed(ready: Dashboard) -> None:
     # Anything sent since the Check turns it off again, even before its answer arrives.
     (ready.state / "outbox" / "request").unlink()
     assert (ready.state / "last-sent").read_text().split()[0] != sent
-    (ready.helper / "result").write_text(f"id={sent}\naction=check\nstate=finished\nexit=0\n\nReady.\n")
+    check_passed(ready, sent)
     assert ready.post("/apply", session=session).status == 409
 
 
@@ -567,7 +602,10 @@ def test_the_settings_page_shows_yours_and_saves_a_change(ready: Dashboard) -> N
 
 
 def test_settings_cant_be_saved_before_there_are_any(ready: Dashboard) -> None:
-    assert "There's no settings.yaml on the server yet" in body(ready.get("/settings", ready.sign_in()))
+    # The helper publishes none for a link or a file over 64 KB too, so every page says so.
+    session = ready.sign_in()
+    for path in ("/", "/setup", "/settings"):
+        assert "or it's a link or over 64 KB" in body(ready.get(path, session))
 
 
 def test_devices_are_saved_the_same_way(ready: Dashboard) -> None:
@@ -672,7 +710,7 @@ def test_a_slow_body_doesnt_keep_its_thread(ready: Dashboard, monkeypatch: pytes
             break
     conn.close()
     assert time.monotonic() - started < 5
-    assert answer == b"" or answer.startswith(b"HTTP/1.0 400 ")
+    assert answer.startswith(b"HTTP/1.0 400 ")
 
 
 def test_keys_show_only_whether_each_is_set(ready: Dashboard) -> None:
@@ -724,6 +762,25 @@ def test_the_dashboards_own_addresses_when_given(tmp_path: Path, dash: Dashboard
     assert fake.same_origin()
 
 
+def test_a_form_from_another_address_is_told_which_address_works(tmp_path: Path, dash: Dashboard) -> None:
+    # The installer passes one address. Opened at another (by IP, say), every form ends in a
+    # 403, so the page names the one that works.
+    server = make_server(Config(dash.state, dash.helper, origins=("https://dashboard.noc.home.arpa:8444",)),
+                         "127.0.0.1", 0, tmp_path / "cert.pem", tmp_path / "key.pem")  # fmt: skip
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        other = Dashboard(server.server_address[1], dash.state, dash.helper)
+        response = other.post("/sign-in", "password=x")
+        assert response.status == 403
+        assert 'Open the Dashboard at <a href="https://dashboard.noc.home.arpa:8444/">' in body(response)
+    finally:
+        server.shutdown()
+        server.server_close()
+    # Without an address of its own (run by hand), the page says only that it was refused.
+    refused = dash.post("/sign-in", "password=x", origin="https://elsewhere.example")
+    assert refused.status == 403 and "Open the Dashboard at" not in body(refused)
+
+
 def test_the_dashboard_and_the_helper_agree_on_what_may_be_sent() -> None:
     from ok3d import helper
     from ok3d.dashboard import helper_link, server
@@ -734,6 +791,28 @@ def test_the_dashboard_and_the_helper_agree_on_what_may_be_sent() -> None:
     assert helper_link.MAX_FILE == helper.MAX_FILE
     assert helper_link.VERSION.pattern == helper.VERSION.pattern
 
+
+
+@pytest.mark.parametrize("name", ["settings.yaml", "devices.yaml"])
+def test_a_change_on_the_server_after_the_check_turns_apply_off(ready: Dashboard, name: str) -> None:
+    # An edit over SSH, say: the plan Home shows is the old settings', so Check again first.
+    session = ready.sign_in()
+    checked(ready, session, "state=none\nother=0\n")
+    assert "<button>Apply</button>" in body(ready.get("/", session))
+    current = ready.helper / f"current-{name}"
+    current.write_text((current.read_text() if current.exists() else "") + "# changed\n")
+    assert "<button disabled>Apply</button>" in body(ready.get("/", session))
+    assert ready.post("/apply", session=session).status == 409
+
+
+def test_a_check_answer_without_its_files_doesnt_turn_apply_on(ready: Dashboard) -> None:
+    # A Check that doesn't say what it read (from a helper before 0.5.2): Check again.
+    session = ready.sign_in()
+    ready.post("/check", session=session)
+    sent = head(outbox(ready))["id"]
+    (ready.state / "outbox" / "request").unlink()
+    (ready.helper / "result").write_text(f"id={sent}\naction=check\nstate=finished\nexit=0\n\nReady.\n")
+    assert ready.post("/apply", session=session).status == 409
 
 
 def test_a_passed_check_from_before_doesnt_turn_apply_on(ready: Dashboard) -> None:
@@ -774,6 +853,26 @@ def test_no_outbox_gets_an_answer(dash: Dashboard) -> None:
     response = dash.post("/check", session=dash.sign_in())
     assert response.status == 503
     assert "write its outbox" in body(response)
+    # Fixed, it works at once: the request that never went out doesn't leave the helper
+    # looking busy (or keep Apply off) until its answer would have been due.
+    (dash.state / "outbox").mkdir()
+    session = dash.sign_in()
+    assert "busy" not in body(dash.get("/", session))
+    assert dash.post("/check", session=session).status == 303
+
+
+def test_a_failed_send_puts_back_what_was_last_sent(tmp_path: Path) -> None:
+    state, helper = tmp_path / "state", tmp_path / "helper"
+    state.mkdir()
+    helper.mkdir()
+    (state / "last-sent").write_text("0123abcd 1000.0\n")  # an earlier request, long answered
+    with pytest.raises(helper_link.Unavailable):
+        helper_link.send(state, helper, "check")  # no outbox
+    assert (state / "last-sent").read_text() == "0123abcd 1000.0\n"
+    (state / "last-sent").unlink()
+    with pytest.raises(helper_link.Unavailable):
+        helper_link.send(state, helper, "check")
+    assert not (state / "last-sent").exists()
 
 
 def test_a_file_starting_with_a_blank_line_keeps_it(ready: Dashboard) -> None:
@@ -924,6 +1023,12 @@ def test_whats_next_comes_once_an_apply_has_worked(ready: Dashboard) -> None:
     assert "What's next" in shown
     assert '<a href="https://grafana.noc.example.org/">' in shown
     assert "<code>*.noc.example.org</code>" in shown
+    assert "its password is in <code>admin-password</code> in the data root" in shown
+    # With the password set in .env, ok3d makes no admin-password file: it's that one.
+    (ready.helper / "env-set").write_text("OK3D_ADMIN_PASSWORD\n")
+    shown = body(ready.get("/", session))
+    assert "its password is your <code>OK3D_ADMIN_PASSWORD</code> from <code>.env</code>" in shown
+    assert "admin-password</code>" not in shown
 
 
 def test_whats_next_never_links_to_a_domain_it_cant_trust(ready: Dashboard) -> None:
@@ -931,6 +1036,11 @@ def test_whats_next_never_links_to_a_domain_it_cant_trust(ready: Dashboard) -> N
     (ready.helper / "applied").write_text("2026-10-28T23:38:18Z\n")
     shown = body(ready.get("/", ready.sign_in()))
     assert "<script>" not in shown
+    assert '<a href="https://grafana.noc.home.arpa:8443/">' in shown
+    # Nor to a port that can't be one.
+    settings_are(ready, SETTINGS + "cluster:\n  ports:\n    https: 70000\n")
+    shown = body(ready.get("/", ready.sign_in()))
+    assert ":70000" not in shown
     assert '<a href="https://grafana.noc.home.arpa:8443/">' in shown
 
 
@@ -1051,7 +1161,7 @@ def checked(dash: Dashboard, session: str, plan: str | None) -> None:
     dash.post("/check", session=session)
     sent = head(outbox(dash))["id"]
     (dash.state / "outbox" / "request").unlink()
-    (dash.helper / "result").write_text(f"id={sent}\naction=check\nstate=finished\nexit=0\n\nReady.\n")
+    check_passed(dash, sent)
     if plan is not None:
         (dash.helper / "apply-plan").write_text("checked=2026-10-30T09:00:00Z\n" + plan)
 
@@ -1082,7 +1192,7 @@ def test_home_and_the_question_name_what_apply_would_change(ready: Dashboard) ->
     checked(ready, session, "state=changes\nrestart=Grafana\nstop=the UniFi exporter (unpoller)\n"
                             "start=Prometheus\nother=3\n")  # fmt: skip
     home_page = body(ready.get("/", session))
-    for line in ("Restart Grafana", "Stop the UniFi exporter (unpoller)", "Start Prometheus", "3 other change(s)"):
+    for line in ("Restart Grafana", "Stop the UniFi exporter (unpoller)", "Start Prometheus", "3 other changes"):
         assert line in home_page, line
     assert "Restart Grafana" in body(ready.post("/apply", session=session))
 
@@ -1105,7 +1215,7 @@ def test_a_restart_whose_name_cant_be_shown_still_asks(ready: Dashboard) -> None
     session = ready.sign_in()
     checked(ready, session, f"state=changes\nrestart=Deployment/{'x' * 120}\nother=0\n")
     page = body(ready.post("/apply", session=session))
-    assert "<h2>Apply?</h2>" in page and "1 more part(s), whose names can't be shown here" in page
+    assert "<h2>Apply?</h2>" in page and "1 more part, whose names can't be shown here" in page
     assert not (ready.state / "outbox" / "request").exists()
 
 
@@ -1153,7 +1263,12 @@ def test_the_maintenance_page_lists_the_windows(ready: Dashboard) -> None:
     page = body(ready.get("/maintenance", ready.sign_in()))
     assert "router, nas, 2026-11-03 02:00 CET to 2026-11-03 04:00 CET" in page and "starts later" in page
     assert f'name="window" value="{WINDOW_ID}"' in page
+    assert '<button class="plain">Cancel</button>' in page and "End now" not in page
     assert "Read from Alertmanager at 2026-10-30T09:00:00Z." in page
+    # One that's on ends early instead.
+    windows(ready, window("2020-11-03T01:00:00Z", "2099-11-03T03:00:00Z"))
+    page = body(ready.get("/maintenance", ready.sign_in()))
+    assert "on now" in page and '<button class="plain">End now</button>' in page
 
 
 @pytest.mark.parametrize("note", [None, "window=not-checked\n"])
@@ -1214,6 +1329,9 @@ def test_lines_that_arent_windows_arent_counted(ready: Dashboard) -> None:
 @pytest.mark.parametrize(("form", "fields"), [
     ("scope=all&timing=now&length=2h&reason=Router+firmware", {"what": "all", "when": "2h", "reason": "Router firmware"}),
     ("scope=devices&device-router=on&device-nas=on&timing=now&length=30m", {"what": "nas,router", "when": "30m"}),
+    # Fifty, the most a window covers, with the six other fields a browser always sends.
+    ("scope=devices&" + "&".join(f"device-d{i:02}=on" for i in range(50)) + "&timing=now&length=30m&start=&end=&reason=",
+     {"what": ",".join(f"d{i:02}" for i in range(50)), "when": "30m"}),
     ("scope=all&timing=later&start=2026-11-03T02%3A00&end=2026-11-03T04%3A00&length=2h",
      {"what": "all", "when": "2026-11-03T02:00/2026-11-03T04:00"}),
 ])  # fmt: skip
@@ -1230,6 +1348,12 @@ def test_adding_a_window_sends_its_lines(ready: Dashboard, form: str, fields: di
     ("scope=all&timing=now&length=3w", "Choose how long"),
     ("scope=all&timing=later&start=2026-11-03T02%3A00&end=", "Choose how long"),
     ("scope=all&timing=now&length=2h&reason=a%0Aaction%3Dapply", "The reason"),
+    # More devices than a window covers: said as that, never as "aren't devices" or a form
+    # that didn't arrive, however many are ticked.
+    ("scope=devices&" + "&".join(f"device-d{i}=on" for i in range(51)) + "&timing=now&length=2h&start=&end=&reason=",
+     "at most 50 devices"),
+    ("scope=devices&" + "&".join(f"device-device-number-{i}=on" for i in range(200)) + "&timing=now&length=2h",
+     "at most 50 devices"),
 ])  # fmt: skip
 def test_a_window_the_helper_would_refuse_isnt_sent(ready: Dashboard, form: str, says: str) -> None:
     response = ready.post("/maintenance", form, session=ready.sign_in())

@@ -39,8 +39,9 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 DEVICE = r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?"
-# All of ok3d, or up to 50 devices.
-WHAT = re.compile(rf"all|{DEVICE}(?:,{DEVICE}){{0,49}}")
+# All of ok3d, or up to MOST_DEVICES devices.
+MOST_DEVICES = 50
+WHAT = re.compile(rf"all|{DEVICE}(?:,{DEVICE}){{0,{MOST_DEVICES - 1}}}")
 LENGTH = re.compile(r"([1-9][0-9]{0,3})([mhd])")
 LOCAL = r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}"
 RANGE = re.compile(rf"({LOCAL})/({LOCAL})")
@@ -140,8 +141,11 @@ def add(what: str, when: str, reason: str, devices_file: Path, now: datetime, si
     return [*matchers, f"--start={stamp(start)}", f"--end={stamp(end)}", f"--author={AUTHOR}", f"--comment={comment}"]
 
 
-def what_of(matchers: list[dict[str, object]]) -> str | None:
-    """all or the devices a silence covers, if it's one ok3d makes; None if not."""
+def what_of(matchers: object) -> str | None:
+    """all or the devices a silence covers, if it's one ok3d makes; None if not (a silence
+    whose matchers aren't a list of objects, too)."""
+    if not (isinstance(matchers, list) and all(isinstance(m, dict) for m in matchers)):
+        return None
     shape = [(m.get("name"), m.get("isEqual", True), m.get("isRegex"), m.get("value")) for m in matchers]
     if shape == [("alertname", True, True, ".+"), ("alertname", False, False, "Watchdog")]:
         return "all"
@@ -186,7 +190,10 @@ def table(note: str) -> list[str]:
     for line in note.splitlines():
         if not line.startswith("window="):
             continue
-        silence_id, what, _, _, start, end, reason = line.removeprefix("window=").split(";", 6)
+        fields = line.removeprefix("window=").split(";", 6)
+        if len(fields) != 7:
+            continue  # damaged; the Dashboard counts these lines as unreadable too
+        silence_id, what, _, _, start, end, reason = fields
         who = "all of ok3d" if what == "all" else what.replace(",", ", ")
         lines.append(f"{silence_id}  {start} to {end}  {who}" + (f"  ({reason})" if reason else ""))
     return lines or ["No maintenance windows."]

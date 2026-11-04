@@ -108,6 +108,8 @@ def test_a_device_window_is_listed_with_its_devices() -> None:
     silence(matchers=[{"isEqual": True, "isRegex": False, "name": "severity", "value": "warning"}]),
     silence(id="not-an-id"),
     silence(matchers=[{"isEqual": True, "isRegex": True, "name": "device", "value": ".*"}]),
+    silence(matchers=["x"]),
+    silence(matchers="x"),
     "not a silence",
 ])  # fmt: skip
 def test_only_ok3ds_windows_that_havent_ended_are_listed(other: object) -> None:
@@ -116,6 +118,13 @@ def test_only_ok3ds_windows_that_havent_ended_are_listed(other: object) -> None:
 
 def test_a_reason_that_isnt_plain_text_is_left_out() -> None:
     assert maintenance.windows([silence(comment="ok3d: a;b")], NOW)[0].endswith(";")
+
+
+def test_a_damaged_note_line_is_left_out_of_the_table() -> None:
+    good = maintenance.windows([silence()], NOW)[0]
+    assert maintenance.table(f"window=broken;all\n{good}\n") == [
+        "54c2bf37-5a0a-45d7-91a0-30e0c9b716b6  2026-11-03 02:00 CET to 2026-11-03 04:00 CET  all of ok3d  (router firmware)"
+    ]
 
 
 def run(*args: str) -> subprocess.CompletedProcess[str]:
