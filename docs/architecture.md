@@ -7,8 +7,8 @@ says which release brings each piece.
 ## The pieces
 
 This is how ok3d fits together at 1.0. Today there's no Authelia (until 0.8, Grafana has its
-own login and the gateway asks for ok3d's admin login before the others), no Loki and Alloy
-(0.6), and no kagent (0.9).
+own login and the gateway asks for ok3d's admin login before Prometheus and Alertmanager), no
+Loki and Alloy (0.6), and no kagent (0.9).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../images/diagrams/overview-dark.png">

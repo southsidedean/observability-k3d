@@ -109,15 +109,18 @@ first sets up the Dashboard. It stops if you changed ok3d's own files, and then 
 changed. (From 0.5.1 on, the installer won't move a checkout to a newer release: it sends you
 to `./ok3d upgrade`, which checks the release's signature.)
 
-Then, as `./ok3d upgrade` does, delete the cluster so nothing writes to the data root, and
-back up its certificate authority, Grafana's database, and Alertmanager's silences, in your
-ok3d folder (with your data root for `/srv/ok3d`). Deleting the cluster keeps the data root.
+Then, as `./ok3d upgrade` does, check your settings and devices with the new release, delete
+the cluster so nothing writes to the data root, and back up its certificate authority,
+Grafana's database, and Alertmanager's silences, in your ok3d folder (with your data root for
+`/srv/ok3d`). Deleting the cluster keeps the data root. If Check finds a problem, it says
+what, and nothing after it runs: fix it, then run the lines again.
 
 ```sh
-cd ~/ok3d
-./ok3d delete --yes
-(umask 077 && mkdir -p /srv/ok3d/backups &&
-  tar -C /srv/ok3d -czf /srv/ok3d/backups/before-installer.tar.gz certs grafana alertmanager)
+cd ~/ok3d   # or the folder you gave OK3D_DIR
+./ok3d check &&
+  ./ok3d delete --yes &&
+  (umask 077 && mkdir -p /srv/ok3d/backups &&
+    tar -C /srv/ok3d -czf /srv/ok3d/backups/before-installer.tar.gz certs grafana alertmanager)
 ```
 
 Leave out of the `tar` line any of the three folders your data root doesn't have. Then, on
