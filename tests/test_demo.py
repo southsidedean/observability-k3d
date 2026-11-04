@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import os
 import re
+import socket
 import stat
 import subprocess
 import threading
@@ -151,6 +152,21 @@ def test_a_device_takes_a_post_and_logs_where_it_went_but_not_what_it_said(capsy
     logged = capsys.readouterr().out
     assert "received a POST to '/ok3d-topic'" in logged
     assert "do-not-log" not in logged and "template" not in logged
+
+
+@pytest.mark.parametrize("length", ["-1", "-5", "lots"])
+def test_a_device_refuses_a_post_whose_length_isnt_one(length: str) -> None:
+    server = demo_device.make_server("nas", "127.0.0.1", 0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        # The connection stays open: a server reading until it closes would never answer.
+        with socket.create_connection(("127.0.0.1", server.server_address[1]), timeout=5) as conn:
+            conn.sendall(f"POST / HTTP/1.1\r\nHost: nas\r\nContent-Length: {length}\r\n\r\n".encode())
+            assert conn.recv(100).startswith(b"HTTP/1.0 400 ")
+    finally:
+        server.shutdown()
+        server.server_close()
 
 
 def test_the_device_page_names_the_device_safely() -> None:

@@ -39,6 +39,8 @@ def make_server(name: str, host: str, port: int) -> ThreadingHTTPServer:
     body = page(name)
 
     class Handler(BaseHTTPRequestHandler):
+        timeout = 10  # seconds a client may go quiet, so one can't keep a thread forever
+
         def do_GET(self) -> None:
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -47,7 +49,14 @@ def make_server(name: str, host: str, port: int) -> ThreadingHTTPServer:
             self.wfile.write(body)
 
         def do_POST(self) -> None:
-            length = min(int(self.headers.get("Content-Length") or 0), MAX_BODY)
+            try:
+                length = int(self.headers.get("Content-Length") or 0)
+            except ValueError:
+                length = -1
+            if length < 0:  # read(-1) would read until the client closes
+                self.send_error(400)
+                return
+            length = min(length, MAX_BODY)
             print(received(self.path.split("?", 1)[0], self.rfile.read(length)), flush=True, file=sys.stdout)
             self.send_response(200)
             self.send_header("Content-Length", "0")
