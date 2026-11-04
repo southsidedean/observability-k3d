@@ -275,7 +275,7 @@ check_linux_limits() {
 		if [ "$available_gib" -ge "$warn_memory_gib" ]; then
 			pass "$available_gib GiB of memory free"
 		else
-			warn "$available_gib GiB of memory free: ok3d needs about $warn_memory_gib GiB, to have room to spare"
+			warn "$available_gib GiB of memory free: Check warns below $warn_memory_gib GiB, which leaves room to spare"
 		fi
 	fi
 }

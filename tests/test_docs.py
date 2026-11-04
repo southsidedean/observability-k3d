@@ -176,3 +176,13 @@ def test_the_readme_clones_the_latest_release() -> None:
     assert released, "CHANGELOG.md has no released version"
     clones = re.findall(r"git clone --branch (v\S+) ", (ROOT / "README.md").read_text())
     assert clones == [f"v{released[0]}"], f"README.md should clone v{released[0]}, the latest release"
+
+
+def test_the_docs_give_the_memory_figure_check_warns_at() -> None:
+    # ./ok3d check warns below warn_memory_gib; the pages that say how much a server needs say
+    # the same figure, in GiB, as Check counts it.
+    found = re.search(r"^warn_memory_gib=(\d+)$", (ROOT / "ok3d").read_text(), re.M)
+    assert found
+    figure = f"{found.group(1)} GiB"
+    for page in ("README.md", "docs/install-with-ai.md", "PLAN.md"):
+        assert figure in (ROOT / page).read_text(), f"{page} doesn't say {figure}"
