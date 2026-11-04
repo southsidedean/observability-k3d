@@ -143,8 +143,9 @@ NAV = (
 # When the helper publishes no settings.yaml: there's none, or it's one the helper won't copy
 # (helper.py's read_own_file).
 NO_SETTINGS = (
-    "There's no <code>settings.yaml</code> the Dashboard can show: there's none on the server yet, "
-    "or it's a link or over 64 KB. Make one there from <code>settings.example.yaml</code>"
+    "The Dashboard can't show your <code>settings.yaml</code>: there's none on the server yet, or "
+    "it's a link, or it's over 64 KB, which the Dashboard doesn't read. If there's none, make one "
+    "there from <code>settings.example.yaml</code>"
 )
 
 # What each page says about saving: the helper checks first, and keeps your old file.
@@ -211,7 +212,7 @@ def home(config: Config, message: str = "") -> str:
         ""
         if helper_link.can_apply(config.state, config.helper)
         else "<p class=muted>Apply turns on once a Check finds no problems, and off again when anything "
-        "else is sent.</p>"
+        "else is sent, or when settings.yaml or devices.yaml changes on the server.</p>"
     )
     disabled = "" if helper_link.can_apply(config.state, config.helper) else " disabled"
     return (
@@ -312,7 +313,8 @@ def maintenance_page(config: Config, message: str = "") -> str:
         if w.end <= now:
             continue
         state = "<span class=bad>on now</span>" if w.on(now) else "<span class=muted>starts later</span>"
-        end = "End now" if w.on(now) else "Cancel"  # both end it: one that hasn't started never does
+        # Both send maintenance-end; a window that hasn't started is taken away before it begins.
+        end = "End now" if w.on(now) else "Cancel"
         rows.append(
             f"<li>{who(w.what)}, {html.escape(w.start_here)} to {html.escape(w.end_here)}: {state}"
             + (f" ({html.escape(w.reason)})" if w.reason else "")
@@ -459,7 +461,7 @@ def todo(config: Config) -> list[str]:
     switched-on part needs, somewhere for alerts to go, and devices to watch."""
     settings = helper_link.current(config.helper, "settings.yaml")
     if settings is None:
-        return [NO_SETTINGS + " (the installer makes it for you)."]
+        return [NO_SETTINGS + " (the installer does this for you)."]
     have = helper_link.env_set(config.helper)
     left = []
     for switch in switches.MODULES + switches.ALERTS:
@@ -633,8 +635,7 @@ def file_page(config: Config, name: str, message: str = "") -> str:
     base = helper_link.fingerprint(text)
     if text is None:
         if name == "settings.yaml":
-            return (f"<section><h2>{title}</h2>{about}<p class=bad>{NO_SETTINGS}; after that you can "
-                    "change it here.</p></section>")  # fmt: skip
+            return (f"<section><h2>{title}</h2>{about}<p class=bad>{NO_SETTINGS}.</p></section>")
         text = "devices: []\n"
     note = f"<p class=bad>{html.escape(message)}</p>" if message else ""
     return (
@@ -939,7 +940,8 @@ class Handler(BaseHTTPRequestHandler):
         times, checked as ./ok3d maintenance will check them before anything is sent."""
         # One field for each device ticked, plus six others. devices.yaml may list more devices
         # than a window covers, so the form takes as many as fit in 16 KB (the shortest field,
-        # device-a=on&, is 12 bytes), and a window over the limit is told so.
+        # device-a=on&, is 12 bytes), and the page says when more devices are ticked than a window
+        # covers. A form over 16 KB (some 220 long device names) gets "didn't arrive in one piece".
         form = self.read_form(limit=16 * 1024, fields=16 * 1024 // 12)
 
         def refuse(message: str) -> None:

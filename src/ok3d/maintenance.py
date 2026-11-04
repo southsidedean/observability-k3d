@@ -151,7 +151,7 @@ def what_of(matchers: object) -> str | None:
         return "all"
     if len(shape) == 1 and shape[0][:3] == ("device", True, True) and isinstance(shape[0][3], str):
         names = shape[0][3].split("|")
-        if all(re.fullmatch(DEVICE, n) for n in names) and len(names) <= 50:
+        if all(re.fullmatch(DEVICE, n) for n in names) and len(names) <= MOST_DEVICES:
             return ",".join(names)
     return None
 
@@ -160,9 +160,10 @@ def parse_time(text: object) -> datetime | None:
     if not isinstance(text, str):
         return None
     try:
-        return datetime.fromisoformat(text.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
     except ValueError:
         return None
+    return parsed if parsed.tzinfo is not None else None  # one with no zone can't be compared
 
 
 def windows(silences: object, now: datetime) -> list[str]:
@@ -181,7 +182,11 @@ def windows(silences: object, now: datetime) -> list[str]:
         reason = comment.removeprefix(f"{AUTHOR}:").strip() if comment.startswith(f"{AUTHOR}:") else ""
         if not REASON.fullmatch(reason):
             reason = ""
-        found.append((start, f"window={silence_id};{what};{stamp(start)};{stamp(end)};{here(start)};{here(end)};{reason}"))
+        try:
+            shown = f"{here(start)};{here(end)}"
+        except OverflowError:  # a time the server's own zone can't show, such as year 1
+            continue
+        found.append((start, f"window={silence_id};{what};{stamp(start)};{stamp(end)};{shown};{reason}"))
     return [line for _, line in sorted(found)]
 
 

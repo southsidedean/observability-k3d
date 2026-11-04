@@ -154,7 +154,7 @@ def test_a_device_takes_a_post_and_logs_where_it_went_but_not_what_it_said(capsy
     assert "do-not-log" not in logged and "template" not in logged
 
 
-@pytest.mark.parametrize("length", ["-5", "lots"])
+@pytest.mark.parametrize("length", ["-1", "-5", "lots"])
 def test_a_device_refuses_a_post_whose_length_isnt_one(length: str) -> None:
     server = demo_device.make_server("nas", "127.0.0.1", 0)
     thread = threading.Thread(target=server.serve_forever, daemon=True)

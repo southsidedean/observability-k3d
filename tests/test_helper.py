@@ -883,6 +883,24 @@ def test_an_upgrade_that_stopped_partway_is_marked_stopped(h: helper.Opened, sys
     assert "step=it was cut off while deleting the cluster (the server restarted, say). docs/upgrading.md" in text
 
 
+def test_an_upgrade_cut_off_with_no_step_says_partway(h: helper.Opened) -> None:
+    (h.folders.own / "upgrade").write_text("from=0.5.1\nto=v0.5.2\nstate=running\n")
+    helper.publish(h)
+    assert "step=it was cut off partway (the server restarted, say)." in (h.folders.own / "upgrade").read_text()
+
+
+def test_a_file_the_check_cant_read_keeps_apply_off(h: helper.Opened, monkeypatch: pytest.MonkeyPatch) -> None:
+    # An error reading it (EIO, say) still gets the request an answer, with a value no copy matches.
+    def read_own_file(path: Path, limit: int) -> bytes | None:
+        raise OSError("EIO")
+
+    monkeypatch.setattr(helper, "read_own_file", read_own_file)
+    send(h)
+    helper.handle_once(h)
+    assert result(h)["settings"] == result(h)["devices"] == "unreadable"
+    assert result(h)["state"] == "finished"
+
+
 def test_an_upgrade_that_finishes_while_its_checked_isnt_marked_stopped(h: helper.Opened, monkeypatch: pytest.MonkeyPatch) -> None:
     # The upgrade finishes just as the helper asks whether one is running: it writes its last
     # state, then ends. The helper must not mark that finished upgrade as stopped.

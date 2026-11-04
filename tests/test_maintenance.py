@@ -110,6 +110,8 @@ def test_a_device_window_is_listed_with_its_devices() -> None:
     silence(matchers=[{"isEqual": True, "isRegex": True, "name": "device", "value": ".*"}]),
     silence(matchers=["x"]),
     silence(matchers="x"),
+    silence(startsAt="2026-11-03T02:00:00"),
+    silence(endsAt="9999-12-31T23:30:00Z"),  # past the last day the server's own zone can show
     "not a silence",
 ])  # fmt: skip
 def test_only_ok3ds_windows_that_havent_ended_are_listed(other: object) -> None:

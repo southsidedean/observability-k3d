@@ -66,11 +66,14 @@ The helper's checks hold only with the right mounts, which the installer sets up
    - It was written in the last 5 minutes (or up to a minute ahead, for a clock that's off).
    - Its head is plain ASCII text, with each line ending in a newline.
    - Its head has exactly the lines its action needs, each once, and nothing else: `id` and
-     `action`, `name` with `set-env`, `version` with `upgrade`, and optionally `base` with a
-     save.
+     `action`, `name` with `set-env`, `version` with `upgrade`, `what` and `when` (and
+     optionally `reason`) with `maintenance-add`, `window` with `maintenance-end`, and
+     optionally `base` with a save. Each maintenance line is checked whole, as
+     `./ok3d maintenance` checks it.
    - The id is 16 to 64 lowercase hex digits.
    - The action is one of `check`, `apply`, `save-settings`, `save-devices`, `set-env`,
-     `look-for-release`, or `upgrade`, exactly. A save and `set-env` have a blank line and
+     `look-for-release`, `upgrade`, `maintenance-add`, `maintenance-end`, or
+     `maintenance-list`, exactly. A save and `set-env` have a blank line and
      then a body (below); the others have nothing after their head.
    - The id isn't one of the last 100 the helper carried out, so a request can't be replayed.
    - No upgrade is running (below): while one is, every request is refused.
@@ -98,8 +101,10 @@ The helper's checks hold only with the right mounts, which the installer sets up
    ...
    ```
 
-   A Check's answer also has `settings` and `devices`: the SHA-256 of each file's text as
-   the Check read it, or `none`. The Dashboard turns Apply off once its copies stop matching.
+   A Check's answer also has `settings` and `devices`: the SHA-256 of each file's text as the
+   helper read it when the Check started; `none` when there's none, or it's a link or over
+   64 KB (then a change to it isn't seen); or `unreadable` when reading it failed. The
+   Dashboard turns Apply off once its copies stop matching.
 
    A refused request gets `state=refused` and a `reason`, from a fixed list, and one that
    couldn't run gets `state=failed`. If the helper stops partway through (a restart, a
@@ -297,7 +302,7 @@ temporary file first and renamed into place, so the page never reads half of one
 | `output` | Everything `ok3d` printed for the last request, written as it runs |
 | `seen` | The ids of the last 100 requests, so none runs twice |
 | `staged-settings.yaml`, `staged-devices.yaml` | A file the Dashboard sent, only while `./ok3d validate` checks it |
-| `current-settings.yaml`, `current-devices.yaml` | Copies of yours, for the Dashboard to show; missing when you have none, and never copied through a link. Everything in them, comments too, is visible to the Dashboard, which is one more reason secrets belong in `.env` |
+| `current-settings.yaml`, `current-devices.yaml` | Copies of yours, for the Dashboard to show; missing when you have none, and never copied through a link or when over 64 KB. Everything in them, comments too, is visible to the Dashboard, which is one more reason secrets belong in `.env` |
 | `env-set` | The names of the lines in `.env` that have a value, one per line. Never a value |
 | `apply-plan` | What the last Check found Apply would restart, stop, or start in the running cluster (docs/dashboard-under-the-hood.md). `./ok3d check` writes it |
 | `applied` | When the last `./ok3d apply` that worked finished, for the Dashboard's What's next. `./ok3d apply` writes it, not the helper, so an Apply on the server counts too, and `./ok3d delete` removes it |

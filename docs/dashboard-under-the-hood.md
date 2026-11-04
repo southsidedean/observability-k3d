@@ -159,9 +159,10 @@ with a note to wait. If the outbox can't be written, the page says so and sends 
 - **Apply** turns on only when the helper's answer to the last request this Dashboard sent
   is a Check that found no problems. Anything sent since (a save, a key) turns it off again,
   as does a failed Check. So does a change to `settings.yaml` or `devices.yaml` on the
-  server after the Check: the Check's answer has a fingerprint of each file as it read it
-  (`settings=` and `devices=`, the SHA-256 of its text, or `none`), and Apply stays on only
-  while they match the helper's copies. A change to `.env` isn't seen, since the Dashboard
+  server after the Check: the Check's answer has a fingerprint of each file as the helper
+  read it when the Check started (`settings=` and `devices=`, the SHA-256 of its text, or
+  `none` when there's none or it's a link or over 64 KB, whose changes aren't seen), and
+  Apply stays on only while they match the helper's copies. A change to `.env` isn't seen, since the Dashboard
   never sees its values. The server checks all of this too, not only the button. The helper
   doesn't enforce it: Apply is something you could run yourself anyway.
 - **Apply asks first** when the Check said it would restart or stop part of the running

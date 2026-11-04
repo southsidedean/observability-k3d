@@ -605,7 +605,7 @@ def test_settings_cant_be_saved_before_there_are_any(ready: Dashboard) -> None:
     # The helper publishes none for a link or a file over 64 KB too, so every page says so.
     session = ready.sign_in()
     for path in ("/", "/setup", "/settings"):
-        assert "or it's a link or over 64 KB" in body(ready.get(path, session))
+        assert "or it's a link, or it's over 64 KB" in body(ready.get(path, session))
 
 
 def test_devices_are_saved_the_same_way(ready: Dashboard) -> None:
@@ -1349,7 +1349,7 @@ def test_adding_a_window_sends_its_lines(ready: Dashboard, form: str, fields: di
     ("scope=all&timing=later&start=2026-11-03T02%3A00&end=", "Choose how long"),
     ("scope=all&timing=now&length=2h&reason=a%0Aaction%3Dapply", "The reason"),
     # More devices than a window covers: said as that, never as "aren't devices" or a form
-    # that didn't arrive, however many are ticked.
+    # that didn't arrive, for up to 16 KB of form.
     ("scope=devices&" + "&".join(f"device-d{i}=on" for i in range(51)) + "&timing=now&length=2h&start=&end=&reason=",
      "at most 50 devices"),
     ("scope=devices&" + "&".join(f"device-device-number-{i}=on" for i in range(200)) + "&timing=now&length=2h",

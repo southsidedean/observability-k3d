@@ -61,7 +61,7 @@
 - When an upgrade's install fails and installing the old release again fails too, the
   upgrade says so, instead of saying everything is back.
 - Apply turns off again when `settings.yaml` or `devices.yaml` changes on the server after
-  a Check, so what Home says Apply will change is always what that Check worked out. A save
+  a Check, so the changes Home lists under Apply come from the files that Check read. A save
   from the Dashboard no longer overwrites a change made on the server while the save was
   being checked.
 - After the Dashboard couldn't write a request for the helper, it no longer says the helper
@@ -70,7 +70,7 @@
   the helper restarted.
 - What's next says Grafana's password is your `OK3D_ADMIN_PASSWORD` when you've set one in
   `.env`, instead of pointing to a file ok3d doesn't make then.
-- Opened at another address than the one the installer printed (the server's IP address,
+- Opened at an address other than the one the installer printed (the server's IP address,
   say), the Dashboard still refuses its forms, sign-in included, but now names the address
   where they work.
 - The helper's last answer says what it did in words ("Saving settings.yaml finished..."),
@@ -79,10 +79,12 @@
 - Maintenance: a window for more than 50 devices is refused with a message that says so. A
   window that hasn't started has **Cancel** instead of **End now**, and the page's inputs
   look like the rest of the Dashboard's. `./ok3d maintenance` no longer ends in a Python
-  error on a silence of an unexpected shape or a damaged line in the helper's note.
+  error on a silence of an unexpected shape (odd matchers, or a time with no zone or out of
+  range) or a damaged line in the helper's note.
 - The Basic NOC card no longer says it watches your internet link: that comes in 0.7.
-- The simulated network's devices refuse a POST with a length that isn't one, instead of
-  waiting for the client to hang up.
+- The simulated network's devices answer a POST whose length is negative or not a number
+  with an error, where one used to stop the handler or wait for the client to hang up, and
+  drop a client that goes quiet for 10 seconds.
 - For contributors: an emptied or unreadable private-names list now stops a commit instead of
   turning the check off, the privacy test shows as skipped without a list, an exact copy of
   git's scissors line typed into a message hides nothing, and the tests can no longer act on

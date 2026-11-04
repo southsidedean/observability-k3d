@@ -455,7 +455,10 @@ def back_up(opened: Opened, path: Path) -> None:
 
 def changed_since(opened: Opened, name: str, base: str | None) -> bool:
     """Whether your file is no longer the one the page showed (base: its SHA-256, or none
-    when there was no file). A request with no base doesn't say, so it never has."""
+    when there was no file). A request with no base doesn't say, so it never has. This hashes
+    the raw bytes, while the page hashes the text it showed, with any byte that isn't UTF-8
+    replaced: so a file that isn't UTF-8 can't be saved from the Dashboard, and the reason
+    given is that it changed."""
     if base is None:
         return False
     now = read_own_file(opened.folders.ok3d_dir / name, MAX_FILE)
@@ -634,7 +637,11 @@ def checked_files(opened: Opened) -> dict[str, str]:
     none), so Apply turns off when either changes on the server after the Check."""
     found = {}
     for name in ("settings.yaml", "devices.yaml"):
-        data = read_own_file(opened.folders.ok3d_dir / name, MAX_FILE)
+        try:
+            data = read_own_file(opened.folders.ok3d_dir / name, MAX_FILE)
+        except OSError:  # couldn't be read (EIO, say): a value no copy matches keeps Apply off
+            found[name.removesuffix(".yaml")] = "unreadable"
+            continue
         text = None if data is None else data.decode("utf-8", errors="replace")
         found[name.removesuffix(".yaml")] = "none" if text is None else hashlib.sha256(text.encode("utf-8")).hexdigest()
     return found
@@ -717,9 +724,10 @@ def clear_stopped_upgrade(opened: Opened) -> None:
     # state since the first ask.
     if fields.get("state") != "running" or upgrading(opened.folders.ok3d_dir):
         return
-    during = fields.get("step", "a step")
-    during = during[:1].lower() + during[1:]  # "Deleting the cluster", mid-sentence
-    fields |= {"state": "failed", "step": f"it was cut off while {during} (the server restarted, say). "
+    step = fields.get("step", "")
+    # "Deleting the cluster" reads mid-sentence as "while deleting the cluster".
+    during = f"while {step[:1].lower()}{step[1:]}" if step else "partway"
+    fields |= {"state": "failed", "step": f"it was cut off {during} (the server restarted, say). "
                "docs/upgrading.md says how to carry on.", "finished": now_utc()}  # fmt: skip
     write_file(opened, "upgrade", "".join(f"{k}={v}\n" for k, v in fields.items()))
 
