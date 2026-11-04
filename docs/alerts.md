@@ -2,7 +2,7 @@
 
 When something on your network needs you, ok3d tells you: on your phone through ntfy, by
 email, or both. A dead man's switch tells you when ok3d itself stops. You choose where alerts
-go; the alerts themselves come ready-made.
+go. The alerts themselves are built in ([the list](#the-alerts)).
 
 Prometheus checks the alert rules every 30 seconds. When one fires, Alertmanager sends it,
 and sends it again while it's still firing: every hour for a critical alert, every 12 hours
@@ -53,9 +53,9 @@ To use your own ntfy server, set `alerts.ntfy.server`. For a topic that needs a 
 
 ## When ok3d itself stops: the dead man's switch
 
-An alert can't tell you that the computer sending alerts is down. A dead man's switch can:
-ok3d sends it a ping every minute, and when the pings stop, it tells you (by email or on
-your phone, from its own servers).
+If the server running ok3d goes down, nothing is left to send an alert, so a dead man's switch
+watches from outside: ok3d sends it a ping every minute, and when the pings stop, it tells
+you (by email or on your phone, from its own servers).
 
 1. Make a check at a service such as [healthchecks.io](https://healthchecks.io) (free for a
    few checks), with a period of 1 minute and a grace time of a few minutes. Copy its ping
@@ -114,9 +114,10 @@ On the server:
 ```
 
 A length is minutes, hours, or days (`30m`, `2h`, `1d`), and a window lasts at most 30 days.
-A start and an end are in the server's own time. Each window happens once; repeating ones
-(a weekly reboot, say) come later. There can be 20 at a time, counting the ones that haven't started yet, and one covers up to
-50 devices.
+A start and an end are in the server's own time, and a window may start at most a year from
+now. Each window happens once; repeating ones (a weekly reboot, say) come later. There can
+be 20 at a time, counting the ones that haven't started yet, and one covers up to 50
+devices.
 
 A window for chosen devices covers the alerts about those devices from `devices.yaml`. It
 doesn't cover UniFi's alerts, which name UniFi's own devices: for those, use a window for all

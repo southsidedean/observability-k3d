@@ -35,7 +35,7 @@ that upgrades from the Dashboard alone. 0.6.0, logs and changes, comes next.
 | Screenshots of the pages for the docs (`scripts/screenshots.sh` on the test VM) | Moved to 0.5 |
 | Retire the old stack, and the guide for moving from it | Done ([#17](https://github.com/southsidedean/observability-k3d/pull/17)) |
 | Release 0.4.0 ([#18](https://github.com/southsidedean/observability-k3d/pull/18)), installed on the test VM from its base snapshot | Done |
-| Move production to 0.4.0 | In progress |
+| Move production to ok3d: its server has a 0.4.0 checkout but no cluster yet, so it moves straight to the latest release | Planned |
 
 ## 0.5.0, in detail
 
@@ -58,7 +58,7 @@ that upgrades from the Dashboard alone. 0.6.0, logs and changes, comes next.
 
 | Part | Status |
 |---|---|
-| Upgrades from the Dashboard: back up, move to the new release, recreate, and check (`./ok3d upgrade`, signed releases only) | Done ([#42](https://github.com/southsidedean/observability-k3d/pull/42)) |
+| Upgrades from the Dashboard: back up, move to the new release, check, install, and recreate (`./ok3d upgrade`, signed releases only) | Done ([#42](https://github.com/southsidedean/observability-k3d/pull/42)) |
 | Maintenance windows | Done ([#45](https://github.com/southsidedean/observability-k3d/pull/45)) |
 | Apply asks first when it would stop something | Done ([#43](https://github.com/southsidedean/observability-k3d/pull/43)) |
 | Each choice shown as its `ok3d` command | Done ([#44](https://github.com/southsidedean/observability-k3d/pull/44)) |
@@ -71,13 +71,14 @@ that upgrades from the Dashboard alone. 0.6.0, logs and changes, comes next.
 |---|---|
 | The Maintenance page says it hasn't read Alertmanager yet, instead of "No maintenance windows" | Done ([#49](https://github.com/southsidedean/observability-k3d/pull/49)) |
 | The Maintenance page says when lines in the helper's note can't be read, instead of "No maintenance windows" | Done ([#51](https://github.com/southsidedean/observability-k3d/pull/51)) |
-| Check said the upgrade from 0.5.0 would restart the gateway, and it didn't: Check counted the chart's label as a restart, and now counts only a changed pod template | Done ([#50](https://github.com/southsidedean/observability-k3d/pull/50)) |
+| Check said the upgrade from 0.5.0 would restart the gateway, and it didn't: Check counted the chart's label as a restart, and now counts only a changed pod template or replica count | Done ([#50](https://github.com/southsidedean/observability-k3d/pull/50)) |
 | A social image for GitHub, with its source in `images/` | Done ([#52](https://github.com/southsidedean/observability-k3d/pull/52)) |
 | The social image says ok3d is self-contained, in its own k3d cluster | Done ([#56](https://github.com/southsidedean/observability-k3d/pull/56)) |
 | Fixes from the 0.5.2 review: the charts and alerts | Done ([#53](https://github.com/southsidedean/observability-k3d/pull/53)) |
 | Fixes from the 0.5.2 review: the shell, the installer, and the git hooks | Done ([#54](https://github.com/southsidedean/observability-k3d/pull/54)) |
 | Fixes from the 0.5.2 review: the Dashboard, the helper, and maintenance windows | Done ([#55](https://github.com/southsidedean/observability-k3d/pull/55)) |
 | Fixes from the 0.5.2 review: the UniFi dashboards' panel descriptions, plugins, and upstream text | Done ([#58](https://github.com/southsidedean/observability-k3d/pull/58)) |
+| Fixes from the 0.5.2 review: the docs, `PLAN.md`, and `SECURITY.md` | Done ([#57](https://github.com/southsidedean/observability-k3d/pull/57)) |
 | Release 0.5.2, tested with an upgrade from 0.5.1 from the Dashboard alone | Planned |
 
 ## Found in the 0.5.2 review, for later
@@ -93,3 +94,4 @@ for the release named, or for a decision.
 | NetworkPolicies for cert-manager and kube-system, and between monitoring's own parts | 0.8, with the mesh |
 | A warning when a silence made on Alertmanager's own page covers the Watchdog | 0.7 |
 | The Dashboard's sign-in pause, which any device on the network can keep on for everyone by guessing, and its 32 connections, which one device can fill: limits per address instead | 0.8, with the new sign-in |
+| The NOC with agents setup card can't be chosen: it needs `modules.agents`, which only the server may change. Decide how the Dashboard turns agents on, and say so on the card | 0.9 |

@@ -1,8 +1,9 @@
 # Plan: ok3d, a home network operations center on k3d, with AI agents
 
-Status: planning (2026-10-27). Nothing below is built yet. `v0.2.0` is the old stack's last
-version (the `scripts/cluster-setup-k3d-observability-everything.sh` stack). It keeps
-working until 0.4.0 replaces it. The roadmap ends in 1.x.
+Status: 0.5.1 is released and 0.5.2 is in progress; `docs/roadmap.md` has where each release
+stands. `v0.2.0` was the old stack's last version (the
+`scripts/cluster-setup-k3d-observability-everything.sh` stack), and 0.4.0 replaced it. The
+plan was written on 2026-10-27, before anything was built, and the roadmap ends in 1.x.
 
 ## Goal
 
@@ -48,9 +49,9 @@ about a problem. Each of these is fixed in the roadmap below:
 | Standalone | Nothing here depends on another project. Other stacks' exporters (node-exporter, GPU, Plex, SMART) can be listed as scrape targets like any device, and other projects' MCP servers can be added as remote tools, but ok3d never reads another stack's Prometheus and never shares config, code, or services with it. |
 | The cluster is disposable, the data isn't | Upgrading means deleting the cluster and creating it again with newer versions. Everything stateful lives in host folders under one data root, so a new cluster picks up where the old one left off. This worked well with the old stack and stays the core rule. |
 | Dashboard first (decided 2026-10-27) | The Dashboard runs **outside the cluster**, as one locked-down container on the host, because it's what creates the cluster and later recreates it to upgrade. You install it first, configure the deployment on it, and apply; it then creates the k3d cluster and deploys everything. Later it changes settings, adds devices, and runs upgrades. It keeps working when the cluster is down, which is when you need it most. |
-| The helper | The Dashboard can't run anything itself. A small helper on the host (`ok3d-helper`, a systemd user service running as you) does that for it, the way kia's Stack page works with the kia-stack service. The page leaves a request file: check or apply, choices from fixed lists, a random id, less than 5 minutes old, at most 4 KB. The helper checks every value again and refuses anything else. It assumes the Dashboard's container may have been taken over: the most it will ever do is what you could do with the `ok3d` command yourself. |
+| The helper | The Dashboard can't run anything itself. A small helper on the host (`ok3d-helper`, a systemd user service running as you) does that for it, the way kia's Stack page works with the kia-stack service. The page leaves a request file: one action from a fixed list (check, apply, a save of settings, devices, or one `.env` line, looking for or starting an upgrade, and maintenance windows), a random id, less than 5 minutes old, at most 65 KB. The helper checks every value again and refuses anything else. It assumes the Dashboard's container may have been taken over: the most it will ever do is what you could do with the `ok3d` command yourself. |
 | The `ok3d` command | Everything the Dashboard does, the terminal does too: `ok3d check`, `ok3d apply`, `ok3d upgrade`, `ok3d backup`, `ok3d doctor`. The Dashboard shows each choice as the command it equals. |
-| Packaging | Helm, as two releases in order. **`ok3d-platform`**: the custom resource definitions (Gateway API, cert-manager, the Prometheus operator, kagent), cert-manager, and Istio's charts in the order Istio needs. **`ok3d`**: everything else, as one umbrella chart with pinned dependencies (`Chart.lock`). A values schema refuses typos. The Dashboard's Check is `helm template` plus the schema plus kubeconform, without touching the cluster; Apply is `helm upgrade --install`. Recreating the cluster to upgrade gives every upgrade fresh custom resource definitions, which Helm alone doesn't update. |
+| Packaging | Helm, as two releases in order. **`ok3d-platform`**: the custom resource definitions (Gateway API, cert-manager, the Prometheus operator, kagent), cert-manager, and Istio's charts in the order Istio needs. **`ok3d`**: everything else, as one umbrella chart with pinned dependencies (`Chart.lock`). A values schema refuses typos. Check is the host check, the schema, and a render (`helm template`); with a cluster running, it also does a server-side dry run of Apply, which changes nothing. kubeconform runs in CI and `scripts/check.sh`. Apply is `helm upgrade --install`. Recreating the cluster to upgrade gives every upgrade fresh custom resource definitions, which Helm alone doesn't update. |
 | Images and language (decided 2026-10-27) | Two images, on opposite sides of a trust boundary. **`ok3d-dashboard`** runs on the host and holds the Dashboard. **`ok3d`** runs in the cluster: one image with several entry points (the ok3d MCP tools, the UniFi MCP server, the action runner, the Approvals page, the layout builder, the digests), each run as its own pod with its own permissions. Taking over anything in the cluster must not lead into the Dashboard. Both are written in Python, like kia, and built on Chainguard's Wolfi base for amd64 and arm64. They run as non-root with a read-only filesystem. The helper is a host script, also in Python, because it parses requests it can't trust. |
 | Your settings | `settings.yaml` for settings, `devices.yaml` for devices, `.env` for secrets, and `local/` for anything private of your own (below). All are gitignored, and each has a committed, commented example. The Dashboard writes them through the helper, and you can edit them by hand. `chart/values.yaml` holds the defaults; you never edit it. `vars.sh` is retired. |
 | Secrets on the page | The Dashboard sets secrets in write-only fields. The helper writes them to `.env` (mode 600), and the page only ever shows whether each is set. No secret is ever sent back to a browser. |
@@ -65,7 +66,7 @@ about a problem. Each of these is fixed in the roadmap below:
 | Alerts that know the layout | UniFi reports which port each device connects through. ok3d builds the network's layout from that (and from `devices.yaml` for anything else) and holds back alerts for everything behind a failed device: a dead switch is one alert, not ten. When the internet link is down, the internet checks are held back too. No hand-written rules. |
 | Alerts on targets | Services with a reliability target (the internet link, DNS, Wi-Fi, the NOC's own pages) alert on how fast they use up their error budget, rather than on single thresholds, so a short blip doesn't page you and a slow decline doesn't go unnoticed. |
 | Maintenance windows | Set on the Dashboard ("UniFi firmware, Tuesday 23:00 to 00:00"): matching alerts are silenced for the window, the board shows it, and the agents know about it. |
-| What changed | Every change ok3d can see is a marker on every graph: UniFi configuration changes and firmware updates, ok3d deploys and upgrades, new devices, and every action taken. Most outages follow a change. |
+| What changed | Every change ok3d can see is a marker on every graph: UniFi configuration changes and firmware updates, ok3d deploys and upgrades, new devices, and every action taken. |
 | North/south: agentgateway (decided 2026-10-27) | agentgateway, in standalone mode (its own config file, generated by the chart into a ConfigMap), is the gateway for everything coming into the cluster or leaving it: the only way into the web pages, the only route to the AI model, and the place MCP tools are served from. It starts the trace for each request. Something else is used only where agentgateway can't do the job: syslog over UDP has its own Service. kgateway is retired. |
 | East/west: Istio ambient (decided 2026-10-27) | Open-source Istio in ambient mode is the data plane between workloads. ztunnel gives every pod in the mesh mutual TLS and a workload identity, and AuthorizationPolicies use that identity alongside the NetworkPolicies. Istio's waypoint proxies go only where layer-7 metrics or spans are wanted. No sidecars. |
 | Traces | Tempo keeps the traces (7 days by default), with Alloy as the OpenTelemetry collector for agentgateway, the waypoints, and kagent. Grafana links traces, logs, and metrics to each other, and Tempo's service graph and request metrics go to Prometheus. |
@@ -83,7 +84,7 @@ about a problem. Each of these is fixed in the roadmap below:
 | What agents may do (decided 2026-10-27) | Four tiers. **1. Read**: everything above; ships first. **2. Approved actions**: a short list of safe, undoable actions (below), each its own narrow tool and its own switch; the agent asks, a signed-in admin approves, it runs, and the gateway logs it. **3. Plans**: bigger changes are written as a plan file you review and apply with a script that has no AI in it. **4. Never**: firewall, VLAN, routing, DNS, Wi-Fi security, credentials, and firmware. No tool exists for them, so no planted instruction can reach them. |
 | Approvals (decided 2026-10-27) | On both the page and your phone. The Approvals page lives in the cluster behind sign-in, for the admins group only, and Authelia asks for a second factor there. ntfy notifications carry a **view** action that opens the page; they never approve anything in one tap, since anyone who knows an ntfy topic can read it. A request expires after 15 minutes. An agent can't approve its own request. |
 | Plex (decided 2026-10-27) | An optional module that watches Plex as a service on the network: whether it answers, remote access, streams and transcodes, the load they put on the server, and how much of your upload remote streams use. It scrapes a Plex exporter you already run, or runs its own, pinned. This doesn't duplicate kia's Plex dashboards, which watch Live TV and players. |
-| Your internet link | A record of every outage with its length, latency, packet loss, DNS time, and a speed test at a set interval (with a cap), with a monthly report. Useful when talking to your ISP. |
+| Your internet link | A record of every outage with its length, latency, packet loss, DNS time, and a speed test at a set interval (with a cap), with a monthly report: something to show your ISP. |
 | Digests | A daily or weekly summary by ntfy or email: uptime, incidents, new devices, the biggest users of the internet link. With agents on, a morning briefing from an agent, started by a Kubernetes CronJob (kagent has no scheduler). |
 | The NOC watches itself | Failed scrapes, logs Loki couldn't take, syslog messages dropped, a full data root, and an ok3d backup that's too old all alert. So does a UniFi controller whose own backups have stopped. |
 | The simulated network (decided 2026-10-27) | A small fake network for tests, screenshots, and trying ok3d without UniFi gear: recorded `/metrics` output from unpoller and the other exporters, served as if live, and a few small containers that answer ping and HTTP, one of which can fail on cue. CI's smoke test, every screenshot in the docs, and the docs' examples use it, so none of them show a real network. `ok3d demo` starts it. |
@@ -97,32 +98,32 @@ about a problem. Each of these is fixed in the roadmap below:
 
 | Piece | Where | Job |
 |---|---|---|
-| **The Dashboard** | a container on the host | Setup, settings, devices, secrets, maintenance windows, upgrades, and backups. Works when the cluster doesn't. |
-| **ok3d-helper** | a systemd user service on the host | Runs the `ok3d` command for the Dashboard, and nothing else. |
-| **Prometheus** | `monitoring` | Collects and keeps the numbers (30 days by default). |
-| **Alertmanager** | `monitoring` | Sends alerts: grouping, repeating, holding back alerts behind a failed device, maintenance windows, and the dead man's switch. |
-| **Grafana** | `monitoring` | Dashboards, including the NOC board. |
-| **Loki** | `monitoring` | Keeps the logs (30 days by default). |
-| **Tempo** | `monitoring` | Keeps the traces. |
-| **Alloy** | `monitoring` | Pod logs, the syslog listener, and the OpenTelemetry collector. |
-| **blackbox exporter** | `monitoring` | Ping, DNS, HTTP, TCP, and certificate-expiry checks for everything in `devices.yaml`. |
-| **unpoller** | `monitoring` | UniFi controller metrics. Optional. |
-| **SNMP, NUT, and Plex exporters** | `monitoring` | Switches, NAS, and UPS that aren't UniFi, and Plex. Optional. |
-| **agentgateway** | `gateway` | North/south: TLS, sign-in, security headers, the model route, and MCP. |
-| **Istio ambient** | `istio-system` | East/west: istiod, istio-cni, ztunnel, and waypoints where needed. |
-| **cert-manager** | `cert-manager` | Issues and renews the certificates. |
-| **Authelia** | `auth` | Accounts, groups, second factors, and OIDC. |
-| **The Approvals page** | `auth` | Approve or turn down what an agent asks to do. |
-| **kagent** | `agents` | Agents and their chat page. |
-| **MCP servers** | `agents` | Grafana's, ok3d's own tools, UniFi, and Plex. |
-| **Action runner** | `agents` | Carries out approved actions, one narrow tool each, and checks the result. The only piece with write access to anything, and only to what the switched-on actions need. |
+| The Dashboard | a container on the host | Setup, settings, devices, secrets, maintenance windows, upgrades, and backups. Works when the cluster doesn't. |
+| ok3d-helper | a systemd user service on the host | Runs the `ok3d` command for the Dashboard, and nothing else. |
+| Prometheus | `monitoring` | Collects and keeps the numbers (30 days by default). |
+| Alertmanager | `monitoring` | Sends alerts: grouping, repeating, holding back alerts behind a failed device, maintenance windows, and the dead man's switch. |
+| Grafana | `monitoring` | Dashboards, including the NOC board. |
+| Loki | `monitoring` | Keeps the logs (30 days by default). |
+| Tempo | `monitoring` | Keeps the traces. |
+| Alloy | `monitoring` | Pod logs, the syslog listener, and the OpenTelemetry collector. |
+| blackbox exporter | `monitoring` | Ping, DNS, HTTP, TCP, and certificate-expiry checks for everything in `devices.yaml`. |
+| unpoller | `monitoring` | UniFi controller metrics. Optional. |
+| SNMP, NUT, and Plex exporters | `monitoring` | Switches, NAS, and UPS that aren't UniFi, and Plex. Optional. |
+| agentgateway | `gateway` | North/south: TLS, sign-in, security headers, the model route, and MCP. |
+| Istio ambient | `istio-system` | East/west: istiod, istio-cni, ztunnel, and waypoints where needed. |
+| cert-manager | `cert-manager` | Issues and renews the certificates. |
+| Authelia | `auth` | Accounts, groups, second factors, and OIDC. |
+| The Approvals page | `auth` | Approve or turn down what an agent asks to do. |
+| kagent | `agents` | Agents and their chat page. |
+| MCP servers | `agents` | Grafana's, ok3d's own tools, UniFi, and Plex. |
+| Action runner | `agents` | Carries out approved actions, one narrow tool each, and checks the result. The only piece with write access to anything, and only to what the switched-on actions need. |
 
 On the hosts you monitor, not in the cluster:
 
 | Piece | Job |
 |---|---|
-| **Alloy** (Linux) or **node_exporter** (macOS) | Each computer's own numbers and, with Alloy, its system log. The docs give a ready config. |
-| **Syslog** | Routers, switches, access points, and anything else that can only send syslog. |
+| Alloy (Linux) or node_exporter (macOS) | Each computer's own numbers and, with Alloy, its system log. The docs give a ready config. |
+| Syslog | Routers, switches, access points, and anything else that can only send syslog. |
 
 ## Actions
 
@@ -144,13 +145,17 @@ written to Loki, marked on the graphs, and its result goes back to the agent and
 
 ## The data root
 
-One folder on the server, set by `host.dataRoot`. A dedicated filesystem is best. The
-install doc shows how to make one with LVM, and how to grow it later.
+One folder on the server, set by `host.dataRoot`. A dedicated filesystem is best. How to make
+one with LVM, and grow it later, is planned for the install doc (below); until then the
+README only says to use one if you can.
 
 ```text
 <host.dataRoot>/
+├── admin-password   Grafana's admin password, when .env doesn't set OK3D_ADMIN_PASSWORD
+├── backups/         an archive of certs/, grafana/, and alertmanager/ before each upgrade (the last three)
 ├── dashboard/       the Dashboard's state, and outbox/, where it leaves requests for the helper
-├── helper/         the helper's own folder: its answers, which the Dashboard can only read
+├── demo/            the simulated network's state, while it runs
+├── helper/          the helper's own folder: its answers, which the Dashboard can only read
 ├── prometheus/      the time series database
 ├── alertmanager/    silences and what was already sent, so a new cluster doesn't repeat alerts
 ├── loki/            logs
@@ -164,9 +169,12 @@ install doc shows how to make one with LVM, and how to grow it later.
 └── kagent-ate/      kagent's sandbox state, mounted at /var/lib/ate on the server node
 ```
 
-The host check creates any missing folder with the owner and mode its app runs as. No folder
-is world-writable. Before an upgrade, `ok3d backup` copies `grafana/`, `authelia/`, and
-`certs/`, which migrate forward only or can't be made again.
+The data root itself is yours to make (`ok3d` prints the `sudo install -d` command).
+`./ok3d apply`, and the command that needs one (install, upgrade, demo), makes any missing
+folder in it, with the owner and mode its app runs as; Check only checks. No folder is
+world-writable. Before an upgrade, `./ok3d upgrade` archives `certs/`, `grafana/`, and
+`alertmanager/` into `backups/`, since they migrate forward only or can't be made again
+(`authelia/` joins them in 0.8). `ok3d backup`, to another machine, comes in 0.7.
 
 ## The host
 
@@ -189,7 +197,7 @@ What the server needs, and what the host check checks before anything is created
 Set up the way kia's repository is (decided 2026-10-27; the settings and rulesets were
 applied that day).
 
-**The repository's settings**
+### The repository's settings
 
 - Squash merges only, with the pull request's title as the commit's title, and branches
   deleted after merging.
@@ -200,12 +208,27 @@ applied that day).
   scanning with push protection on. The wiki off; the docs live in the repository.
 - Release tags are signed.
 
-**Workflows.** Every action is pinned to an exact commit, and every workflow runs with the
-least permissions it needs. Each job in `tests` is a required check on `main`. All of it
-also runs locally with `scripts/check.sh`, which skips a tool you don't have installed (CI
-installs all of them, so nothing is skipped there).
+### Workflows
 
-`tests` runs on every push and pull request, and weekly. Its jobs:
+Every action is pinned to an exact commit, and every workflow runs with the least
+permissions it needs. Each job in `tests` is a required check on `main`. All of it also runs
+locally with `scripts/check.sh`, which skips a tool you don't have installed (CI installs
+all of them, so nothing is skipped there).
+
+`tests` runs on every push and pull request, and weekly. The table below is the design.
+
+Built so far (0.5.2):
+
+- lint and security checks, without the JSON check, hadolint, the color check, or axe;
+- pytest, which also holds the privacy, docs, and UniFi dashboard tests;
+- charts, which also runs the Grafana dashboards' datasource tests and the promtool and amtool
+  tests, without helm-unittest or the memory budget;
+- the Dashboard's image.
+
+Not built yet: the JSON check, Grype, hadolint, the color and accessibility checks, helm-unittest,
+the dashboard linter, a separate docs job, the end-to-end smoke test, and `mesh`.
+
+The jobs:
 
 | Job | What it checks |
 |---|---|
@@ -216,7 +239,7 @@ installs all of them, so nothing is skipped there).
 | **dashboards** | Grafana's dashboard-linter. Every panel uses a datasource that exists, with no `${DS_*}` left behind. ok3d's changes to the vendored dashboards, made in place, still hold (`tests/test_dashboards.py`). |
 | **images** | Both images built for amd64 and arm64 and started once (`--version`). Trivy fails on any fixable high or critical CVE (exceptions in `.trivyignore`, each with its reason). Grype gives a second opinion, as a report only. |
 | **docs** | Every link leads somewhere, the house style holds, `docs/settings.md` matches what the schema generates, every alert has a runbook, every `.env` key is in `.env.example` and the docs, and every setup card is documented. The install doc's commands are pulled out and run by the smoke test, so the doc can't drift from what works. |
-| **end-to-end smoke test** | A k3d cluster on the runner, with agents off to fit the runner's memory. The installer runs in CI mode, then Check and Apply go through the Dashboard's own API, the way a browser would. Then `ok3d test`: the targets are up, a test rule fires and reaches a test receiver, syslog arrives in both formats over UDP and TCP, the gateway serves TLS and redirects to sign-in, a NetworkPolicy blocks what it should, and the data survives the cluster being recreated. Secrets used in the test are canaries, and the run fails if any of them shows up in a log, a trace, a page, or an alert. From 0.5, an upgrade test: install the previous release, then upgrade to the pull request's code. |
+| **end-to-end smoke test** | A k3d cluster on the runner, with agents off to fit the runner's memory. The installer runs in CI mode, then Check and Apply go through the Dashboard's own API, the way a browser would. Then a planned `ok3d test`: the targets are up, a test rule fires and reaches a test receiver, syslog arrives in both formats over UDP and TCP, the gateway serves TLS and redirects to sign-in, a NetworkPolicy blocks what it should, and the data survives the cluster being recreated. Secrets used in the test are canaries, and the run fails if any of them shows up in a log, a trace, a page, or an alert. The upgrade test (install the previous release, then upgrade) runs on the test VM before each release, not in CI. |
 | **mesh** | The smoke test with Istio ambient on, as its own job to keep run times down (from 0.8). |
 
 The other workflows:
@@ -226,77 +249,95 @@ The other workflows:
 | `codeql` | every push and pull request, and weekly | GitHub's CodeQL for the Python, in the Security tab. |
 | `dependency review` | every pull request | Blocks a pull request that adds a dependency with a known vulnerability or an incompatible license. |
 | `scorecard` | weekly | OpenSSF Scorecard: how well the repository itself is protected (pinned actions, branch protection, token permissions, signed releases), in the Security tab. |
-| `mutation` | weekly | Mutation testing (mutmut) on the code that guards something: the helper, the action runner's guardrails, and the MCP tools' handling of untrusted text. If a change to that code gets past every test, a test is missing. |
-| `upstream` | weekly | Whether the vendored dashboards have newer revisions. Opens an issue, never a change: taking a new revision means making ok3d's changes to it again. |
+| `mutation` | weekly (not built yet) | Mutation testing (mutmut) on the code that guards something: the helper, the action runner's guardrails, and the MCP tools' handling of untrusted text. If a change to that code gets past every test, a test is missing. |
+| `upstream` | weekly (not built yet) | Whether the vendored dashboards have newer revisions. Opens an issue, never a change: taking a new revision means making ok3d's changes to it again. |
 | `images` and `image scan` | from 0.5.0 | Build the Dashboard's image (and the in-cluster one, once the first tool that runs in the cluster arrives), scan with Trivy before pushing, push, attach an SBOM and a provenance attestation, and scan the published images weekly. |
 | `release` | a merge to `main` that changes the version | Tags the release and publishes its notes from `CHANGELOG.md`. Not built yet: releases are made by hand (CONTRIBUTING.md). A workflow can't sign the tag without a signing key in CI, which would be a decision of its own. |
 
-**Updates:** Renovate keeps the pinned versions current: the actions, the Helm chart
-dependencies in `Chart.yaml`, the image tags and base images (by digest), and the Python
+### Updates
+
+Renovate keeps the pinned versions current: the actions, the Helm chart dependencies in
+`Chart.yaml`, the image tags (the demo's and the tools' by digest), and the Python
 dependencies. Dependabot handles Helm dependencies and image tags in values poorly. Renovate
 opens one grouped pull request a month, for releases at least a week old, and security fixes
 right away. Dependabot stays on only for security alerts.
 
-**Considered for later** (2026-10-29): a self-hosted runner on a test VM, so the real
-cluster, agents included, runs on every pull request instead of by hand (never run anything
-by hand on it, or its runs break); and on that runner, a weekly job outside pull requests
-that deploys the newest kagent and agentgateway, to catch a break in either before Renovate
-proposes it (kia runs a weekly check of its own fast-moving upstream). GitHub's runners can't:
-the smoke test there runs with agents off to fit their memory.
+### Considered for later (2026-10-29)
 
-**Left to the test VM**, because CI can't do them: kagent with a real model, a real UniFi
-controller, an ntfy notification on a real phone, trusting the certificate authority in a
-real browser, and Tailscale. They're on the release checklist.
+A self-hosted runner on a test VM, so the real cluster, agents included, runs on every pull
+request instead of by hand (never run anything by hand on it, or its runs break); and on
+that runner, a weekly job outside pull requests that deploys the newest kagent and
+agentgateway, to catch a break in either before Renovate proposes it (kia runs a weekly
+check of its own fast-moving upstream). GitHub's runners can't: the smoke test there runs
+with agents off to fit their memory.
 
-**Files:** `LICENSE` (AGPL-3.0), `SECURITY.md` (how to report a problem privately, and how
-the stack limits the damage), `CONTRIBUTING.md` (branches, hooks, checks, releases),
-`CHANGELOG.md`, a pull request template with its checklist, and issue templates for bugs
-and features, with links to troubleshooting and private security reports.
+### Left to the test VM
 
-**Git hooks** (`git config core.hooksPath .githooks`): pre-commit refuses commits on `main`,
-of anyone's own settings files, of secrets, and of private names or addresses outside the
+CI can't do these, so the test VM does: kagent with a real model, a real UniFi controller,
+an ntfy notification on a real phone, trusting the certificate authority in a real browser,
+and Tailscale. They're on the release checklist.
+
+### Files
+
+`LICENSE` (AGPL-3.0), `SECURITY.md` (how to report a problem privately, and how the stack
+limits the damage), `CONTRIBUTING.md` (branches, hooks, checks, releases), `CHANGELOG.md`, a
+pull request template with its checklist, and issue templates for bugs and features, with a
+link to private security reports (and to troubleshooting, once that page is written).
+
+### Git hooks
+
+With `git config core.hooksPath .githooks`, pre-commit refuses commits on `main`, of
+anyone's own settings files, of secrets, and of private names or addresses outside the
 examples, anywhere in what the commit would hold and in its files' names; commit-msg refuses
 them in the message. Private names come from a list kept in `.git/hooks/private-names`, on
 your own machine and never committed: your host names, domains, and addresses, each plain
-name also matched in its other spellings. The same check (`scripts/private-names.sh`) runs on pull
-request descriptions and release notes before they're posted. A commit that adds or
+name also matched in its other spellings. The same check (`scripts/private-names.sh`) runs
+on pull request descriptions and release notes before they're posted. A commit that adds or
 changes an image needs `IMAGES_CHECKED=1`, set only after every image was looked at and its
 metadata stripped. Pre-push runs the quick checks.
 
-**Committing:** files are staged by name, never with `git add -A`, so nothing untracked (a
-screenshot dropped into `images/`, say) goes in by mistake. Examples use stand-ins: addresses
-like `192.168.1.20`, `192.0.2.x`, and `fd00::5`, and names like `my-server.lan` and
+### Committing
+
+Files are staged by name, never with `git add -A`, so nothing untracked (a screenshot
+dropped into `images/`, say) goes in by mistake. Examples use stand-ins: addresses like
+`192.168.1.20`, `192.0.2.x`, and `fd00::5`, and names like `my-server.lan` and
 `noc.home.arpa`.
 
-**Releasing:** user-facing changes collect in `CHANGELOG.md` under the next version, marked
-unreleased. A release pull request sets the version and the date. Then the signed tag,
-`gh release create` with that version's changelog section as the notes, a check that the
-images (the Dashboard's, and the in-cluster one once it exists) were published for both
-architectures and scanned, and a "Start X.Y.Z.dev0" pull request for the next one.
+### Releasing
 
-**Testing before a release:** CI covers what a runner can. Each release is also installed on
-a test VM from scratch through the Dashboard, with the certificate authority trusted in a
-browser, and upgraded from the release before, before production moves to it.
+User-facing changes collect in `CHANGELOG.md` under the next version, marked unreleased. A
+release pull request sets the version and the date. Then the signed tag, `gh release create`
+with that version's changelog section as the notes, a check that the images (the
+Dashboard's, and the in-cluster one once it exists) were published for both architectures
+and scanned, and a "Start X.Y.Z.dev0" pull request for the next one.
 
-**The test VM** (decided 2026-10-27) is a generic home server, the case most people have: a
-Multipass VM with Ubuntu 24.04 LTS, 8 CPUs, 16 GiB of memory, Docker, k3d, Helm, kubectl, the
-raised inotify limits, and an empty data root at `/srv/ok3d`. Its setup is a cloud-init file
-in `tests/vm/`, so anyone can make the same VM. It keeps snapshots: `base` (the prerequisites
-and nothing of ok3d), restored before every install test and every screenshot run so each
-starts clean, and one per release once installed, for upgrade tests. The same VM is the
-screenshot environment.
+### Testing before a release
+
+CI covers what a runner can. Each release is also installed on a test VM from scratch
+through the Dashboard, with the certificate authority trusted in a browser, and upgraded
+from the release before, before production moves to it.
+
+### The test VM
+
+The test VM (decided 2026-10-27) is a generic home server, the case most people have: a
+Multipass VM with Ubuntu 24.04 LTS, 8 CPUs, 16 GiB of memory, Docker, k3d, Helm, kubectl,
+the raised inotify limits, and an empty data root at `/srv/ok3d`. Its setup is a cloud-init
+file in `tests/vm/`, so anyone can make the same VM. It keeps snapshots: `base` (the
+prerequisites and nothing of ok3d), restored before every install test and every screenshot
+run so each starts clean, and one per release once installed, for upgrade tests. The same VM
+is the screenshot environment.
 
 ## Quality, security, and docs (decided 2026-10-27)
 
 These hold for every pull request, from 0.3 on.
 
-**Done means:**
+### Done means
 
 - Tests come with the change. A bug fix starts with a test that fails without the fix.
 - Code and configuration are well commented. Each file starts by saying what it's for, and
   comments say why something is done the way it is wherever that isn't obvious from the code.
   This holds for scripts, Python, chart templates, values files and the values schema (every
-  setting has a description, which `docs/settings.md` is generated from), settings examples,
+  setting has a description, which `docs/settings.md` will be generated from), settings examples,
   alert rules (each with a summary, a description, and its runbook link), dashboards (each
   panel says what it shows), and workflows. A part that's hard to follow without its comments
   counts as a defect in review.
@@ -305,48 +346,59 @@ These hold for every pull request, from 0.3 on.
   docs, the README, this plan, runbooks, the CHANGELOG, comments, commit messages, pull
   request descriptions, release notes, the Dashboard's text, and alert and notification text.
 - `CHANGELOG.md` has a line under the next version if users will notice the change.
-- Every pull request gets an independent review before merging, from a person or from Claude
-  Code's `/code-review`, and its findings are fixed or answered.
+- Every pull request gets an independent review before merging, and its findings are fixed
+  or answered with new commits, each reviewed again. The brief says no spot checks: every file
+  in scope read in full, with a coverage table first.
 - Screenshots and diagrams are looked at before they're committed (below).
 - Names that CodeQL would read as secrets are avoided: it flags any function or variable
   named like `*password*` or `*secret*`, even a description of one, and then flags it reaching
   a log.
 
-**Coverage:** reported for all the Python. Branch coverage must be complete for the code that
-guards something: the helper, the action runner's guardrails, and the MCP tools' handling of
-untrusted text. Mutation testing checks those same tests weekly.
+### Coverage
 
-**Security** is built in from 0.3, and the review before 1.0 checks it:
+Coverage is reported for all the Python. The goal, not enforced yet (nothing fails when
+coverage drops): complete branch coverage for the code that guards something (the helper,
+the action runner's guardrails, and the MCP tools' handling of untrusted text), checked
+weekly by mutation testing. Both come before 1.0, with the review that checks them.
 
-- A threat model in `docs/security/threat-model.md`, written in 0.3 and updated with every
-  release that adds a piece. It covers who's on the network, what each piece can reach, and
-  what an attacker gets by taking over each one.
+### Security
+
+Security is built in from 0.3, and the review before 1.0 checks it:
+
+- A threat model in `docs/security/threat-model.md`, updated with every release that adds a
+  piece. It was planned for 0.3 and isn't written yet: it's due before 1.0, with the
+  architectural review. It covers who's on the network, what each piece can reach, and what
+  an attacker gets by taking over each one.
 - Least privilege everywhere: every pod hardened, and every ok3d namespace enforcing Kubernetes'
-  `restricted` Pod Security Standard. The only exceptions are the pieces that need more (the
-  blackbox exporter's `NET_RAW`, istio-cni), each with its reason written next to it.
+  `restricted` Pod Security Standard. The only exception expected is istio-cni
+  (0.8), with its reason written next to it. The blackbox exporter pings without `NET_RAW`,
+  through Linux's unprivileged ping, which the standard allows.
 - Each secret goes from `.env` to its Kubernetes Secret and on to the one piece that uses
   it, and nowhere else. The smoke test's canary secrets check this.
-- Supply chain: actions and base images pinned by digest, charts pinned with `Chart.lock`, an
+- Supply chain: actions pinned by commit, the Dashboard's base image resolved to one digest
+  per build (so the image scanned is the image pushed), charts pinned with `Chart.lock`, an
   SBOM and a provenance attestation for every image, and dependency review on every pull
   request.
 - Untrusted text, from device names, Wi-Fi network names, logs, and syslog, is marked as such
   everywhere it reaches an agent, and the planted-instruction tests grow with every new path.
 
-**Docs:**
+### Docs
 
 - The structure kia uses: a start-here page, an index, and guides written for someone who has
   never seen ok3d, in plain words and short sentences, saying what to do before why.
 - Each subject goes from easy to advanced: the simplest path first, then the options, then
   the advanced parts, then an "under the hood" page that describes the code as it is. An
   under-the-hood page changes in the same pull request as the code it describes.
-- The docs job in CI (links, style, the generated settings reference, a runbook per alert,
-  the install doc's commands run for real).
+- The docs checks: links, alt text, the diagrams' sources, no dashes, and a runbook per alert
+  are checked in pytest today; the rest of the style checks, the generated settings
+  reference, and running the install doc's commands are planned.
 - Before each release, the install doc is followed on a fresh test VM exactly as written, and
   anything that had to be guessed gets fixed.
 
-**Pictures in the docs** (decided 2026-10-27). Screenshots and diagrams go wherever they help
-someone understand: every Dashboard page, every Grafana dashboard, each step of the install,
-and how the pieces fit.
+### Pictures in the docs (decided 2026-10-27)
+
+Screenshots and diagrams go wherever they help someone understand: every Dashboard page,
+every Grafana dashboard, each step of the install, and how the pieces fit.
 
 - Diagrams start as Mermaid files in `docs/diagrams/`. `scripts/diagrams.sh` renders each
   one to PNG in `images/diagrams/`, in a light and a dark version at twice the size for sharp
@@ -355,11 +407,12 @@ and how the pieces fit.
   when an image no longer matches its source or has no source.
 - Screenshots are made by `scripts/screenshots.sh`, never by hand. It runs on the test VM,
   restored from its clean snapshot first (in CI, on a container running k3d), starts ok3d on
-  the simulated network, and drives a headless browser from a pinned container image through the list in
-  `docs/screenshots.json` (JSON, since Playwright's image has no YAML library): each page,
-  what to wait for, what to crop to, and light or dark.
-  It strips the metadata and records the ok3d version each was taken with (making the
-  files smaller is still to do: 14 pictures are about 4.7 MB). Docs and releases can then refresh every screenshot in one run.
+  the simulated network, and drives a headless browser from a pinned container image through
+  the list in `docs/screenshots.json` (JSON, since Playwright's image has no YAML library):
+  each page, what to wait for, what to crop to, and light or dark. It strips the metadata
+  and records the ok3d version each was taken with (making the files smaller is still to
+  do: 14 pictures are about 5 MB). Docs and releases can then refresh every screenshot in
+  one run.
 - The docs show both versions with a `<picture>` tag, so GitHub picks the one for the
   reader's theme. Every image has alt text that says what it shows, and the docs job fails
   on an image without it.
@@ -373,7 +426,8 @@ and how the pieces fit.
 
 Each release ends with something that works on its own and a test that proves it, and goes
 through the test VM before production. Patch releases (0.4.1, ...) fix what testing and use
-turn up. Production moves to ok3d at 0.4.0.
+turn up. Production was to move to ok3d at 0.4.0; it hasn't yet, and moves straight to the
+latest release when it does.
 
 ### 0.3: Groundwork
 
@@ -393,18 +447,22 @@ turn up. Production moves to ok3d at 0.4.0.
 - Test: `ok3d apply` on a fresh test VM gives an empty, healthy cluster, and `ok3d delete`
   then `ok3d apply` brings it back with the data root untouched.
 
-### 0.4: Metrics, alerts, and a safe front door (production moves here)
+### 0.4: Metrics, alerts, and a safe front door (production was to move here)
 
 - The simulated network and `ok3d demo`, which the smoke test and the screenshots use from
   here on.
 - Metrics: kube-prometheus-stack with volumes bound to the data root's folders by label, the
-  k3s scrapes off, the blackbox exporter with `icmp` and `NET_RAW`, and unpoller with DPI
-  metrics off by default. Probes and scrape targets from `devices.yaml`.
+  k3s scrapes off, the blackbox exporter with `icmp` through unprivileged ping (no
+  `NET_RAW`), and unpoller with DPI metrics off by default. Probes and scrape targets from
+  `devices.yaml`.
 - Alerts reach you: Alertmanager to ntfy and email, and the dead man's switch. Rules for
-  devices (down, flapping), the internet link (down, loss, latency, DNS), hosts (disk with
-  `predict_linear`, memory, temperature, RAID, SMART), UniFi (device offline, port errors,
-  client experience), certificates (expiring), and the NOC watching itself. Each alert links
-  to a runbook in `docs/runbooks/`.
+  devices (down, a check failing, flapping, metrics down, a certificate expiring), hosts
+  (disk filling up, with `predict_linear`, and almost full; memory; RAID), and UniFi (the
+  controller unreachable, a device busy or out of memory): the twelve 0.4.0 shipped, with
+  the dead man's switch watching the NOC itself. Moved out of 0.4 (decided 2026-11-04): the
+  internet link's alerts go to 0.7, with its targets; temperature, SMART, UniFi port errors,
+  and client experience have no release yet. Each alert links to a runbook in
+  `docs/runbooks/`.
 - The front door, part one: agentgateway with TLS from the stack's certificate authority,
   security headers, and routes to Grafana (its own login, with a generated password),
   Prometheus, and Alertmanager (both behind basic auth until 0.8). The authority's
@@ -413,8 +471,8 @@ turn up. Production moves to ok3d at 0.4.0.
   manifests go. `docs/upgrading.md` covers the move, which starts fresh (decided
   2026-10-28): old series don't match ok3d's labels, so carrying old Prometheus history or
   Grafana's database is an optional, untested step, and old Loki data can't come across.
-- Test: every target in `devices.yaml` shows as up or down, `ok3d test --send-test-alert`
-  reaches your phone, nothing answers on the network except through the gateway and syslog,
+- Test: every target in `devices.yaml` shows as up or down, `./ok3d test-alert` reaches your
+  phone, nothing answers on the network except through the gateway and syslog,
   and a recreated cluster keeps its history.
 
 ### 0.5: The Dashboard (from here, setup starts on a web page)
@@ -496,7 +554,7 @@ on to 0.6.0.dev0 only in the pull request that brings 0.6's first part.
 - Check said the upgrade from 0.5.0 would restart the gateway. On the test VM, a version
   bump alone restarted nothing (same pod, same ReplicaSet): Check counted the Deployment's
   chart label as a restart. Check now counts a restart only when a workload's pod template
-  (or Prometheus's or Alertmanager's spec) changes.
+  or replica count (or Prometheus's or Alertmanager's spec) changes.
 - A full review of every file before the release (decided 2026-11-03), by five independent
   reviewers, one per part, with a humanizer pass. Its fixes go in four pull requests by part
   (charts and alerts; the shell and hooks; the Dashboard and helper; the docs), plus one for
@@ -672,31 +730,34 @@ release, docs a newcomer can install from, and security fixes for the latest rel
 ## Docs
 
 Written for someone who has never seen the project, in plain words, with diagrams made from
-Mermaid files:
+Mermaid files. A page marked planned isn't written yet; the rest are in `docs/`.
 
 - `README.md`: what it is, what it shows, and what you need.
-- `docs/install.md`: from a bare Linux server to alerts on your phone: the data root (with
-  LVM), local DNS, the installer, the Dashboard, the first apply, trusting the certificate
-  authority, and the first test alert.
+- `docs/install.md` (planned): from a bare Linux server to alerts on your phone: the data
+  root (with LVM), local DNS, the installer, the Dashboard, the first apply, trusting the
+  certificate authority, and the first test alert.
 - `docs/dashboard.md`: every page of the Dashboard, and the `ok3d` command each one equals.
-- `docs/settings.md`: every setting, generated from the values schema so it can't drift.
+- `docs/install-with-ai.md`: the prompt for an AI assistant, and the steps it follows.
+- `docs/settings.md` (planned): every setting, generated from the values schema so it can't
+  drift.
 - `docs/devices.md`: adding devices, protected devices, and what each check does.
 - `docs/alerts.md`: every alert, what it means, and where it's sent.
 - `docs/runbooks/`: one page per alert: what to check, in order.
-- `docs/sign-in.md`: accounts, groups, roles, and second factors.
-- `docs/agents.md`: what the agents can and can't do, the actions and their guardrails,
-  approvals, and what the agents cost.
+- `docs/sign-in.md` (planned, 0.8): accounts, groups, roles, and second factors.
+- `docs/agents.md` (planned, 0.9): what the agents can and can't do, the actions and their
+  guardrails, approvals, and what the agents cost.
 - `docs/upgrading.md`: upgrading from the Dashboard, what's backed up first, and moving from
   the old stack.
 - `docs/architecture.md`: how the pieces fit, and why each choice was made.
-- `docs/troubleshooting.md`.
-- `docs/setups.md`: each setup card, what it gives you, and the hardware it needs.
+- `docs/troubleshooting.md` (planned).
+- `docs/setups.md` (planned): each setup card, what it gives you, and the hardware it needs.
 - `docs/certificate.md`: why the browser warns before you trust ok3d's certificate authority,
   and how to stop it on each kind of device (kia's `secure-page.md` covers the same).
-- `docs/metrics.md`: every metric ok3d's own parts expose.
+- `docs/metrics.md` (planned): every metric ok3d's own parts expose.
 - `docs/demo.md`: trying ok3d on the simulated network.
-- Under-the-hood pages: the Dashboard and the helper, security, the network's layout and how
-  alerts are held back, and the agents and actions.
+- `docs/roadmap.md`: where each release stands.
+- Under-the-hood pages: the Dashboard and the helper (written), and security, the network's
+  layout and how alerts are held back, and the agents and actions (planned).
 
 ## To check before building
 

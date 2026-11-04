@@ -13,7 +13,7 @@ flowchart TD
     fix["Fix what Check found<br/>(each problem says how)"]
     apply["Apply<br/>(makes the cluster and deploys ok3d)"]
     next["What's next<br/>(trust the certificate, open Grafana, send a test alert)"]
-    upgrade["A new release:<br/>back up, make the cluster again, check"]
+    upgrade["A new release:<br/>check, back up, make the cluster again"]
 
     install --> open --> choose --> check
     check -- "problems" --> fix --> check

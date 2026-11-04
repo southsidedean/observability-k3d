@@ -4,6 +4,12 @@
 
 ### Upgrading
 
+- From 0.5.1, press **Look for a new release** on the Dashboard's Home, then **Upgrade now**
+  ([docs/upgrading.md](docs/upgrading.md#from-the-dashboard-from-051)), or run
+  `./ok3d upgrade v0.5.2` on the server. From 0.5.0 or 0.4, run the installer again, which
+  moves straight to 0.5.2, then delete the cluster and back up the data root as
+  [docs/upgrading.md](docs/upgrading.md#from-050-or-04) shows, then **Check** and **Apply**
+  on the Dashboard.
 - Check now refuses a `devices.yaml` with two devices of the same name, a `behind` that names
   itself or no device in the file, or one device with the same metrics port twice. The
   upgrade runs Check first, so with any of those it stops and moves back to 0.5.1, saying
@@ -15,8 +21,9 @@
 - Apply's question no longer says an upgrade restarts the gateway when it doesn't. Check
   counted any change to a running part as a restart, even the chart's version label, which
   every release changes and which restarts nothing. It now counts a restart only when the
-  part's pod template (or, for Prometheus and Alertmanager, their spec) changes. So the
-  upgrade from 0.5.0 to 0.5.1 never restarted the gateway, though 0.5.1's notes said it did.
+  part's pod template or replica count (or, for Prometheus and Alertmanager, their spec)
+  changes. So the upgrade from 0.5.0 to 0.5.1 never restarted the gateway, though 0.5.1's
+  notes said it did.
 - The Maintenance page no longer says "No maintenance windows" before ok3d has read them from
   Alertmanager, after a fresh install, say. It says it hasn't read them yet, with **Read them
   now**. And when lines in the helper's note can't be read (a damaged file, say), it says how
@@ -91,6 +98,16 @@
   the speed test ping reads in milliseconds. The links lead to ok3d's UniFi docs and
   unpoller's site, the 30-second smoothing (which drew nothing) is gone, and the upstream
   author's notes are rewritten for ok3d.
+- The docs, from the review: the README's commands clone the latest release instead of
+  `main`, and name Helm 3.13. Upgrading from 0.5.0 or 0.4 now deletes the cluster and backs
+  up the data root before Apply. `SECURITY.md` says which protections hold now and which
+  come later, and that the ping checks need no extra capability. Smaller fixes in the
+  architecture, demo, certificate, AI install, alerts, and runbook pages, both
+  under-the-hood pages (running the Dashboard from the checkout now works as written), the
+  bug report form, and the setup diagram. The Settings page's screenshot, which no page
+  showed, is no longer taken.
+- When a path can't go in the helper's service file, `./ok3d install` now names the helper's
+  Python too.
 - For contributors: an emptied or unreadable private-names list now stops a commit instead of
   turning the check off, the privacy test shows as skipped without a list, an exact copy of
   git's scissors line typed into a message hides nothing, and the tests can no longer act on
@@ -103,7 +120,7 @@
 ### Upgrading
 
 - From 0.5.0 or 0.4, run the installer again, as for 0.5.0
-  ([docs/upgrading.md](docs/upgrading.md#to-051-from-050-or-04)). If ok3d isn't in `~/ok3d`,
+  ([docs/upgrading.md](docs/upgrading.md#from-050-or-04)). If ok3d isn't in `~/ok3d`,
   put `OK3D_DIR=/path/to/ok3d` before `sh`. Then **Check** and **Apply** on the Dashboard.
   Apply now asks first: from 0.5.0 it restarts the gateway, so ok3d's pages are unavailable
   for a moment, and the rest changes without stopping anything.

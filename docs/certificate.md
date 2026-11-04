@@ -9,7 +9,7 @@ one port, over HTTPS:
 | Prometheus | `https://prometheus.noc.home.arpa:8443/` | the same |
 | Alertmanager | `https://alertmanager.noc.home.arpa:8443/` | the same |
 | The certificate authority | `https://ca.noc.home.arpa:8443/` | none: it's a download |
-| The Dashboard (from 0.5) | `https://dashboard.noc.home.arpa:8444/` | its own password, which `./ok3d install` prints |
+| The Dashboard | `https://dashboard.noc.home.arpa:8444/` | its own password, which `./ok3d install` prints |
 
 The admin password is `OK3D_ADMIN_PASSWORD` from `.env`, or, if you left that empty, the one
 ok3d made the first time: it's in `admin-password` in the data root, readable only by you.
@@ -50,7 +50,8 @@ again. Until a device trusts it, its browser warns about every page. Trust it on
 device:
 
 1. Download it: open `https://ca.noc.home.arpa:8443/` and accept the warning this one time
-   (it's the authority itself you're fetching), or copy `certs/ca.crt` from the data root.
+   (it's the authority itself you're fetching), or copy `certs/ca.crt` from the data root
+   (it's the same file: rename it `ok3d-ca.crt` to match the steps below).
 2. Add it to the device:
    - **macOS:** double-click `ok3d-ca.crt`, add it to the System keychain, then in Keychain
      Access open it, expand Trust, and set "When using this certificate" to Always Trust.

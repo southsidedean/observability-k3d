@@ -56,7 +56,8 @@ The helper's checks hold only with the right mounts, which the installer sets up
    action=check
    ```
 
-   The id is a random number the page makes, so it knows which answer is to its own request.
+   The id is a random number the Dashboard makes for each request, so it knows which answer
+   is to its own request.
 2. Every 3 seconds, the helper renames that file into `helper/taken/`, under a name that's
    new each time, so nothing left from before is ever in the way. A rename moves whatever is
    there: a link moves as a link, never what it points to.
@@ -68,8 +69,8 @@ The helper's checks hold only with the right mounts, which the installer sets up
    - Its head has exactly the lines its action needs, each once, and nothing else: `id` and
      `action`, `name` with `set-env`, `version` with `upgrade`, `what` and `when` (and
      optionally `reason`) with `maintenance-add`, `window` with `maintenance-end`, and
-     optionally `base` with a save. Each maintenance line is checked whole, as
-     `./ok3d maintenance` checks it.
+     optionally `base` with a save. Each maintenance line is checked whole, with the
+     patterns `./ok3d maintenance` uses.
    - The id is 16 to 64 lowercase hex digits.
    - The action is one of `check`, `apply`, `save-settings`, `save-devices`, `set-env`,
      `look-for-release`, `upgrade`, `maintenance-add`, `maintenance-end`, or
@@ -113,7 +114,8 @@ The helper's checks hold only with the right mounts, which the installer sets up
    nothing it said but its id, and only when the id is valid (16 to 64 hex digits), so the
    page knows which request was refused. Any other answer also names its action (and, for
    `set-env`, the line), both checked against fixed lists first.
-6. The page reads `helper/result` every few seconds, and shows it when the id matches.
+6. Each time a page loads, it reads `helper/result`, and shows it when the id matches.
+   Reload Home to see the answer arrive.
 
 ## Saving settings and devices
 
@@ -277,18 +279,18 @@ starts none.
 While an upgrade runs, the helper refuses every request, the Dashboard's Check, Apply, and
 saves included, since any of them partway through would race it. It counts an upgrade as
 running while the `ok3d-upgrade` service is active, or while something holds a lock on
-`local/upgrading` in the ok3d checkout. `./ok3d upgrade` holds that lock (with `flock`) for as
-long as it runs, so an upgrade started on the server counts too (including one waiting on the server for you to type yes),
-and the system lets go of it when the upgrade ends, however it ends. The helper writes that
-a request is running before it asks, and `./ok3d upgrade` takes its lock before it reads
-that answer, so whichever comes second sees the other: an Apply never starts under an
-upgrade, nor an upgrade under an Apply. A request the helper is about to refuse says it's
-running for a moment first, so `./ok3d upgrade` reads a running answer again for a few
-seconds before it counts. If `helper/upgrade` says an upgrade is running when
-neither is true (the server restarted partway), the helper rewrites it as stopped, keeping
-the step it stopped at, so Home doesn't show it running forever. It asks whether one is
-running before it reads the file and again after, so an upgrade that finishes or starts in
-between is never marked stopped.
+`local/upgrading` in the ok3d checkout. `./ok3d upgrade` holds that lock (with `flock`) for
+as long as it runs, so an upgrade started on the server counts too (including one waiting on
+the server for you to type yes), and the system lets go of it when the upgrade ends, however
+it ends. The helper writes that a request is running before it asks, and `./ok3d upgrade`
+takes its lock before it reads that answer, so whichever comes second sees the other: an
+Apply never starts under an upgrade, nor an upgrade under an Apply. A request the helper is
+about to refuse says it's running for a moment first, so `./ok3d upgrade` reads a running
+answer again for a few seconds before it counts. If `helper/upgrade` says an upgrade is
+running when neither is true (the server restarted partway), the helper rewrites it as
+stopped, keeping the step it stopped at, so Home doesn't show it running forever. It asks
+whether one is running before it reads the file and again after, so an upgrade that finishes
+or starts in between is never marked stopped.
 
 ## What the helper writes
 
@@ -315,7 +317,7 @@ temporary file first and renamed into place, so the page never reads half of one
 
 In the ok3d checkout: `settings.yaml`, `devices.yaml`, and `.env` when you save them, and
 `local/backups/`, which keeps the last 10 copies of each from before a save, and a folder of
-all three from before each upgrade.
+all three from before each of the last three upgrades.
 
 ## Running it
 

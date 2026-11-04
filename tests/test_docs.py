@@ -166,3 +166,13 @@ def test_the_roadmap_knows_the_version_the_code_is_at() -> None:
     assert f"| {version.group(0)} |" in roadmap, f"docs/roadmap.md has no row for {version.group(0)}"
     if "dev" in __version__:
         assert f"{version.group(0)} is in progress" in roadmap, "docs/roadmap.md doesn't say which version is in progress"
+
+
+def test_the_readme_clones_the_latest_release() -> None:
+    # "With commands instead" clones a release, not main, which may hold unreleased code. The
+    # release pull request moves it on, and this holds it to the newest dated CHANGELOG entry.
+    changelog = (ROOT / "CHANGELOG.md").read_text()
+    released = re.findall(r"^## (\d+\.\d+\.\d+) \(\d{4}-\d{2}-\d{2}\)$", changelog, re.M)
+    assert released, "CHANGELOG.md has no released version"
+    clones = re.findall(r"git clone --branch (v\S+) ", (ROOT / "README.md").read_text())
+    assert clones == [f"v{released[0]}"], f"README.md should clone v{released[0]}, the latest release"

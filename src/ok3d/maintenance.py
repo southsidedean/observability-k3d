@@ -184,7 +184,7 @@ def windows(silences: object, now: datetime) -> list[str]:
             reason = ""
         try:
             shown = f"{here(start)};{here(end)}"
-        except OverflowError:  # a time the server's own zone can't show, such as year 1
+        except OverflowError:  # at the calendar's very start or end, which ok3d never makes
             continue
         found.append((start, f"window={silence_id};{what};{stamp(start)};{stamp(end)};{shown};{reason}"))
     return [line for _, line in sorted(found)]

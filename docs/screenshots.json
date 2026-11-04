@@ -9,7 +9,6 @@
                 {"wait": "form[action='/apply'] button:not([disabled])", "timeout": 300}],
      "wait": "text=What's next", "crop": "main"},
     {"name": "dashboard-setup", "site": "dashboard", "path": "/setup", "wait": "text=Ready-made setups", "crop": "main"},
-    {"name": "dashboard-settings", "site": "dashboard", "path": "/settings", "wait": "textarea", "crop": "main"},
     {"name": "dashboard-devices", "site": "dashboard", "path": "/devices", "wait": "textarea", "crop": "main"},
     {"name": "dashboard-keys", "site": "dashboard", "path": "/keys", "wait": "text=Keys and passwords", "crop": "main"},
     {"name": "dashboard-maintenance", "site": "dashboard", "path": "/maintenance", "wait": "text=Maintenance windows", "crop": "main"},
