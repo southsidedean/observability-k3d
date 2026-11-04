@@ -73,8 +73,10 @@ that upgrades from the Dashboard alone. 0.6.0, logs and changes, comes next.
 | The Maintenance page says when lines in the helper's note can't be read, instead of "No maintenance windows" | Done ([#51](https://github.com/southsidedean/observability-k3d/pull/51)) |
 | Check said the upgrade from 0.5.0 would restart the gateway, and it didn't: Check counted the chart's label as a restart, and now counts only a changed pod template or replica count | Done ([#50](https://github.com/southsidedean/observability-k3d/pull/50)) |
 | A social image for GitHub, with its source in `images/` | Done ([#52](https://github.com/southsidedean/observability-k3d/pull/52)) |
+| The social image says ok3d is self-contained, in its own k3d cluster | Done ([#56](https://github.com/southsidedean/observability-k3d/pull/56)) |
 | Fixes from the 0.5.2 review: the charts and alerts | Done ([#53](https://github.com/southsidedean/observability-k3d/pull/53)) |
 | Fixes from the 0.5.2 review: the shell, the installer, and the git hooks | Done ([#54](https://github.com/southsidedean/observability-k3d/pull/54)) |
+| Fixes from the 0.5.2 review: the Dashboard, the helper, and maintenance windows | Done ([#55](https://github.com/southsidedean/observability-k3d/pull/55)) |
 | Fixes from the 0.5.2 review: the docs, `PLAN.md`, and `SECURITY.md` | Done ([#57](https://github.com/southsidedean/observability-k3d/pull/57)) |
 | Release 0.5.2, tested with an upgrade from 0.5.1 from the Dashboard alone | Planned |
 
@@ -90,3 +92,4 @@ for the release named, or for a decision.
 | cert-manager's metrics scraped, so a certificate it fails to renew raises an alert | 0.6 |
 | NetworkPolicies for cert-manager and kube-system, and between monitoring's own parts | 0.8, with the mesh |
 | A warning when a silence made on Alertmanager's own page covers the Watchdog | 0.7 |
+| The Dashboard's sign-in pause, which any device on the network can keep on for everyone by guessing, and its 32 connections, which one device can fill: limits per address instead | 0.8, with the new sign-in |

@@ -102,7 +102,7 @@ running, so its service doesn't decide ok3d has stopped.
 
 On the Dashboard, open **Maintenance**, choose all of ok3d or tick the devices, then either
 a length from now or a start and an end, and add a reason if you like. Home says while a
-window is on. **End now** ends one early.
+window is on. **End now** ends one early, and **Cancel** takes away one that hasn't started.
 
 On the server:
 

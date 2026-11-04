@@ -313,11 +313,16 @@ def busy(state: Path, helper: Path, now: float | None = None) -> bool:
 
 def can_apply(state: Path, helper: Path) -> bool:
     """Apply stays off until the helper's answer to the last request this Dashboard sent is a
-    Check that found no problems. Anything sent since (a save, a key) turns it off again."""
+    Check that found no problems. Anything sent since (a save, a key) turns it off again, and
+    so does a change to settings.yaml or devices.yaml on the server: the answer says which
+    ones the Check read (helper.py's checked_files)."""
     last = answer(helper)
     sent = last_sent(state)
-    return (last is not None and sent is not None and last.fields.get("id") == sent[0]
-            and last.action == "check" and last.passed)  # fmt: skip
+    if last is None or sent is None or last.fields.get("id") != sent[0] or last.action != "check":
+        return False
+    same = all(last.fields.get(name.removesuffix(".yaml")) == fingerprint(current(helper, name))
+               for name in ("settings.yaml", "devices.yaml"))  # fmt: skip
+    return last.passed and same
 
 
 def write_private(path: Path, data: bytes) -> None:
@@ -344,10 +349,23 @@ def send(state: Path, helper: Path, action: str, name: str | None = None, body: 
                 + (f"base={base}\n" if base else "") + (f"version={version}\n" if version else "")
                 + "".join(f"{key}={value}\n" for key, value in (extra or {}).items()))  # fmt: skip
         data = head.encode() + (b"\n" + body if body is not None else b"")
+        # last-sent first, so an answer can't arrive before the page knows its id. If the
+        # request itself then can't be written, last-sent goes back to what it was: otherwise
+        # it would name a request the helper never got, and the page would say the helper is
+        # busy (and keep Apply off) until ANSWER_WITHIN passed.
+        before = read(state / "last-sent")
         try:
             write_private(state / "last-sent", f"{request_id} {time.time()}\n".encode())
+        except OSError:
+            raise Unavailable from None
+        try:
             write_private(state / "outbox" / "request", data)
         except OSError:
+            with contextlib.suppress(OSError):
+                if before is None:
+                    (state / "last-sent").unlink()
+                else:
+                    write_private(state / "last-sent", before.encode())
             raise Unavailable from None
         return request_id
 

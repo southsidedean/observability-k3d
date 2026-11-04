@@ -91,15 +91,17 @@ when the cluster is down.
   browsers that send it, `Sec-Fetch-Site: same-origin`, or it's refused. A form is read only
   when it's `application/x-www-form-urlencoded`, at most 4 KB (385 KB for a settings or
   devices file, since a browser sends each line break as six characters), with at most 10
-  fields. Any form that's refused (too big, from elsewhere, with no session, or to a page
-  that isn't there) is read and thrown away first: refused while the browser was still
-  sending, the browser would show a reset connection instead of the refusal. A refused form
-  over 1 MB isn't read, and is refused straight away. Every form must arrive within 30
-  seconds: about 13 KB a second for the biggest settings or devices file. No `GET` changes
-  anything. Started with
-  `--origin https://my-server.lan:8444` (once for each address you open it at), it accepts
-  forms only from those exact addresses, which the installer will pass; without, the Origin
-  must match the address the browser asked for.
+  fields. Maintenance's form takes up to 16 KB, with a field for each device ticked. Any
+  form that's refused (too big, from elsewhere, with no session, or to a page that isn't
+  there) is read and thrown away first: refused while the browser was still sending, the
+  browser would show a reset connection instead of the refusal. A refused form over 1 MB
+  isn't read, and is refused straight away. Every form must arrive within 30 seconds: about
+  13 KB a second for the biggest settings or devices file. No `GET` changes anything.
+  Started with `--origin https://my-server.lan:8444` (once for each address you open it at),
+  it accepts forms only from those exact addresses, and a form from anywhere else gets a
+  page naming the first of them. The installer passes the address it prints, so the
+  Dashboard's forms work only there (not at the server's IP address, say). Without
+  `--origin`, the Origin must match the address the browser asked for.
 - Every page is made in `src/ok3d/dashboard/server.py`, with every value escaped, including
   what `ok3d` printed in the helper's answer.
 - Every answer carries the same headers: a Content Security Policy that allows only the
@@ -156,9 +158,13 @@ with a note to wait. If the outbox can't be written, the page says so and sends 
 
 - **Apply** turns on only when the helper's answer to the last request this Dashboard sent
   is a Check that found no problems. Anything sent since (a save, a key) turns it off again,
-  as does a failed Check. The server checks this too, not only the button. It doesn't see
-  changes you make to the files on the server after the Check, and the helper doesn't
-  enforce it: Apply is something you could run yourself anyway.
+  as does a failed Check. So does a change to `settings.yaml` or `devices.yaml` on the
+  server after the Check: the Check's answer has a fingerprint of each file as the helper
+  read it when the Check started (`settings=` and `devices=`, the SHA-256 of its text, or
+  `none` when there's none or it's a link or over 64 KB, whose changes aren't seen), and
+  Apply stays on only while they match the helper's copies. A change to `.env` isn't seen, since the Dashboard
+  never sees its values. The server checks all of this too, not only the button. The helper
+  doesn't enforce it: Apply is something you could run yourself anyway.
 - **Apply asks first** when the Check said it would restart or stop part of the running
   cluster, or couldn't tell. `./ok3d check` works that out (below) and writes it to
   `helper/apply-plan`; Home lists it under Apply once that Check has passed. Pressing Apply

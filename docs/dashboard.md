@@ -52,12 +52,14 @@ Home is where you start and finish each change:
 2. **Check** asks the server whether it's ready and your settings are valid. It changes
    nothing. Its answer appears under **The helper's last answer**: reload the page to see it
    arrive.
-3. **Apply** turns on once a Check finds no problems. The first Apply makes the cluster and
-   takes about 20 minutes; later ones bring it up to date with your settings, and are
-   quicker. Once a cluster is running, Check also lists what Apply would change: the parts
-   it would restart (Grafana, say, after a change to its settings), stop (a part you
-   switched off), or start. If Apply would restart or stop anything, it asks first: a page
-   names those parts, and **Apply anyway** goes ahead.
+3. **Apply** turns on once a Check finds no problems, and off again if you change
+   `settings.yaml` or `devices.yaml` on the server after it. The first Apply makes the
+   cluster and takes about 20 minutes; later ones bring it up to date with your settings,
+   and are quicker. Once a cluster is running, Check also lists what Apply would change:
+   the parts it would restart (Grafana, say, after a change to its settings), stop (a part
+   you switched off), or start. If Apply would restart or stop anything, or Check couldn't
+   tell what it would change, it asks first: a page names the parts, or says Check couldn't
+   tell, and **Apply anyway** goes ahead.
 4. **What's next** appears once an Apply has worked: the steps on your own devices that the
    Dashboard can't do for you, such as trusting the certificate authority and opening
    Grafana.
@@ -91,7 +93,7 @@ backups it makes, and what to do if an upgrade stops partway.
 
 Choose a ready-made setup, or switch the parts on and off yourself:
 
-- **Basic NOC** watches your devices and your internet link.
+- **Basic NOC** watches your devices: whether each is up, with alerts when one isn't.
 - **Network NOC** adds your UniFi network. It needs your UniFi controller's address in
   `settings.yaml` on the server (`unifi.url`) and a view-only API key on the Keys page.
   [Your devices](devices.md#unifi) says how to make the key.
@@ -124,9 +126,10 @@ file on the server.
 
 **Maintenance** lists the maintenance windows: times when alerts don't notify you, for all of
 ok3d or for the devices you choose. Add one from now for a length, or between two times in
-the server's own time, with a reason if you like; **End now** ends one early. Home says while
-one is on. Until ok3d has read the windows from Alertmanager (after a fresh install, say), the
-page says so instead of listing none: **Read them now** reads them.
+the server's own time, with a reason if you like. **End now** ends one early, and **Cancel**
+takes away one that hasn't started. Home says while one is on. Until ok3d has read the
+windows from Alertmanager (after a fresh install, say), the page says so instead of listing
+none: **Read them now** reads them.
 [Alerts](alerts.md#maintenance-windows-keeping-alerts-quiet-while-you-work) has the details.
 
 ## Keys
@@ -149,4 +152,5 @@ switch's address, and the Anthropic API key are set only in `.env` on the server
 
 Once an Apply has worked, Grafana is at `https://grafana.noc.home.arpa:8443/` with the
 example settings. Sign in as `admin`, with the password in `admin-password` in the data
-root. The **ok3d: Devices** dashboard shows every device and check.
+root (or your `OK3D_ADMIN_PASSWORD`, if you set one in `.env`). The **ok3d: Devices**
+dashboard shows every device and check.

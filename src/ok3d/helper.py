@@ -2,7 +2,7 @@
 secrets, when the Dashboard asks.
 
 The Dashboard runs in a container and can't run anything on the host itself. When you press
-Check or Apply, or saves a change, it leaves a request file in its outbox,
+Check or Apply, or save a change, it leaves a request file in its outbox,
 `<data root>/dashboard/outbox/request`:
 
     id=3f9a0c51d2e8b746
@@ -453,14 +453,25 @@ def back_up(opened: Opened, path: Path) -> None:
         extra.unlink(missing_ok=True)
 
 
+def changed_since(opened: Opened, name: str, base: str | None) -> bool:
+    """Whether your file is no longer the one the page showed (base: its SHA-256, or none
+    when there was no file). A request with no base doesn't say, so it never has. This hashes
+    the raw bytes, while the page hashes the text it showed, with any byte that isn't UTF-8
+    replaced: so a file that isn't UTF-8 can't be saved from the Dashboard, and the reason
+    given is that it changed."""
+    if base is None:
+        return False
+    now = read_own_file(opened.folders.ok3d_dir / name, MAX_FILE)
+    return (hashlib.sha256(now).hexdigest() if now is not None else "none") != base
+
+
 def save(opened: Opened, request: Request) -> tuple[int, str]:
     """save-settings or save-devices: ./ok3d validate checks the file first, in the helper's
     own folder; only a file it passes replaces yours, after a copy of yours is kept."""
     name, kind = SAVES[request.action]
-    if request.base is not None:
-        now = read_own_file(opened.folders.ok3d_dir / name, MAX_FILE)
-        if (hashlib.sha256(now).hexdigest() if now is not None else "none") != request.base:
-            return 1, f"Not saved: {name} changed on the server since the page showed it. Open it again.\n"
+    changed = f"Not saved: {name} changed on the server since the page showed it. Open it again.\n"
+    if changed_since(opened, name, request.base):
+        return 1, changed
     write_file(opened, f"staged-{name}", request.body.decode("utf-8"))
     try:
         args = ["validate", kind, str(opened.folders.own / f"staged-{name}")]
@@ -472,6 +483,9 @@ def save(opened: Opened, request: Request) -> tuple[int, str]:
             os.unlink(f"staged-{name}", dir_fd=opened.own)
     if status != 0:
         return status, output + f"Not saved: your {name} is unchanged.\n"
+    # Again, since validate can take minutes: an edit on the server meanwhile stays as it is.
+    if changed_since(opened, name, request.base):
+        return 1, output + changed
     target = opened.folders.ok3d_dir / name
     back_up(opened, target)
     replace_file(target, request.body)
@@ -591,6 +605,8 @@ def handle_once(opened: Opened, now: float | None = None) -> str | None:
         if seen_before(opened, request.id):
             raise Refused("the request was carried out already")
         answer = {"id": request.id, "action": request.action} | ({"name": request.name} if request.name else {})
+        if request.action == "check":
+            answer |= checked_files(opened)
         # Running first, then whether an upgrade is: ./ok3d upgrade takes its lock first, then
         # reads this answer, so whichever comes second sees the other, and an upgrade never
         # starts under an Apply, nor an Apply under an upgrade.
@@ -607,8 +623,28 @@ def handle_once(opened: Opened, now: float | None = None) -> str | None:
         reason = "the file couldn't be saved" if request.action in (*SAVES, "set-env") else "the ok3d command couldn't run"
         write_result(opened, answer | {"state": "failed", "reason": reason, "finished": now_utc()})
         return f"couldn't carry out {describe(request)}"
+    except Exception as e:  # anything else gets an answer too, or the Dashboard stays busy
+        write_result(opened, answer | {"state": "failed", "reason": "the helper hit an error it didn't expect",
+                                       "finished": now_utc()})  # fmt: skip
+        return f"couldn't carry out {describe(request)}: {type(e).__name__}"
     write_result(opened, answer | {"state": "finished", "exit": str(status), "finished": now_utc()}, output)
     return f"ran {describe(request)}: exit {status}"
+
+
+def checked_files(opened: Opened) -> dict[str, str]:
+    """For a Check's answer: the settings.yaml and devices.yaml it reads, as fingerprints the
+    Dashboard can match against the copies publish() leaves it (the SHA-256 of the text, or
+    none), so Apply turns off when either changes on the server after the Check."""
+    found = {}
+    for name in ("settings.yaml", "devices.yaml"):
+        try:
+            data = read_own_file(opened.folders.ok3d_dir / name, MAX_FILE)
+        except OSError:  # couldn't be read (EIO, say): a value no copy matches keeps Apply off
+            found[name.removesuffix(".yaml")] = "unreadable"
+            continue
+        text = None if data is None else data.decode("utf-8", errors="replace")
+        found[name.removesuffix(".yaml")] = "none" if text is None else hashlib.sha256(text.encode("utf-8")).hexdigest()
+    return found
 
 
 def describe(request: Request) -> str:
@@ -688,8 +724,11 @@ def clear_stopped_upgrade(opened: Opened) -> None:
     # state since the first ask.
     if fields.get("state") != "running" or upgrading(opened.folders.ok3d_dir):
         return
-    fields |= {"state": "failed", "step": f"it stopped partway, at {fields.get('step', 'a step')} (the server "
-               "restarted, say): docs/upgrading.md says how to carry on", "finished": now_utc()}  # fmt: skip
+    step = fields.get("step", "")
+    # "Deleting the cluster" reads mid-sentence as "while deleting the cluster".
+    during = f"while {step[:1].lower()}{step[1:]}" if step else "partway"
+    fields |= {"state": "failed", "step": f"it was cut off {during} (the server restarted, say). "
+               "docs/upgrading.md says how to carry on.", "finished": now_utc()}  # fmt: skip
     write_file(opened, "upgrade", "".join(f"{k}={v}\n" for k, v in fields.items()))
 
 
