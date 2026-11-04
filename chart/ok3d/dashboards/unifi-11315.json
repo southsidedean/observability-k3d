@@ -1034,7 +1034,7 @@
       "cacheTimeout": null,
       "datasource": "${DS_PROMETHEUS}",
       "decimals": 0,
-      "description": "Clients on each wireless channel, and wired clients by switch.",
+      "description": "Clients on each wireless channel, and the wired clients.",
       "fieldConfig": {
         "defaults": {
           "custom": {}
@@ -1099,7 +1099,7 @@
       "cacheTimeout": null,
       "datasource": "${DS_PROMETHEUS}",
       "decimals": 0,
-      "description": "Visualize how many clients are connected to which radios/APs.",
+      "description": "Clients by Wi-Fi protocol (ac, na, ng, and so on).",
       "fieldConfig": {
         "defaults": {
           "custom": {}

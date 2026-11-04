@@ -1516,7 +1516,7 @@
         {
           "columns": [],
           "datasource": "${DS_PROMETHEUS}",
-          "description": "These are total \"lifetime\" counters.",
+          "description": "This port's speed, PoE, and satisfaction now, and its lifetime traffic, drop, and error counts.",
           "fieldConfig": {
             "defaults": {
               "custom": {}

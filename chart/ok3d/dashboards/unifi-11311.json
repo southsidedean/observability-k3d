@@ -1006,7 +1006,7 @@
           "dashes": false,
           "datasource": "${DS_PROMETHEUS}",
           "decimals": 0,
-          "description": "This graphs shows clients connected to the site.",
+          "description": "Clients at the site, by subsystem: users, guests, VPN users, and all stations.",
           "fill": 0,
           "fillGradient": 0,
           "gridPos": {
@@ -1135,7 +1135,7 @@
           "dashes": false,
           "datasource": "${DS_PROMETHEUS}",
           "decimals": 0,
-          "description": "Data a second that VPN users send and receive; received is on the negative axis.",
+          "description": "Bytes a second VPN users send and receive; received is on the negative axis.",
           "fill": 0,
           "fillGradient": 0,
           "gridPos": {
