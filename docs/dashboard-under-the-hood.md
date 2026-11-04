@@ -302,8 +302,10 @@ again: it brings each part up to date. In order, it:
    (browsers accept at most 398). The Dashboard's container can write `dashboard/tls/`, so
    nothing there is trusted: the key, the request, and the extensions are made in a new
    folder inside `certs/`, the authority's own, with a random serial, and only the finished
-   certificate and key are moved into `tls/` (a rename, which replaces a link there rather
-   than following it). A certificate already there is kept only if it's a plain file this
+   certificate and key are moved into `tls/` by a rename through `tls/` opened without
+   following a link. That replaces a link there, even one to a folder, instead of moving
+   the files to where it leads, and the container can't swap `tls/` itself in between. A
+   certificate already there is kept only if it's a plain file this
    authority signed for this name, it matches the key beside it, and it has more than 30
    days left.
 5. Writes the helper's service, `~/.config/systemd/user/ok3d-helper.service`, from

@@ -2,16 +2,16 @@
 # Every check that doesn't need a cluster, the same ones CI runs: the shell scripts, the
 # Python's lint, security, and type checks, the workflows, Renovate's settings, the tests
 # (privacy, docs, the git hooks, the charts, and the ok3d command among them), and the
-# charts' objects. The pre-push hook runs it; run it yourself
-# any time:
+# charts' objects. The pre-push hook runs it; run it yourself any time:
 #   scripts/check.sh
 #
 # Needs python3 with the dev tools installed (python3 -m pip install -e '.[dev]', ideally in
 # a .venv, which this script uses when it finds one), plus shellcheck, actionlint, npx, helm,
 # and kubeconform. The alert rules' and Alertmanager's tests also use promtool and amtool
 # (CONTRIBUTING.md says where to get the versions ok3d runs); without them, those tests skip.
-# A tool that isn't installed here is skipped with a note; CI sets CI=true, which turns a
-# missing tool into a failure, so nothing is skipped there.
+# A tool that isn't installed here is skipped with a note; CI=true turns a missing tool into
+# a failure instead. CI itself runs the same checks as separate steps, in
+# .github/workflows/tests.yml.
 set -eu
 cd "$(dirname "$0")/.."
 

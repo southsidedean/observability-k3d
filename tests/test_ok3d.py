@@ -99,7 +99,10 @@ esac""",
     # Makes the key and certificate files, and answers the name-constraint question with
     # FAKE_CA_DOMAIN (the domain the existing authority was made for).
     "openssl": r"""echo "openssl $*" >>"$FAKE_LOG"
-if [ "$1" = req ]; then
+if [ "$1" = req ] && [ -n "${FAKE_OPENSSL_FAIL:-}" ]; then
+	echo "req: Unrecognized flag addext" >&2
+	exit 1
+elif [ "$1" = req ]; then
 	while [ $# -gt 0 ]; do
 		case "$1" in -keyout | -out) touch "$2"; shift ;; esac
 		shift
@@ -126,6 +129,10 @@ fi""",
     # open file, so it's held until the shell ends.
     "flock": 'exec python3 -c "import fcntl, sys; fcntl.flock(int(sys.argv[1]), fcntl.LOCK_EX | fcntl.LOCK_NB)" "$2" 2>/dev/null',
     "loginctl": 'echo "loginctl $*" >>"$FAKE_LOG"; echo "${FAKE_LINGER:-yes}"',
+    # The real python3 (ok3d runs its helpers with it), except that FAKE_PYTHON says which
+    # version it is when ok3d asks.
+    "python3": 'case "$*" in *version_info*) [ -z "${FAKE_PYTHON:-}" ] || { echo "$FAKE_PYTHON"; exit; } ;; esac\n'
+               'exec "$REAL_PYTHON3" "$@"',
 }
 
 
@@ -148,6 +155,7 @@ def env(tmp_path: Path) -> dict[str, str]:
         "FAKE_LOG": str(tmp_path / "calls.log"),
         "FAKE_DATA_ROOT": str(data_root),
         "OK3D_SETTINGS": str(settings),
+        "REAL_PYTHON3": shutil.which("python3") or "python3",
     }
 
 
@@ -264,6 +272,30 @@ def test_apply_passes_devices_yaml_when_there_is_one(env: dict[str, str], tmp_pa
     assert f"--values {devices}" in release
 
 
+@pytest.mark.parametrize("name", ["my settings.yaml", "settings*.yaml"])
+def test_a_settings_path_that_would_split_is_refused(env: dict[str, str], tmp_path: Path, name: str) -> None:
+    # Unquoted where it's used, it would become several arguments, or a glob.
+    settings = tmp_path / name
+    settings.write_text("settingsVersion: 1\n")
+    result = ok3d({**env, "OK3D_SETTINGS": str(settings)}, "check")
+    assert result.returncode == 1
+    assert "can't use a folder or file name with a space" in result.stderr
+    assert not any(line.startswith("helm") for line in calls(env))
+
+
+@pytest.mark.parametrize("value", ["x$(touch PWNED)", "x`touch PWNED`", "x'; touch PWNED; '", 'x\\" ; touch PWNED'])
+def test_a_rendered_setting_that_could_run_something_is_dropped_before_eval(env: dict[str, str], tmp_path: Path,
+                                                                           value: str) -> None:
+    # load_settings evals the KEY: "value" lines; the schema already limits values, and this
+    # is the second guard. The line is dropped, so the setting is missing and ok3d stops
+    # (it needs the domain), and nothing in the value runs.
+    result = subprocess.run([str(ROOT / "ok3d"), "check"], capture_output=True, text=True, check=False,
+                            env={**env, "FAKE_DOMAIN": value}, cwd=tmp_path)  # fmt: skip
+    assert result.returncode != 0
+    assert "DOMAIN" in result.stderr
+    assert not (tmp_path / "PWNED").exists() and not (ROOT / "PWNED").exists()
+
+
 def test_without_devices_yaml_check_warns_and_apply_goes_on(env: dict[str, str], tmp_path: Path) -> None:
     env["OK3D_DEVICES"] = str(tmp_path / "missing.yaml")
     result = ok3d(env, "check")
@@ -283,6 +315,57 @@ def test_the_unifi_key_goes_to_kubectl_on_stdin_only(env: dict[str, str], tmp_pa
     assert "stdin: abc123secret" in Path(env["FAKE_LOG"] + ".stdin").read_text()
 
 
+@pytest.mark.parametrize(("line", "value"), [("KEY='abc'", "abc"), ('KEY="abc"', "abc"), ("KEY=abc'", "abc'"),
+                                             ("KEY=\"abc'", "\"abc'"), ("KEY=\"'abc'\"", "'abc'"),
+                                             ("KEY=", "")])  # fmt: skip
+def test_only_a_matching_pair_of_quotes_is_taken_off(env: dict[str, str], tmp_path: Path, line: str,
+                                                     value: str) -> None:
+    # Through the UniFi key, the one secret Apply hands on as it reads it (on stdin).
+    dotenv = tmp_path / ".env"
+    dotenv.write_text(line.replace("KEY", "UNIFI_API_KEY") + "\n")
+    dotenv.chmod(0o600)
+    env.update(OK3D_ENV=str(dotenv), FAKE_UNIFI="true")
+    result = ok3d(env, "apply")
+    if value:
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert f"stdin: {value}\n" in Path(env["FAKE_LOG"] + ".stdin").read_text()
+    else:
+        assert result.returncode == 1 and "UNIFI_API_KEY in .env is empty" in result.stdout
+
+
+def test_a_dotenv_that_is_a_link_is_judged_by_its_file(env: dict[str, str], tmp_path: Path) -> None:
+    real = tmp_path / "secrets.env"
+    real.write_text("UNIFI_API_KEY=abc123secret\n")
+    real.chmod(0o600)
+    link = tmp_path / ".env"
+    link.symlink_to(real)
+    env.update(OK3D_ENV=str(link), FAKE_UNIFI="true")
+    result = ok3d(env, "apply")
+    assert result.returncode == 0, result.stdout + result.stderr
+    real.chmod(0o644)
+    unsafe = ok3d(env, "apply")
+    assert unsafe.returncode == 1 and "FAIL  " in unsafe.stdout and "chmod 600" in unsafe.stdout
+
+
+@pytest.mark.parametrize("on", [{"FAKE_NTFY": "true", "FAKE_DEADMAN": "true"}, {"FAKE_UNIFI": "true"},
+                                {"FAKE_UNIFI": "true", "FAKE_NTFY": "true"}], ids=["alerts", "unifi", "both"])
+def test_a_missing_dotenv_is_said_once_not_as_every_secret_being_empty(env: dict[str, str], tmp_path: Path,
+                                                                       on: dict[str, str]) -> None:
+    env.update(OK3D_ENV=str(tmp_path / "missing.env"), **on)
+    result = ok3d(env, "check")
+    assert result.returncode == 1
+    assert result.stdout.count("FAIL  No .env at") == 1
+    assert "No .env" not in result.stderr
+    assert "in .env is empty" not in result.stdout
+
+
+def test_install_says_when_docker_isnt_running(linux: dict[str, str]) -> None:
+    result = ok3d({**linux, "FAKE_DOCKER_STATUS": "1"}, "install")
+    assert result.returncode == 1
+    assert "Docker isn't running" in result.stderr
+    assert not any(line.startswith("docker pull") for line in calls(linux))
+
+
 def test_a_dotenv_others_can_read_is_refused(env: dict[str, str], tmp_path: Path) -> None:
     dotenv = tmp_path / ".env"
     dotenv.write_text("UNIFI_API_KEY=abc123secret\n")
@@ -290,7 +373,8 @@ def test_a_dotenv_others_can_read_is_refused(env: dict[str, str], tmp_path: Path
     env.update(OK3D_ENV=str(dotenv), FAKE_UNIFI="true")
     result = ok3d(env, "apply")
     assert result.returncode == 1
-    assert "chmod 600" in result.stderr
+    # Check, which Apply runs first, says so as one of its problems.
+    assert "chmod 600" in result.stdout
     assert not any(line.startswith("helm upgrade") for line in calls(env))
 
 
@@ -314,6 +398,37 @@ def test_check_warns_when_the_unifi_key_would_go_unencrypted(env: dict[str, str]
     result = ok3d(env, "check")
     assert result.returncode == 0, result.stdout + result.stderr
     assert ("WARN  unifi.url is http://" in result.stdout) is warned
+
+
+def test_check_says_which_python_it_found(env: dict[str, str]) -> None:
+    result = ok3d({**env, "FAKE_PYTHON": "3.12"}, "check")
+    assert "PASS  Python 3.12" in result.stdout
+    old = ok3d({**env, "FAKE_PYTHON": "3.10"}, "check")
+    assert old.returncode == 1
+    assert "FAIL  Python 3.10: ok3d needs 3.12 or newer" in old.stdout
+
+
+def test_install_refuses_a_python_too_old_for_the_helper(linux: dict[str, str]) -> None:
+    result = ok3d({**linux, "FAKE_PYTHON": "3.10"}, "install")
+    assert result.returncode == 1
+    assert "The helper needs Python 3.12 or newer at " in result.stderr and "that's 3.10" in result.stderr
+    assert not any(line.startswith("systemctl") for line in calls(linux))
+
+
+def test_install_checks_the_python_the_helper_runs_not_the_one_on_path(linux: dict[str, str],
+                                                                         tmp_path: Path) -> None:
+    # A new python3 first on PATH (pyenv, say) doesn't make an old system one fit the helper.
+    old = tmp_path / "old-python3"
+    old.write_text('#!/bin/sh\necho 3.10\n')
+    old.chmod(0o755)
+    result = ok3d({**linux, "FAKE_PYTHON": "3.13", "OK3D_HELPER_PYTHON": str(old)}, "install")
+    assert result.returncode == 1
+    assert f"at {old}, and that's 3.10" in result.stderr
+
+
+def test_the_helpers_service_runs_the_systems_own_python_by_default() -> None:
+    assert "ExecStart=@PYTHON@ -I @DIR@/src/ok3d/helper.py" in (ROOT / "deploy" / "ok3d-helper.service").read_text()
+    assert 'helper_python=${OK3D_HELPER_PYTHON:-/usr/bin/python3}' in (ROOT / "ok3d").read_text()
 
 
 def test_apply_moves_a_0_3_release_out_of_ok3d_system(env: dict[str, str]) -> None:
@@ -376,12 +491,16 @@ def test_apply_keeps_an_existing_cluster_and_authority(env: dict[str, str]) -> N
     assert "is kept" in result.stdout
 
 
-def test_apply_refuses_an_authority_made_for_another_domain(env: dict[str, str]) -> None:
+@pytest.mark.parametrize(("made_for", "domain"), [("noc.example.org", "noc.home.arpa"), ("noc.example.org", "noc.example"),
+                                               ("home.arpa", "noc.home.arpa")])  # fmt: skip
+def test_apply_refuses_an_authority_made_for_another_domain(env: dict[str, str], made_for: str,
+                                                            domain: str) -> None:
+    # Also when one name holds the other: an authority for noc.example.org can't vouch for noc.example.
     certs = Path(env["FAKE_DATA_ROOT"]) / "certs"
     certs.mkdir(mode=0o700)
     (certs / "ca.crt").write_text("cert")
     (certs / "ca.key").write_text("key")
-    env["FAKE_CA_DOMAIN"] = "noc.example.org"
+    env.update(FAKE_CA_DOMAIN=made_for, FAKE_DOMAIN=domain)
     result = ok3d(env, "apply")
     assert result.returncode == 1
     assert "is for another domain" in result.stderr
@@ -513,8 +632,10 @@ def test_check_reads_settings_and_devices_through_the_section_check(env: dict[st
 
 @pytest.fixture
 def linux(env: dict[str, str], tmp_path: Path) -> dict[str, str]:
-    """A Linux machine with systemd, its user config under tmp_path."""
-    return {**env, "FAKE_UNAME": "Linux", "XDG_CONFIG_HOME": str(tmp_path / "config")}
+    """A Linux machine with systemd, its user config under tmp_path, and the python3 stand-in
+    as the helper's (the real /usr/bin/python3 may be any version)."""
+    return {**env, "FAKE_UNAME": "Linux", "XDG_CONFIG_HOME": str(tmp_path / "config"),
+            "OK3D_HELPER_PYTHON": str(tmp_path / "bin" / "python3")}
 
 
 def test_install_sets_up_the_helper_and_the_dashboard(linux: dict[str, str], tmp_path: Path) -> None:
@@ -524,7 +645,8 @@ def test_install_sets_up_the_helper_and_the_dashboard(linux: dict[str, str], tmp
     for folder in ("dashboard", "dashboard/outbox", "dashboard/tls", "helper"):
         assert stat.S_IMODE((data / folder).stat().st_mode) == 0o700, folder
     unit = (tmp_path / "config" / "systemd" / "user" / "ok3d-helper.service").read_text()
-    assert f"ExecStart=/usr/bin/python3 -I {ROOT}/src/ok3d/helper.py watch --ok3d-dir {ROOT} --data-root {data}" in unit
+    python = linux["OK3D_HELPER_PYTHON"]
+    assert f"ExecStart={python} -I {ROOT}/src/ok3d/helper.py watch --ok3d-dir {ROOT} --data-root {data}" in unit
     for placeholder in ("@DIR@", "@DATA_ROOT@", "@PATH@"):
         assert placeholder not in unit
     log = calls(linux)
@@ -561,6 +683,15 @@ def test_install_issues_the_dashboards_certificate_for_its_name(linux: dict[str,
     assert [n for n in os.listdir(Path(data) / "certs") if n.startswith("issue.")] == []
 
 
+def test_a_failed_certificate_authority_says_why(env: dict[str, str]) -> None:
+    result = ok3d({**env, "FAKE_OPENSSL_FAIL": "1"}, "apply")
+    assert result.returncode == 1
+    assert "Unrecognized flag addext" in result.stderr
+    assert "Couldn't make the certificate authority" in result.stderr
+    assert sorted(os.listdir(Path(env["FAKE_DATA_ROOT"]) / "certs")) == []
+    assert not any(line.startswith("k3d cluster create") for line in calls(env))
+
+
 def test_a_new_certificate_authority_vouches_for_no_ip_address(linux: dict[str, str]) -> None:
     ok3d(linux, "install")
     make = next(line for line in calls(linux) if line.startswith("openssl req -x509"))
@@ -576,6 +707,21 @@ def test_install_replaces_links_in_tls_instead_of_following_them(linux: dict[str
     ok3d(linux, "install")
     assert victim.read_text() == "mine\n"
     assert not (tls / "dashboard.key").is_symlink()
+
+
+def test_install_replaces_a_link_to_a_folder_instead_of_moving_into_it(linux: dict[str, str],
+                                                                       tmp_path: Path) -> None:
+    # mv would move the new key into the folder the link names: anywhere you can write.
+    tls = Path(linux["FAKE_DATA_ROOT"]) / "dashboard" / "tls"
+    tls.mkdir(parents=True)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (tls / "dashboard.key").symlink_to(elsewhere)
+    (tls / "dashboard.crt").symlink_to(elsewhere)
+    assert ok3d(linux, "install").returncode == 0
+    assert list(elsewhere.iterdir()) == []
+    assert (tls / "dashboard.key").is_file() and not (tls / "dashboard.key").is_symlink()
+    assert (tls / "dashboard.crt").is_file() and not (tls / "dashboard.crt").is_symlink()
 
 
 def test_install_refuses_a_tls_folder_that_is_a_link(linux: dict[str, str], tmp_path: Path) -> None:
@@ -1016,6 +1162,17 @@ def test_a_failed_move_back_says_so(releases: dict[str, str]) -> None:
     assert result.returncode == 1
     assert "Moving back to 0.5.0 failed too" in result.stderr
     assert "Moving back to 0.5.0 failed too" in note(releases, "upgrade")["step"]
+
+
+def test_a_failed_install_says_whether_the_old_release_went_back_in(releases: dict[str, str]) -> None:
+    back = upgrade(releases | {"FAKE_NEW_FAIL": "install"}, "v0.5.1", "--yes")
+    assert back.returncode == 1
+    assert "the Dashboard are back on 0.5.0" in note(releases, "upgrade")["step"]
+    # Here the old release's install fails too (its Python check), so it mustn't say they're back.
+    neither = upgrade(releases | {"FAKE_NEW_FAIL": "install", "FAKE_PYTHON": "3.10"}, "v0.5.1", "--yes")
+    assert neither.returncode == 1
+    step = note(releases, "upgrade")["step"]
+    assert "installing 0.5.0 again failed too" in step and "are back on" not in step
 
 
 def sign(releases: dict[str, str], tmp_path: Path, name: str, target: str, version: str) -> str:

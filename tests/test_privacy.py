@@ -16,6 +16,8 @@ import re
 import subprocess
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parent.parent
 
 ALLOWED_NETWORKS = [
@@ -112,10 +114,12 @@ def test_nothing_from_the_private_names_list() -> None:
     try:
         result = subprocess.run(["sh", str(ROOT / "scripts" / "private-names.sh"), "patterns"], cwd=ROOT,
                                 capture_output=True, text=True, check=False)  # fmt: skip
-    except FileNotFoundError:  # no sh or git: nothing to check against
-        return
+    except FileNotFoundError:
+        pytest.skip("no sh to run scripts/private-names.sh with")
     if result.returncode == 3:
-        return  # CI and fresh clones have no list; the generic checks above still ran
+        # CI and fresh clones have no list; the generic checks above still ran. A skip, so
+        # pytest -ra says so, instead of a pass that checked nothing.
+        pytest.skip("no private-names list here (CI, or a fresh clone)")
     assert result.returncode == 0, f"scripts/private-names.sh patterns failed: {result.stderr}"
     patterns = [re.compile(line, re.IGNORECASE) for line in result.stdout.splitlines() if line]
     files = tracked_text_files()

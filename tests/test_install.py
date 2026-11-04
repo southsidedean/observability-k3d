@@ -22,6 +22,10 @@ case "$1" in
 status)
 	[ -z "${FAKE_DIRTY:-}" ] || echo " M ok3d"
 	;;
+describe)
+	[ -n "${FAKE_AT:-}" ] || exit 128
+	echo "$FAKE_AT"
+	;;
 ls-remote)
 	printf '%s\trefs/tags/%s\n' a v0.3.0 b v0.4.0 c v0.10.0 d v1.1.0-rc1 e v0.9.2 f v1.0.0
 	;;
@@ -30,7 +34,9 @@ clone)
 	mkdir -p "$last/.git"
 	cp "$FAKE_EXAMPLE" "$last/settings.example.yaml"
 	if [ -z "${FAKE_OLD:-}" ]; then
-		printf '#!/bin/sh\n# ok3d: a stand-in\ncase "$1" in\ninstall) echo "ran ok3d install in $(pwd)" ;;\nesac\n' >"$last/ok3d"
+		printf '#!/bin/sh\n# ok3d: a stand-in\ncase "$1" in\ninstall) echo "ran ok3d install in $(pwd)" ;;\n' >"$last/ok3d"
+		[ -z "${FAKE_UPGRADE:-}" ] || printf 'upgrade) ;;\n' >>"$last/ok3d"
+		printf 'esac\n' >>"$last/ok3d"
 	else
 		printf '#!/bin/sh\necho old\n' >"$last/ok3d"
 	fi
@@ -97,7 +103,27 @@ def test_it_brings_a_checkout_up_to_the_release(env: dict[str, str]) -> None:
     install({**env, "OK3D_VERSION": "v0.9.2"})
     log = calls(env)
     assert any("fetch --quiet https://github.com/southsidedean/observability-k3d.git refs/tags/v0.9.2:refs/tags/v0.9.2" in line for line in log)
-    assert any(line.endswith("checkout --quiet v0.9.2") for line in log)
+    assert any(line.endswith("checkout --quiet refs/tags/v0.9.2") for line in log)
+
+
+def test_a_checkout_that_can_upgrade_is_sent_to_ok3d_upgrade(env: dict[str, str]) -> None:
+    # The upgrade checks the tag's signature and makes the cluster again; this would do neither.
+    install({**env, "FAKE_UPGRADE": "1"})
+    before = len(calls(env))
+    result = install({**env, "FAKE_UPGRADE": "1", "FAKE_AT": "v0.9.2"})
+    assert result.returncode == 1
+    assert "run ./ok3d upgrade there" in result.stderr
+    assert not any(" fetch " in line or " checkout " in line for line in calls(env)[before:])
+    assert "ran ok3d install" not in result.stdout
+
+
+def test_running_it_again_on_the_same_release_installs_again(env: dict[str, str]) -> None:
+    install({**env, "FAKE_UPGRADE": "1"})
+    before = len(calls(env))
+    result = install({**env, "FAKE_UPGRADE": "1", "FAKE_AT": "v1.0.0"})
+    assert result.returncode == 0, result.stderr
+    assert "is on ok3d v1.0.0 already" in result.stdout and "ran ok3d install" in result.stdout
+    assert not any(" fetch " in line or " checkout " in line for line in calls(env)[before:])
 
 
 def test_it_says_how_to_make_the_data_root(env: dict[str, str]) -> None:

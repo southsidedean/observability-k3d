@@ -11,8 +11,9 @@
 #                     cluster, it says which and asks first; --yes skips the question.
 #   ./ok3d install    Set up the Dashboard: the helper as a service of yours, the Dashboard's
 #                     certificate, and its container, which keeps running when the cluster
-#                     doesn't. Prints its address, and its password on a terminal. Safe to
-#                     run again: it brings each part up to date. (Linux, with systemd.)
+#                     doesn't. Prints its address, and the first time, its password on a
+#                     terminal. Safe to run again: it brings each part up to date. (Linux,
+#                     with systemd.)
 #   ./ok3d delete     Delete the cluster. The data root stays, so `./ok3d apply` brings
 #                     everything back. Asks first; --yes skips the question.
 #   ./ok3d demo up    Start the simulated network: a few small containers that stand in for a
@@ -65,6 +66,12 @@ envfile=${OK3D_ENV:-$root/.env}
 # needs.
 min_k3d=5.9.0
 min_helm=3.0.0
+# The helper, apply_plan (for Check), and maintenance run on the server's python3, and use
+# what 3.12 brought (Ubuntu 24.04's). The helper's service runs the system's own,
+# /usr/bin/python3 (OK3D_HELPER_PYTHON names another, for a test), so install checks that
+# one, and Check the one on your PATH, which the others use.
+min_python=3.12
+helper_python=${OK3D_HELPER_PYTHON:-/usr/bin/python3}
 # The inotify limits two k3d clusters on one machine need (the defaults run out).
 min_instances=1024
 min_watches=1048576
@@ -120,7 +127,8 @@ fetch_dependencies() {
 }
 
 # The values files for the ok3d chart, as Helm arguments: your settings, then your devices
-# if you have a devices.yaml.
+# if you have a devices.yaml. These and chart_args's are split into words where they're used
+# (unquoted), so a space or a * in a path would break them: load_settings refuses those.
 values_args() {
 	printf '%s\n' --values "$settings"
 	[ ! -f "$devices" ] || printf '%s\n' --values "$devices"
@@ -146,6 +154,12 @@ protected_settings() {
 # Reads the settings ok3d needs as shell variables (CLUSTER_NAME, DATA_ROOT, and the rest),
 # from the chart's cluster-settings.yaml, rendered by Helm after the schema has checked them.
 load_settings() {
+	case "$root$settings$devices" in
+	*[[:space:]*?[]*)
+		echo "ok3d can't use a folder or file name with a space or * ? [ in it ($root, $settings, $devices). Move it, or set OK3D_SETTINGS and OK3D_DEVICES to plain paths." >&2
+		exit 1
+		;;
+	esac
 	if [ ! -f "$settings" ]; then
 		echo "No settings file at $settings. Copy settings.example.yaml to settings.yaml and fill it in." >&2
 		exit 1
@@ -183,20 +197,37 @@ env_value() {
 		echo "No .env at $envfile. Copy .env.example to .env, fill it in, and chmod 600 .env." >&2
 		exit 1
 	fi
-	# Any permission for the group or others (read, write, or run) is too much.
-	if [ -n "$(find "$envfile" \( -perm -040 -o -perm -020 -o -perm -010 -o -perm -004 -o -perm -002 -o -perm -001 \) -print)" ]; then
+	# Any permission for the group or others (read, write, or run) is too much. -L, so a .env
+	# that's a link is judged by the file it leads to, not by the link's own mode.
+	if [ -n "$(find -L "$envfile" \( -perm -040 -o -perm -020 -o -perm -010 -o -perm -004 -o -perm -002 -o -perm -001 \) -print)" ]; then
 		echo "$envfile can be read by others. Make it yours alone: chmod 600 $envfile" >&2
 		exit 1
 	fi
-	sed -n "s/^$1=//p" "$envfile" | tail -n 1 | sed "s/^[\"']//; s/[\"']\$//"
+	# Only one matching pair of quotes is taken off: KEY=abc' keeps its last character, and
+	# KEY="'abc'" keeps the inner pair (t ends the script after the first that's taken off).
+	sed -n "s/^$1=//p" "$envfile" | tail -n 1 | sed -e "s/^\"\(.*\)\"\$/\1/;t" -e "s/^'\(.*\)'\$/\1/"
+}
+
+# python_version [PYTHON]: that python's version (python3 on PATH by default) as MAJOR.MINOR,
+# or nothing without one.
+python_version() {
+	"${1:-python3}" -I -c 'import sys; print("%d.%d" % sys.version_info[:2])' 2>/dev/null || true
 }
 
 check_tools() {
-	for tool in docker k3d helm kubectl openssl; do
+	for tool in docker k3d helm kubectl openssl python3; do
 		if ! command -v "$tool" >/dev/null 2>&1; then
-			fail "$tool isn't installed (README.md, What you need, links to how to get it)"
+			fail "$tool isn't installed (README.md's What you need section says where to get it)"
 		fi
 	done
+	if command -v python3 >/dev/null 2>&1; then
+		have=$(python_version)
+		if [ -n "$have" ] && version_at_least "$have.0" "$min_python.0"; then
+			pass "Python $have"
+		else
+			fail "Python ${have:-of an unknown version}: ok3d needs $min_python or newer"
+		fi
+	fi
 	if command -v docker >/dev/null 2>&1; then
 		if docker info >/dev/null 2>&1; then
 			pass "Docker is running"
@@ -268,25 +299,32 @@ check_data_root() {
 	pass "the data root $DATA_ROOT"
 }
 
-# Each alert destination that's on needs its secret in .env.
-check_alert_secrets() {
+# The UniFi module and each alert destination that's on need their secret in .env. A .env
+# that's missing or that others can read is said once, instead of as each secret being empty.
+check_secrets() {
+	if [ "$MODULE_UNIFI" = true ] || [ "$ALERTS_NTFY" = true ] || [ "$ALERTS_EMAIL" = true ] ||
+		[ "$ALERTS_DEADMAN" = true ]; then
+		problem=$(env_value OK3D_NO_SUCH_KEY 2>&1 >/dev/null) || true
+		if [ -n "$problem" ]; then
+			fail "$problem"
+			return
+		fi
+	fi
 	need_secret() {
 		if [ -z "$(env_value "$2")" ]; then fail "$1 is on, but $2 in .env is empty"; fi
 	}
+	[ "$MODULE_UNIFI" != true ] || need_secret modules.unifi UNIFI_API_KEY
 	[ "$ALERTS_NTFY" != true ] || need_secret alerts.ntfy NTFY_TOPIC
 	[ "$ALERTS_NTFY" != true ] || [ "$ALERTS_NTFY_TOKEN" != true ] || need_secret alerts.ntfy.useToken NTFY_TOKEN
 	[ "$ALERTS_EMAIL" != true ] || need_secret alerts.email SMTP_PASSWORD
 	[ "$ALERTS_DEADMAN" != true ] || need_secret alerts.deadman DEADMAN_URL
-	if [ "$ALERTS_NTFY" != true ] && [ "$ALERTS_EMAIL" != true ]; then
-		warn "no alert destination is on: alerts won't reach you (docs/alerts.md sets one up)"
-	fi
 }
 
 cmd_check() {
 	load_settings
 	pass "the settings in $settings"
 	if [ -f "$devices" ]; then
-		# shellcheck disable=SC2046 # one argument per line, on purpose
+		# shellcheck disable=SC2046 # split into words, on purpose (values_args)
 		if check_sections devices "$devices" && helm template ok3d chart/ok3d $(values_args) >/dev/null; then
 			pass "the devices in $devices"
 		else
@@ -295,15 +333,15 @@ cmd_check() {
 	else
 		warn "no devices.yaml: ok3d will watch only itself (start from devices.example.yaml)"
 	fi
-	if [ "$MODULE_UNIFI" = true ] && [ -z "$(env_value UNIFI_API_KEY)" ]; then
-		fail "modules.unifi is on, but UNIFI_API_KEY in .env is empty"
-	fi
 	# Allowed, since some controllers only serve http, but the key then crosses the network as
 	# it is, where anything on it can read it.
 	case "$MODULE_UNIFI ${UNIFI_URL:-}" in
 	"true http://"*) warn "unifi.url is http://, so the UniFi API key goes over your network unencrypted: use https:// if the controller serves it" ;;
 	esac
-	check_alert_secrets
+	check_secrets
+	if [ "$ALERTS_NTFY" != true ] && [ "$ALERTS_EMAIL" != true ]; then
+		warn "no alert destination is on: alerts won't reach you (docs/alerts.md sets one up)"
+	fi
 	check_tools
 	check_linux_limits
 	check_data_root
@@ -323,12 +361,15 @@ make_certificate_authority() {
 	certs="$DATA_ROOT/certs"
 	install -d -m 0700 "$certs"
 	if [ -f "$certs/ca.crt" ] && [ -f "$certs/ca.key" ]; then
-		if openssl x509 -in "$certs/ca.crt" -noout -ext nameConstraints 2>/dev/null | grep -qF "DNS:.$DOMAIN"; then
+		# The whole entry, not part of one: an authority for noc.example.org can't vouch for
+		# noc.example, though one name holds the other.
+		if openssl x509 -in "$certs/ca.crt" -noout -ext nameConstraints 2>/dev/null |
+			sed 's/^[[:space:]]*//' | grep -qxF "DNS:.$DOMAIN"; then
 			echo "The certificate authority in $certs is kept."
 			return
 		fi
 		echo "The certificate authority in $certs is for another domain, not $DOMAIN. Move" >&2
-		echo "$certs aside (your devices will need to trust the new one), then run ./ok3d apply." >&2
+		echo "$certs aside (your devices will need to trust the new one), then run this again." >&2
 		exit 1
 	fi
 	echo "Making the certificate authority in $certs (for $DOMAIN and the names under it)."
@@ -340,8 +381,15 @@ make_certificate_authority() {
 			-addext "basicConstraints=critical,CA:TRUE,pathlen:0" \
 			-addext "keyUsage=critical,keyCertSign,cRLSign" \
 			-addext "nameConstraints=critical,permitted;DNS:$DOMAIN,permitted;DNS:.$DOMAIN,excluded;IP:0.0.0.0/0.0.0.0,excluded;IP:0:0:0:0:0:0:0:0/0:0:0:0:0:0:0:0" \
-			2>/dev/null
-	)
+			2>"$certs/openssl-error"
+	) || {
+		# openssl says why (one without -addext, say), which matters more than the usual noise.
+		cat "$certs/openssl-error" >&2
+		rm -f "$certs/openssl-error" "$certs/ca.key" "$certs/ca.crt"
+		echo "Couldn't make the certificate authority (openssl, above)." >&2
+		exit 1
+	}
+	rm -f "$certs/openssl-error"
 	chmod 0644 "$certs/ca.crt"
 }
 
@@ -491,7 +539,7 @@ deploy() {
 	password=$(admin_password)
 	load_admin_secret "$password"
 	echo "Deploying ok3d."
-	# shellcheck disable=SC2046 # chart_args prints one argument per line, on purpose
+	# shellcheck disable=SC2046 # split into words, on purpose (values_args)
 	helm upgrade --install ok3d chart/ok3d $(chart_args "$password") \
 		--kube-context "$context" --namespace monitoring \
 		--wait --timeout 30m
@@ -560,7 +608,7 @@ apply_plan() {
 		plan="state=unknown"  # the password is made by Apply, and the release depends on it
 		plan_why="there's no admin password yet"
 	else
-		# shellcheck disable=SC2046 # chart_args prints one argument per line, on purpose
+		# shellcheck disable=SC2046 # split into words, on purpose (values_args)
 		if helm upgrade ok3d chart/ok3d $(chart_args "$(admin_password)") --kube-context "$context" \
 			--namespace monitoring --dry-run=server >"$plan_work/next" 2>"$plan_work/errors" &&
 			plan=$(python3 -I src/ok3d/apply_plan.py "$plan_work/now" "$plan_work/next"); then
@@ -684,9 +732,11 @@ helper_note() {
 # The Dashboard's container can write dashboard/tls/, so nothing there is trusted: the key,
 # the request, and the extensions are made in a new folder inside certs/ (the authority's
 # own, which the container never sees), and only the finished certificate and key are moved
-# into tls/. A rename replaces a link there rather than following it. A certificate already
-# in tls/ is kept only if it's a plain file that this authority signed for this name and
-# that matches the key beside it.
+# into tls/. mv would follow a link there to a folder and move the files into that folder, so
+# the move is a rename(2), through tls/ opened without following a link: it replaces a link
+# of either kind, and the container can't swap tls/ for a link in between. A certificate
+# already in tls/ is kept only if it's a plain file that this authority signed for this name
+# and that matches the key beside it.
 make_dashboard_certificate() {
 	tls="$DATA_ROOT/dashboard/tls"
 	if [ -L "$tls" ] || { [ -e "$tls" ] && [ ! -d "$tls" ]; }; then
@@ -728,8 +778,16 @@ make_dashboard_certificate() {
 		echo "Couldn't issue the Dashboard's certificate." >&2
 		exit 1
 	}
-	mv -f "$work/dashboard.key" "$key"
-	mv -f "$work/dashboard.crt" "$crt"
+	python3 -I -c '
+import os, sys
+tls = os.open(sys.argv[1], os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+for name in ("dashboard.key", "dashboard.crt"):
+    os.replace(os.path.join(sys.argv[2], name), name, dst_dir_fd=tls)
+' "$tls" "$work" || {
+		rm -rf "$work"
+		echo "Couldn't put the Dashboard's certificate in $tls (above)." >&2
+		exit 1
+	}
 	rm -rf "$work"
 }
 
@@ -751,7 +809,7 @@ install_helper() {
 	# Each value with what sed would read as special (\, &, and the # it's split on) escaped.
 	esc() { printf '%s' "$1" | sed 's/[\\&#]/\\&/g'; }
 	sed -e "s#@DIR@#$(esc "$root")#g" -e "s#@DATA_ROOT@#$(esc "$DATA_ROOT")#g" -e "s#@PATH@#$(esc "$unit_path")#g" \
-		deploy/ok3d-helper.service >"$units/.ok3d-helper.service.tmp"
+		-e "s#@PYTHON@#$(esc "$helper_python")#g" deploy/ok3d-helper.service >"$units/.ok3d-helper.service.tmp"
 	mv -f "$units/.ok3d-helper.service.tmp" "$units/ok3d-helper.service"
 	systemctl --user daemon-reload
 	systemctl --user enable ok3d-helper >/dev/null 2>&1
@@ -792,6 +850,9 @@ start_dashboard() {
 			echo "There's no image $image here (OK3D_DASHBOARD_IMAGE)." >&2
 			exit 1
 		}
+	elif ! docker info >/dev/null 2>&1; then
+		echo "Docker isn't running, or you can't reach it (are you in the docker group?), so the Dashboard can't start." >&2
+		exit 1
 	elif ! docker pull --quiet "$image" >/dev/null; then
 		echo "Couldn't get $image; the Dashboard that's running is left as it was." >&2
 		exit 1
@@ -816,8 +877,13 @@ cmd_install() {
 		echo "Run ok3d as yourself, not as root: the helper runs as you, and what it keeps should be yours." >&2
 		exit 1
 	fi
+	have=$(python_version "$helper_python")
+	if [ -z "$have" ] || ! version_at_least "$have.0" "$min_python.0"; then
+		echo "The helper needs Python $min_python or newer at $helper_python, and that's ${have:-not there}. Install it (Ubuntu 24.04's is 3.12), then run this again." >&2
+		exit 1
+	fi
 	# The service file holds these paths, so they're kept to characters it reads plainly.
-	case "$root$DATA_ROOT" in
+	case "$root$DATA_ROOT$helper_python" in
 	*[!A-Za-z0-9._/-]*)
 		echo "The ok3d folder ($root) and the data root ($DATA_ROOT) may have only letters, digits, and . _ / -." >&2
 		exit 1
@@ -868,7 +934,7 @@ cmd_delete() {
 		fi
 		printf 'Delete the cluster %s? The data root %s stays. Type the cluster name to go ahead: ' \
 			"$CLUSTER_NAME" "$DATA_ROOT"
-		read -r answer
+		read -r answer || answer=""
 		if [ "$answer" != "$CLUSTER_NAME" ]; then
 			echo "Not deleted."
 			exit 1
@@ -888,7 +954,7 @@ demo_devices() {
 
 # demo_known NAME: whether NAME is one of the demo's devices.
 demo_known() {
-	demo_devices | awk '{print $1}' | grep -qx "$1"
+	demo_devices | awk '{print $1}' | grep -qxF -e "$1"
 }
 
 demo_up() {
@@ -969,7 +1035,7 @@ cmd_demo() {
 		fi
 		install -d -m 0755 "$state"
 		touch "$state/failed"
-		grep -vx "$device" "$state/failed" >"$state/failed.new" || true
+		grep -vxF -e "$device" "$state/failed" >"$state/failed.new" || true
 		if [ "$sub" = fail ]; then
 			echo "$device" >>"$state/failed.new"
 			docker stop "ok3d-demo-$device" >/dev/null
@@ -1235,15 +1301,22 @@ stopped() {
 	exit 1
 }
 
-# go_back WHY: moves the checkout back to where it was before the upgrade, then stops,
-# saying why, and whether the move back worked.
+# go_back WHY [WHY_IF_REINSTALL_FAILED]: moves the checkout back to where it was before the
+# upgrade, then stops, saying why, and whether the move back worked. With reinstall=yes it
+# installs the old release again too, and says the second reason when that fails.
 go_back() {
 	echo "Moving back to ok3d $from." | tee -a "$log"
 	if ! git -c advice.detachedHead=false checkout --quiet "$old" >>"$log" 2>&1; then
 		stopped "$1 Moving back to $from failed too (see the log), so this checkout is on $target: git -C $root checkout $old moves it back."
 	fi
 	if [ "$reinstall" = yes ]; then
-		./ok3d install 2>&1 9>&- | tee -a "$log" || true
+		# tee's status is the pipe's, so the install's own goes through a file.
+		{
+			status=0
+			./ok3d install 2>&1 9>&- || status=$?
+			echo "$status" >"$work/reinstalled"
+		} | tee -a "$log"
+		[ "$(cat "$work/reinstalled" 2>/dev/null)" = 0 ] || stopped "$2"
 	fi
 	stopped "$1"
 }
@@ -1397,7 +1470,7 @@ upgrade_to() {
 		echo "This moves ok3d to $target and makes the cluster $CLUSTER_NAME again: its pages are"
 		echo "down until it's done. Read $releases_page/$target first."
 		printf 'Type %s to go ahead: ' "$target"
-		read -r answer
+		read -r answer || answer=""
 		if [ "$answer" != "$target" ]; then
 			echo "Not upgraded."
 			exit 1
@@ -1432,7 +1505,8 @@ upgrade_to() {
 		go_back "$target's check found problems (above). Nothing else changed: read $target's Upgrading notes, fix what it says, and try again."
 	if ! step "Installing $target's helper and Dashboard" ./ok3d install; then
 		reinstall=yes
-		go_back "$target's install failed (above). This checkout, the helper, and the Dashboard are back on $from; the cluster wasn't touched."
+		go_back "$target's install failed (above). This checkout, the helper, and the Dashboard are back on $from; the cluster wasn't touched." \
+			"$target's install failed (above), and installing $from again failed too (see the log). This checkout is back on $from: ./ok3d install puts the helper and the Dashboard back. The cluster wasn't touched."
 	fi
 	step "Deleting the cluster" ./ok3d delete --yes ||
 		stopped "couldn't delete the cluster (above). ./ok3d apply brings it up to date with $target."

@@ -37,7 +37,7 @@ every page, and AI agents that explain what went wrong.
 - A Linux server with systemd and about 8 GB of memory free (more once agents arrive in 0.9),
   [Docker](https://docs.docker.com/engine/install/), [k3d](https://k3d.io) 5.9 or newer,
   [Helm](https://helm.sh), [`kubectl`](https://kubernetes.io/docs/tasks/tools/), `git`,
-  `curl`, `openssl`, and Python 3.
+  `curl`, `openssl`, and Python 3.12 or newer (Ubuntu 24.04's).
 - A folder for ok3d's data, on a filesystem of its own if you can.
 - A way to add a name to your local DNS: most routers can, and so can Pi-hole.
 

@@ -50,7 +50,7 @@ Follow these in order. Every step is safe to repeat.
    installing anything:
    - Linux with systemd, and you're running as an ordinary user, not root;
    - about 8 GB of memory free;
-   - `git`, `curl`, `openssl`, and Python 3 at `/usr/bin/python3`;
+   - `git`, `curl`, `openssl`, and Python 3.12 or newer at `/usr/bin/python3`;
    - Docker, running, and usable without `sudo` (`docker info` works);
    - [k3d](https://k3d.io) 5.9 or newer, [Helm](https://helm.sh), and `kubectl`;
    - the inotify limits: `/proc/sys/fs/inotify/max_user_instances` at least 1024, and

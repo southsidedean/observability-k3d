@@ -3,10 +3,16 @@
 #
 #   curl -fsSL https://raw.githubusercontent.com/southsidedean/observability-k3d/main/install.sh | sh
 #
-# It checks out the latest release of ok3d into ~/ok3d (or brings an existing checkout up to
-# that release), makes settings.yaml from settings.example.yaml if you have none, and runs
-# ./ok3d install, which starts the helper and the Dashboard and prints the Dashboard's address
-# (and its password, when the output is a terminal). Run it again to move to a newer release.
+# It checks out the latest release of ok3d into ~/ok3d, makes settings.yaml from
+# settings.example.yaml if you have none, and runs ./ok3d install, which starts the helper and
+# the Dashboard and prints the Dashboard's address (and its password, when the output is a
+# terminal). Run again on the same release, it installs that release again.
+#
+# To move to a newer release, use ./ok3d upgrade (or Upgrade now on the Dashboard's Home): it
+# checks that the release's tag is signed by a key in deploy/release-signers and makes the
+# cluster again, and this doesn't. So for a checkout that has ./ok3d upgrade (0.5.1 and newer),
+# this refuses to move it and says so. One from before 0.5.1 has no upgrade command, so this
+# brings it up to the release instead (docs/upgrading.md).
 #
 # What it reads, all optional:
 #   OK3D_DIR        where ok3d goes (default ~/ok3d)
@@ -39,7 +45,8 @@ done
 # The release: the newest vX.Y.Z tag (not a test tag like v1.2.3-rc1), unless you named one.
 version=${OK3D_VERSION:-}
 if [ -z "$version" ]; then
-	version=$(git ls-remote --tags --refs "$repo" 'v*' | sed -n 's#.*refs/tags/\(v[0-9]*\.[0-9]*\.[0-9]*\)$#\1#p' |
+	version=$(git ls-remote --tags --refs "$repo" 'v*' |
+		sed -n 's#.*refs/tags/\(v[0-9]\{1,6\}\.[0-9]\{1,6\}\.[0-9]\{1,6\}\)$#\1#p' |
 		sort -t. -k1.2,1n -k2,2n -k3,3n | tail -n 1)
 	[ -n "$version" ] || stop "Couldn't find ok3d's releases at $repo."
 fi
@@ -55,14 +62,25 @@ if [ -d "$dir/.git" ]; then
 	fi
 	[ -z "$(git -C "$dir" status --porcelain --untracked-files=no)" ] ||
 		stop "$dir has changes of yours to ok3d's own files. Commit or stash them first (your settings are safe: they're not ok3d's)."
-	say "Bringing $dir up to ok3d $version."
-	# From the same place the version came from, whatever the checkout's origin is.
-	if [ "$version" = main ]; then
-		git -C "$dir" fetch --quiet "$repo" main
+	at=$(git -C "$dir" describe --tags --exact-match HEAD 2>/dev/null || true)
+	if [ "$version" != main ] && [ "$at" = "$version" ]; then
+		say "$dir is on ok3d $version already."
+	elif [ "$version" != main ] && grep -q '^upgrade)' "$dir/ok3d"; then
+		stop "$dir has ok3d ${at:-from a branch}. To move it to $version, run ./ok3d upgrade there (or press
+Upgrade now on the Dashboard's Home): it checks the release's signature and makes the cluster
+again, and this installer doesn't."
 	else
-		git -C "$dir" fetch --quiet "$repo" "refs/tags/$version:refs/tags/$version"
+		say "Bringing $dir up to ok3d $version."
+		# From the same place the version came from, whatever the checkout's origin is.
+		if [ "$version" = main ]; then
+			git -C "$dir" fetch --quiet "$repo" main
+		else
+			git -C "$dir" fetch --quiet "$repo" "refs/tags/$version:refs/tags/$version"
+		fi
+		# The tag by its full name, so a branch called the same can't be taken instead.
+		git -C "$dir" -c advice.detachedHead=false checkout --quiet \
+			"$([ "$version" = main ] && echo FETCH_HEAD || echo "refs/tags/$version")"
 	fi
-	git -C "$dir" -c advice.detachedHead=false checkout --quiet "$([ "$version" = main ] && echo FETCH_HEAD || echo "$version")"
 elif [ -e "$dir" ]; then
 	stop "$dir is there already and isn't an ok3d checkout. Move it, or set OK3D_DIR to another folder."
 else

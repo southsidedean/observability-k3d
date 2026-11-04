@@ -40,6 +40,30 @@
   page.
 - The docs no longer say `behind` turns a failed switch into one alert: that comes in 0.7.
   Until then it's carried on the device's alerts. `protected` is marked as coming in 0.9.
+- Running the installer again no longer moves a checkout that has `./ok3d upgrade` (0.5.1
+  and newer) to a newer release, since that skipped the release's signature check and the
+  cluster's remake. It says to run `./ok3d upgrade` instead. Run again on the same release,
+  it installs that release again, as before.
+- `./ok3d install` can no longer be made to write the Dashboard's new certificate and key into
+  another folder: a link in `dashboard/tls/` (which the Dashboard's container can write) to a
+  folder is now replaced, not followed.
+- Keeping the certificate authority now needs its domain to match exactly. Changing the
+  domain to a shorter one it contains (noc.example from noc.example.org, say) used to keep an
+  authority that can't vouch for the new names.
+- Check looks for Python 3.12 or newer, and `./ok3d install` refuses unless the system's own
+  `/usr/bin/python3`, which the helper runs, is 3.12 or newer. ok3d also refuses a checkout,
+  settings, or devices path with a space or `*`, `?`, or `[` in it, which broke Check and
+  Apply.
+- When openssl can't make the certificate authority, Apply says why. A missing or unsafe
+  `.env` is said once among Check's problems, not as every secret being empty, and a `.env` that's a link is judged by
+  the file it leads to. A value in `.env` loses its quotes only when they match. Install says
+  when Docker isn't running.
+- When an upgrade's install fails and installing the old release again fails too, the
+  upgrade says so, instead of saying everything is back.
+- For contributors: an emptied or unreadable private-names list now stops a commit instead of
+  turning the check off, the privacy test shows as skipped without a list, an exact copy of
+  git's scissors line typed into a message hides nothing, and the tests can no longer act on
+  this repository when the pre-push hook runs them.
 
 ## 0.5.1 (2026-10-30)
 
