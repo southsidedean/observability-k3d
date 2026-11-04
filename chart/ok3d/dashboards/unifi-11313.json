@@ -81,25 +81,18 @@
       "type": "dashboards"
     },
     {
-      "icon": "question",
-      "tags": [],
-      "title": "Help",
-      "type": "link",
-      "url": "https://golift.io/unifi-poller/issues"
-    },
-    {
       "icon": "doc",
       "tags": [],
-      "title": "Wiki",
+      "title": "ok3d: UniFi",
       "type": "link",
-      "url": "https://golift.io/unifi-poller/wiki"
+      "url": "https://github.com/southsidedean/observability-k3d/blob/main/docs/devices.md#unifi"
     },
     {
-      "icon": "bolt",
+      "icon": "external link",
       "tags": [],
-      "title": "Discord",
+      "title": "unpoller",
       "type": "link",
-      "url": "https://discord.gg/KnyKYt2"
+      "url": "https://unpoller.com/"
     }
   ],
   "panels": [
@@ -393,7 +386,8 @@
       "timeFrom": null,
       "title": "Gateway Details",
       "transform": "table",
-      "type": "table-old"
+      "type": "table-old",
+      "description": "The gateway's model, address, firmware version, uptime, and bytes passed, as the controller reports them."
     },
     {
       "collapsed": true,
@@ -409,7 +403,7 @@
         {
           "cacheTimeout": null,
           "datasource": "${DS_PROMETHEUS}",
-          "description": "",
+          "description": "How long the gateway has been up.",
           "fieldConfig": {
             "defaults": {
               "custom": {},
@@ -483,7 +477,7 @@
         {
           "cacheTimeout": null,
           "datasource": "${DS_PROMETHEUS}",
-          "description": "",
+          "description": "Upload and download speeds from the gateway's last speed test.",
           "fieldConfig": {
             "defaults": {
               "custom": {},
@@ -565,7 +559,7 @@
         {
           "cacheTimeout": null,
           "datasource": "${DS_PROMETHEUS}",
-          "description": "",
+          "description": "How long the gateway's last speed test took, and the internet link's latency.",
           "fieldConfig": {
             "defaults": {
               "custom": {},
@@ -729,7 +723,8 @@
           "timeShift": null,
           "title": "",
           "transparent": true,
-          "type": "stat"
+          "type": "stat",
+          "description": "The share of the gateway's processor and memory in use."
         },
         {
           "cacheTimeout": null,
@@ -920,7 +915,8 @@
               "value": "null"
             }
           ],
-          "valueName": "current"
+          "valueName": "current",
+          "description": "Clients the controller counts as desktops."
         },
         {
           "cacheTimeout": null,
@@ -1014,7 +1010,8 @@
               "value": "null"
             }
           ],
-          "valueName": "current"
+          "valueName": "current",
+          "description": "Clients on the gateway's networks that aren't guests."
         },
         {
           "cacheTimeout": null,
@@ -1109,7 +1106,8 @@
               "value": "null"
             }
           ],
-          "valueName": "current"
+          "valueName": "current",
+          "description": "Clients the controller counts as mobile devices."
         },
         {
           "cacheTimeout": null,
@@ -1203,7 +1201,8 @@
               "value": "null"
             }
           ],
-          "valueName": "current"
+          "valueName": "current",
+          "description": "Clients on guest networks."
         },
         {
           "cacheTimeout": null,
@@ -1298,7 +1297,8 @@
               "value": "null"
             }
           ],
-          "valueName": "current"
+          "valueName": "current",
+          "description": "Clients the controller counts as handheld devices."
         },
         {
           "aliasColors": {
@@ -1430,7 +1430,8 @@
           "yaxis": {
             "align": false,
             "alignLevel": null
-          }
+          },
+          "description": "The gateway's load average: how many tasks are running or waiting for the processor, averaged over 1, 5, and 15 minutes."
         },
         {
           "aliasColors": {
@@ -1958,7 +1959,7 @@
           "dashes": false,
           "datasource": "${DS_PROMETHEUS}",
           "decimals": 2,
-          "description": "",
+          "description": "Multicast and broadcast packets a second on the gateway's internet port, sent and received.",
           "editable": true,
           "error": false,
           "fieldConfig": {
@@ -2234,7 +2235,7 @@
           "dashes": false,
           "datasource": "${DS_PROMETHEUS}",
           "decimals": null,
-          "description": "",
+          "description": "Packets a second the gateway dropped as they arrived on its LAN port.",
           "editable": true,
           "error": false,
           "fieldConfig": {
@@ -2457,11 +2458,6 @@
         "options": [
           {
             "selected": false,
-            "text": "30s",
-            "value": "30s"
-          },
-          {
-            "selected": false,
             "text": "1m",
             "value": "1m"
           },
@@ -2486,7 +2482,7 @@
             "value": "15m"
           }
         ],
-        "query": "30s,1m,2m,5m,10m,15m",
+        "query": "1m,2m,5m,10m,15m",
         "skipUrlSync": false,
         "type": "custom"
       }

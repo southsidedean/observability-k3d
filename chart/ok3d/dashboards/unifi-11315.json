@@ -73,25 +73,18 @@
       "type": "dashboards"
     },
     {
-      "icon": "question",
-      "tags": [],
-      "title": "Help",
-      "type": "link",
-      "url": "https://golift.io/unifi-poller/issues"
-    },
-    {
       "icon": "doc",
       "tags": [],
-      "title": "Wiki",
+      "title": "ok3d: UniFi",
       "type": "link",
-      "url": "https://golift.io/unifi-poller/wiki"
+      "url": "https://github.com/southsidedean/observability-k3d/blob/main/docs/devices.md#unifi"
     },
     {
-      "icon": "bolt",
+      "icon": "external link",
       "tags": [],
-      "title": "Discord",
+      "title": "unpoller",
       "type": "link",
-      "url": "https://discord.gg/KnyKYt2"
+      "url": "https://unpoller.com/"
     }
   ],
   "panels": [
@@ -1038,23 +1031,16 @@
       "type": "table-old"
     },
     {
-      "aliasColors": {},
-      "breakPoint": "50%",
       "cacheTimeout": null,
-      "combine": {
-        "label": "Others",
-        "threshold": 0
-      },
       "datasource": "${DS_PROMETHEUS}",
       "decimals": 0,
-      "description": "Visualize wireless channel usage w/ wired client counts.",
+      "description": "Clients on each wireless channel, and the wired clients.",
       "fieldConfig": {
         "defaults": {
           "custom": {}
         },
         "overrides": []
       },
-      "fontSize": "70%",
       "format": "short",
       "gridPos": {
         "h": 10,
@@ -1065,18 +1051,9 @@
       "hideTimeOverride": false,
       "id": 9,
       "interval": null,
-      "legend": {
-        "header": "",
-        "percentage": true,
-        "show": true,
-        "values": false
-      },
-      "legendType": "Right side",
       "links": [],
       "maxDataPoints": 3,
       "nullPointMode": "connected",
-      "pieType": "pie",
-      "strokeWidth": "2",
       "targets": [
         {
           "expr": "count by (hostname) (unpoller_client_uptime_seconds{site_name=~\"$Site\", name=~\"$Wired\", sw_name=~\"$Switch\"})",
@@ -1096,26 +1073,39 @@
       "title": "Clients / Channel",
       "transparent": true,
       "type": "piechart",
-      "valueName": "current"
+      "options": {
+        "pieType": "pie",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true,
+          "values": [
+            "percent"
+          ]
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
     },
     {
-      "aliasColors": {},
-      "breakPoint": "25%",
       "cacheTimeout": null,
-      "combine": {
-        "label": "Others",
-        "threshold": 0
-      },
       "datasource": "${DS_PROMETHEUS}",
       "decimals": 0,
-      "description": "Visualize how many clients are connected to which radios/APs.",
+      "description": "Clients by Wi-Fi protocol (ac, na, ng, and so on).",
       "fieldConfig": {
         "defaults": {
           "custom": {}
         },
         "overrides": []
       },
-      "fontSize": "70%",
       "format": "short",
       "gridPos": {
         "h": 10,
@@ -1126,18 +1116,9 @@
       "hideTimeOverride": false,
       "id": 11,
       "interval": null,
-      "legend": {
-        "header": "",
-        "percentage": true,
-        "show": true,
-        "values": false
-      },
-      "legendType": "Right side",
       "links": [],
       "maxDataPoints": 3,
       "nullPointMode": "connected",
-      "pieType": "pie",
-      "strokeWidth": "3",
       "targets": [
         {
           "expr": "count by (radio_proto) (unpoller_client_roam_count_total{site_name=~\"$Site\", name=~\"$Wireless\", ap_name=~\"$AP\"})",
@@ -1151,16 +1132,30 @@
       "title": "Clients / AP Radio",
       "transparent": true,
       "type": "piechart",
-      "valueName": "current"
+      "options": {
+        "pieType": "pie",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true,
+          "values": [
+            "percent"
+          ]
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
     },
     {
-      "aliasColors": {},
-      "breakPoint": "50%",
       "cacheTimeout": null,
-      "combine": {
-        "label": "Others",
-        "threshold": "0.01"
-      },
       "datasource": "${DS_PROMETHEUS}",
       "decimals": 0,
       "description": "This shows an OUI breakdown from Unifi's perspective. e = wired, w = wireless",
@@ -1170,7 +1165,6 @@
         },
         "overrides": []
       },
-      "fontSize": "70%",
       "format": "short",
       "gridPos": {
         "h": 10,
@@ -1181,21 +1175,9 @@
       "hideTimeOverride": false,
       "id": 12,
       "interval": null,
-      "legend": {
-        "header": "Count",
-        "percentage": true,
-        "percentageDecimals": 0,
-        "show": true,
-        "sort": "current",
-        "sortDesc": true,
-        "values": true
-      },
-      "legendType": "Right side",
       "links": [],
       "maxDataPoints": 3,
       "nullPointMode": "connected",
-      "pieType": "pie",
-      "strokeWidth": 1,
       "targets": [
         {
           "expr": "count by (oui) (unpoller_client_uptime_seconds{site_name=~\"$Site\", name=~\"$Wireless\", ap_name=~\"$AP\"})",
@@ -1218,7 +1200,30 @@
       "title": "Client MAC OUI Breakdown",
       "transparent": true,
       "type": "piechart",
-      "valueName": "current"
+      "options": {
+        "pieType": "pie",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true,
+          "values": [
+            "value",
+            "percent"
+          ],
+          "sortBy": "Value",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
     },
     {
       "aliasColors": {},
@@ -1226,7 +1231,7 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "${DS_PROMETHEUS}",
-      "description": "Bandwidth usage per wireless devices as reported by the UAPs. Rx is on the negative axis. Does not include Roku devices.",
+      "description": "Bytes a second to and from each wireless client, as the access points report them; received is on the negative axis. Cameras are left out (they have their own panel).",
       "fieldConfig": {
         "defaults": {
           "custom": {}
@@ -1342,7 +1347,7 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "${DS_PROMETHEUS}",
-      "description": "Wired TX / RX bytes per second (calculated in 30 second buckets). Rx is on the negative axis. Does not include Roku and camera devices. Unaffected by the AP setting.",
+      "description": "Bytes a second to and from each wired client; received is on the negative axis. Cameras are left out (they have their own panel). The AP choice doesn't change it.",
       "fieldConfig": {
         "defaults": {
           "custom": {}
@@ -1458,7 +1463,7 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "${DS_PROMETHEUS}",
-      "description": "Roku Devices TX / RX bytes per second. Rx is on the negative axis. My home network has a ton of Roku devices, so I broke them out separately. If you don't have Roku devices, or they have different names, you can edit the query to use a different name. e = wired, w = wireless",
+      "description": "Bytes a second to and from clients whose names start with roku; received is on the negative axis. Edit the query to choose other devices by name. e is wired, w is wireless.",
       "fieldConfig": {
         "defaults": {
           "custom": {}
@@ -1543,7 +1548,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Client Bandwidth / Echos & FireTVs",
+      "title": "Client Bandwidth / Roku",
       "tooltip": {
         "shared": true,
         "sort": 2,
@@ -1812,7 +1817,8 @@
       "yaxis": {
         "align": false,
         "alignLevel": null
-      }
+      },
+      "description": "Each wireless client's signal strength (RSSI), as its access point hears it: higher is stronger."
     },
     {
       "aliasColors": {},
@@ -1918,7 +1924,8 @@
       "yaxis": {
         "align": false,
         "alignLevel": null
-      }
+      },
+      "description": "Each wireless client's signal, in dBm: closer to 0 is stronger."
     },
     {
       "aliasColors": {},
@@ -2003,7 +2010,7 @@
       "yaxes": [
         {
           "decimals": 0,
-          "format": "dB",
+          "format": "dBm",
           "label": "Noise",
           "logBase": 1,
           "max": null,
@@ -2022,7 +2029,8 @@
       "yaxis": {
         "align": false,
         "alignLevel": null
-      }
+      },
+      "description": "The noise floor on the access point radio each wireless client is on, in dBm: lower (more negative) is better."
     },
     {
       "aliasColors": {},
@@ -2227,7 +2235,8 @@
       "yaxis": {
         "align": false,
         "alignLevel": null
-      }
+      },
+      "description": "How many times a second the access point tries to send to each wireless client."
     },
     {
       "aliasColors": {},
@@ -2434,7 +2443,8 @@
       "yaxis": {
         "align": false,
         "alignLevel": null
-      }
+      },
+      "description": "Frames a second sent again to each wireless client: many mean a poor link."
     },
     {
       "aliasColors": {},
@@ -2537,7 +2547,8 @@
       "yaxis": {
         "align": false,
         "alignLevel": null
-      }
+      },
+      "description": "The transmit power of the radio each wireless client is on, in dBm."
     },
     {
       "aliasColors": {},
@@ -2641,7 +2652,8 @@
       "yaxis": {
         "align": false,
         "alignLevel": null
-      }
+      },
+      "description": "How many problems the controller has found with each client's connection."
     },
     {
       "aliasColors": {},
@@ -2745,7 +2757,8 @@
       "yaxis": {
         "align": false,
         "alignLevel": null
-      }
+      },
+      "description": "The controller's score for each client's experience, from 0 to 100%."
     },
     {
       "aliasColors": {},
@@ -2848,7 +2861,8 @@
       "yaxis": {
         "align": false,
         "alignLevel": null
-      }
+      },
+      "description": "How many times each client has moved from one access point to another."
     },
     {
       "aliasColors": {},
@@ -2951,7 +2965,8 @@
       "yaxis": {
         "align": false,
         "alignLevel": null
-      }
+      },
+      "description": "The share of each wireless client's frames that arrive on the first try: UniFi's client connection quality."
     }
   ],
   "refresh": "1m",
@@ -3110,11 +3125,6 @@
         "options": [
           {
             "selected": false,
-            "text": "30s",
-            "value": "30s"
-          },
-          {
-            "selected": false,
             "text": "1m",
             "value": "1m"
           },
@@ -3149,7 +3159,7 @@
             "value": "1h"
           }
         ],
-        "query": "30s,1m,2m,5m,10m,15m,30m,1h",
+        "query": "1m,2m,5m,10m,15m,30m,1h",
         "skipUrlSync": false,
         "type": "custom"
       },

@@ -4,6 +4,13 @@ sidecar loads (it watches for the grafana_dashboard label). The UniFi ones are f
 Grafana.com (IDs 11311 to 11315), with their placeholder datasources (${DS_PROMETHEUS},
 ${DS_UNIFI_POLLER}) replaced by Prometheus's fixed uid. The Client DPI dashboard (11310) is
 left out: DPI is off, and it's the largest of them by far.
+
+ok3d changes the UniFi files in place. Every panel says what it shows; the clock panel, which
+needs a plugin ok3d's Grafana doesn't install, is gone; the pie charts use the core pie
+chart's settings; the site latency gauges' units and thresholds match their metrics; the
+links lead to ok3d's UniFi docs and unpoller's site; and there's no 30s smoothing, which at
+unpoller's 30-second scrape holds one sample and draws nothing. tests/test_dashboards.py
+checks them.
 */ -}}
 {{- range $path, $_ := .Files.Glob "dashboards/*.json" }}
 {{- $name := base $path | trimSuffix ".json" }}
