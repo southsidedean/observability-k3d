@@ -18,12 +18,6 @@
     },
     {
       "type": "panel",
-      "id": "grafana-clock-panel",
-      "name": "Clock",
-      "version": "1.1.1"
-    },
-    {
-      "type": "panel",
       "id": "piechart",
       "name": "Pie Chart",
       "version": "1.5.0"
@@ -93,25 +87,18 @@
       "type": "dashboards"
     },
     {
-      "icon": "question",
-      "tags": [],
-      "title": "Help",
-      "type": "link",
-      "url": "https://golift.io/unifi-poller/issues"
-    },
-    {
       "icon": "doc",
       "tags": [],
-      "title": "Wiki",
+      "title": "ok3d: UniFi",
       "type": "link",
-      "url": "https://golift.io/unifi-poller/wiki"
+      "url": "https://github.com/southsidedean/observability-k3d/blob/main/docs/devices.md#unifi"
     },
     {
-      "icon": "bolt",
+      "icon": "external link",
       "tags": [],
-      "title": "Discord",
+      "title": "unpoller",
       "type": "link",
-      "url": "https://discord.gg/KnyKYt2"
+      "url": "https://unpoller.com/"
     }
   ],
   "panels": [
@@ -135,30 +122,20 @@
       "mode": "html",
       "title": "",
       "transparent": true,
-      "type": "text"
+      "type": "text",
+      "description": "The dashboard's heading."
     },
     {
-      "aliasColors": {
-        "Channel 11": "#37872D",
-        "Channel 36": "#1F60C4",
-        "Channel 44": "#8F3BB8"
-      },
-      "breakPoint": "50%",
       "cacheTimeout": null,
-      "combine": {
-        "label": "Others",
-        "threshold": 0
-      },
       "datasource": "${DS_PROMETHEUS}",
       "decimals": 0,
-      "description": "Visualize wireless channel usage w/ wired client counts.",
+      "description": "Wireless clients on each channel.",
       "fieldConfig": {
         "defaults": {
           "custom": {}
         },
         "overrides": []
       },
-      "fontSize": "70%",
       "format": "short",
       "gridPos": {
         "h": 10,
@@ -169,19 +146,9 @@
       "hideTimeOverride": false,
       "id": 52,
       "interval": null,
-      "legend": {
-        "header": "",
-        "percentage": true,
-        "percentageDecimals": 0,
-        "show": true,
-        "values": false
-      },
-      "legendType": "Right side",
       "links": [],
       "maxDataPoints": 3,
       "nullPointMode": "connected",
-      "pieType": "pie",
-      "strokeWidth": "3",
       "targets": [
         {
           "expr": "count by (channel) (unpoller_client_roam_count_total{site_name=~\"$Site\", ap_name=~\"$AP\"})\n",
@@ -195,31 +162,39 @@
       "title": "Clients / Channel",
       "transparent": true,
       "type": "piechart",
-      "valueName": "current"
+      "options": {
+        "pieType": "pie",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true,
+          "values": [
+            "percent"
+          ]
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
     },
     {
-      "aliasColors": {
-        "ac": "#37872D",
-        "g": "#E0B400",
-        "na": "#1F60C4",
-        "ng": "#8F3BB8"
-      },
-      "breakPoint": "25%",
       "cacheTimeout": null,
-      "combine": {
-        "label": "Others",
-        "threshold": 0
-      },
       "datasource": "${DS_PROMETHEUS}",
       "decimals": 0,
-      "description": "Visualize how many clients are connected to which radios/APs.",
+      "description": "Clients on each radio type, as the controller describes it.",
       "fieldConfig": {
         "defaults": {
           "custom": {}
         },
         "overrides": []
       },
-      "fontSize": "70%",
       "format": "short",
       "gridPos": {
         "h": 10,
@@ -230,20 +205,9 @@
       "hideTimeOverride": false,
       "id": 54,
       "interval": null,
-      "legend": {
-        "header": "",
-        "percentage": true,
-        "show": true,
-        "sort": "current",
-        "sortDesc": true,
-        "values": true
-      },
-      "legendType": "Right side",
       "links": [],
       "maxDataPoints": 3,
       "nullPointMode": "connected",
-      "pieType": "pie",
-      "strokeWidth": "3",
       "targets": [
         {
           "expr": "count by (radio_desc) (unpoller_client_uptime_seconds{site_name=~\"$Site\", ap_name=~\"$AP\"})",
@@ -257,16 +221,33 @@
       "title": "Clients / AP Radio",
       "transparent": true,
       "type": "piechart",
-      "valueName": "current"
+      "options": {
+        "pieType": "pie",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true,
+          "values": [
+            "value",
+            "percent"
+          ],
+          "sortBy": "Value",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
     },
     {
-      "aliasColors": {},
-      "breakPoint": "50%",
       "cacheTimeout": null,
-      "combine": {
-        "label": "Others",
-        "threshold": "0.01"
-      },
       "datasource": "${DS_PROMETHEUS}",
       "decimals": 0,
       "description": "This shows an OUI breakdown from Unifi's perspective.",
@@ -276,7 +257,6 @@
         },
         "overrides": []
       },
-      "fontSize": "70%",
       "format": "short",
       "gridPos": {
         "h": 10,
@@ -287,20 +267,9 @@
       "hideTimeOverride": false,
       "id": 56,
       "interval": null,
-      "legend": {
-        "header": "Count",
-        "percentage": true,
-        "percentageDecimals": 0,
-        "show": true,
-        "sortDesc": false,
-        "values": true
-      },
-      "legendType": "Right side",
       "links": [],
       "maxDataPoints": 3,
       "nullPointMode": "connected",
-      "pieType": "pie",
-      "strokeWidth": 1,
       "targets": [
         {
           "expr": "count by (oui) (unpoller_client_uptime_seconds{site_name=~\"$Site\", ap_name=~\"$AP\"})",
@@ -314,7 +283,28 @@
       "title": "Client / MAC OUI",
       "transparent": true,
       "type": "piechart",
-      "valueName": "current"
+      "options": {
+        "pieType": "pie",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true,
+          "values": [
+            "value",
+            "percent"
+          ]
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
     },
     {
       "cacheTimeout": null,
@@ -326,7 +316,7 @@
         "rgba(50, 172, 45, 0.97)"
       ],
       "datasource": "${DS_PROMETHEUS}",
-      "description": "",
+      "description": "Clients on the chosen access points that aren't guests.",
       "editable": true,
       "error": false,
       "fieldConfig": {
@@ -344,7 +334,7 @@
         "thresholdMarkers": true
       },
       "gridPos": {
-        "h": 4,
+        "h": 7,
         "w": 2,
         "x": 0,
         "y": 3
@@ -410,7 +400,7 @@
         "rgba(50, 172, 45, 0.97)"
       ],
       "datasource": "${DS_PROMETHEUS}",
-      "description": "",
+      "description": "Clients on the chosen access points' guest networks.",
       "editable": true,
       "error": false,
       "fieldConfig": {
@@ -428,7 +418,7 @@
         "thresholdMarkers": true
       },
       "gridPos": {
-        "h": 4,
+        "h": 7,
         "w": 2,
         "x": 2,
         "y": 3
@@ -483,82 +473,6 @@
       "valueFontSize": "110%",
       "valueMaps": [],
       "valueName": "current"
-    },
-    {
-      "bgColor": "#3f2b5b",
-      "clockType": "12 hour",
-      "countdownSettings": {
-        "customFormat": null,
-        "endCountdownTime": "2018-04-29T21:47:00.000Z",
-        "endText": "00:00:00"
-      },
-      "datasource": "${DS_UNIFI_POLLER}",
-      "dateSettings": {
-        "dateFormat": "YYYY-MM-DD",
-        "fontSize": "12px",
-        "fontWeight": "bold",
-        "showDate": true
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 3,
-        "w": 4,
-        "x": 0,
-        "y": 7
-      },
-      "id": 32,
-      "links": [],
-      "mode": "time",
-      "offsetFromUtc": null,
-      "offsetFromUtcMinutes": null,
-      "options": {
-        "bgColor": "",
-        "clockType": "24 hour",
-        "countdownSettings": {
-          "endCountdownTime": "2020-06-14T00:36:42-07:00",
-          "endText": "00:00:00"
-        },
-        "dateSettings": {
-          "dateFormat": "YYYY-MM-DD",
-          "fontSize": "20px",
-          "fontWeight": "normal",
-          "showDate": false
-        },
-        "mode": "time",
-        "timeSettings": {
-          "fontSize": "12px",
-          "fontWeight": "normal"
-        },
-        "timezone": "",
-        "timezoneSettings": {
-          "fontSize": "12px",
-          "fontWeight": "normal",
-          "showTimezone": false,
-          "zoneFormat": "offsetAbbv"
-        }
-      },
-      "refreshSettings": {
-        "syncWithDashboard": false
-      },
-      "timeSettings": {
-        "customFormat": "HH:mm:ss",
-        "fontSize": "30px",
-        "fontWeight": "normal"
-      },
-      "timezone": null,
-      "timezoneSettings": {
-        "fontSize": "12px",
-        "fontWeight": "normal",
-        "showTimezone": false,
-        "zoneFormat": "offsetAbbv"
-      },
-      "title": "Now",
-      "type": "grafana-clock-panel"
     },
     {
       "columns": [],
@@ -852,7 +766,8 @@
       "timeFrom": null,
       "title": "Access Point Details",
       "transform": "table",
-      "type": "table-old"
+      "type": "table-old",
+      "description": "Each access point's model, address, firmware version, uptime, and bytes passed, as the controller reports them."
     },
     {
       "columns": [],
@@ -1411,7 +1326,7 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "${DS_PROMETHEUS}",
-      "description": "",
+      "description": "The share of each access point's processor in use.",
       "fieldConfig": {
         "defaults": {
           "custom": {}
@@ -1514,7 +1429,7 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "${DS_PROMETHEUS}",
-      "description": "",
+      "description": "The share of each access point's memory in use.",
       "fieldConfig": {
         "defaults": {
           "custom": {}
@@ -1735,7 +1650,8 @@
       "yaxis": {
         "align": false,
         "alignLevel": null
-      }
+      },
+      "description": "Each access point's load average: how many tasks are running or waiting for the processor, averaged over 1, 5, and 15 minutes."
     },
     {
       "aliasColors": {},
@@ -1842,7 +1758,8 @@
       "yaxis": {
         "align": false,
         "alignLevel": null
-      }
+      },
+      "description": "Clients on each access point, with users and guests as separate lines."
     },
     {
       "aliasColors": {},
@@ -2079,7 +1996,8 @@
       "yaxis": {
         "align": false,
         "alignLevel": null
-      }
+      },
+      "description": "Clients on each access point, by band, with users and guests apart."
     },
     {
       "aliasColors": {},
@@ -2183,7 +2101,8 @@
       "yaxis": {
         "align": false,
         "alignLevel": null
-      }
+      },
+      "description": "The average signal of each access point's clients, in dBm: closer to 0 is stronger."
     },
     {
       "aliasColors": {},
@@ -2268,7 +2187,7 @@
       "yaxes": [
         {
           "decimals": 0,
-          "format": "dBm",
+          "format": "dB",
           "label": "Average Client RSSI",
           "logBase": 1,
           "max": null,
@@ -2287,7 +2206,8 @@
       "yaxis": {
         "align": false,
         "alignLevel": null
-      }
+      },
+      "description": "The average signal strength (RSSI) each access point hears from its clients, by radio: higher is stronger."
     },
     {
       "aliasColors": {},
@@ -2390,7 +2310,8 @@
       "yaxis": {
         "align": false,
         "alignLevel": null
-      }
+      },
+      "description": "The share of frames that reach each client on the first try, by network, on the 5 GHz band: UniFi's client connection quality."
     },
     {
       "aliasColors": {},
@@ -2494,7 +2415,8 @@
       "yaxis": {
         "align": false,
         "alignLevel": null
-      }
+      },
+      "description": "The share of frames that reach each client on the first try, by network, on the 2.4 GHz band: UniFi's client connection quality."
     },
     {
       "aliasColors": {},
@@ -2610,7 +2532,8 @@
       "yaxis": {
         "align": false,
         "alignLevel": null
-      }
+      },
+      "description": "How busy the 5 GHz channel is around each access point, receiving and transmitting."
     },
     {
       "aliasColors": {},
@@ -3087,7 +3010,7 @@
       "dashes": false,
       "datasource": "${DS_PROMETHEUS}",
       "decimals": 0,
-      "description": "PPS on the ng band calculated in 30 second buckets. In is on the negative Axis.",
+      "description": "Packets a second on the access points' 2.4 GHz radios; received is on the negative axis.",
       "editable": true,
       "error": false,
       "fieldConfig": {
@@ -3601,11 +3524,6 @@
         "options": [
           {
             "selected": false,
-            "text": "30s",
-            "value": "30s"
-          },
-          {
-            "selected": false,
             "text": "1m",
             "value": "1m"
           },
@@ -3640,7 +3558,7 @@
             "value": "1h"
           }
         ],
-        "query": "30s,1m,2m,5m,10m,15m,30m,1h",
+        "query": "1m,2m,5m,10m,15m,30m,1h",
         "skipUrlSync": false,
         "type": "custom"
       }

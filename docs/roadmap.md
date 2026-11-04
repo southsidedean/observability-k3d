@@ -77,6 +77,7 @@ that upgrades from the Dashboard alone. 0.6.0, logs and changes, comes next.
 | Fixes from the 0.5.2 review: the charts and alerts | Done ([#53](https://github.com/southsidedean/observability-k3d/pull/53)) |
 | Fixes from the 0.5.2 review: the shell, the installer, and the git hooks | Done ([#54](https://github.com/southsidedean/observability-k3d/pull/54)) |
 | Fixes from the 0.5.2 review: the Dashboard, the helper, and maintenance windows | Done ([#55](https://github.com/southsidedean/observability-k3d/pull/55)) |
+| Fixes from the 0.5.2 review: the UniFi dashboards' panel descriptions, plugins, and upstream text | Done ([#58](https://github.com/southsidedean/observability-k3d/pull/58)) |
 | Fixes from the 0.5.2 review: the docs, `PLAN.md`, and `SECURITY.md` | Done ([#57](https://github.com/southsidedean/observability-k3d/pull/57)) |
 | Release 0.5.2, tested with an upgrade from 0.5.1 from the Dashboard alone | Planned |
 

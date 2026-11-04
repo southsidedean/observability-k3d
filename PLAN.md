@@ -220,7 +220,7 @@ all of them, so nothing is skipped there).
 Built so far (0.5.2):
 
 - lint and security checks, without the JSON check, hadolint, the color check, or axe;
-- pytest, which also holds the privacy and docs tests;
+- pytest, which also holds the privacy, docs, and UniFi dashboard tests;
 - charts, which also runs the Grafana dashboards' datasource tests and the promtool and amtool
   tests, without helm-unittest or the memory budget;
 - the Dashboard's image.
@@ -236,7 +236,7 @@ The jobs:
 | **pytest** | On the oldest supported Python, the newest, and macOS, with a one-minute limit per test. The helper refuses every bad request, and Hypothesis fuzzes it with malformed, oversized, stale, and replayed requests, path tricks, and unknown choices. The MCP tools mark text from devices, logs, and Wi-Fi network names as untrusted, and never let an address or a key into an answer. Planted instructions are kept as test fixtures. The action runner never touches a protected device, never runs without approval, keeps its rate limits, and refuses an expired approval. The Dashboard keeps secrets write-only, won't Apply before Check, and every setup card makes valid settings. Tests for real-world failure, as kia has: settings files that are hand-edited, cut short by a full disk, or the wrong shape; one broken exporter or device not stopping the rest; the Dashboard saving while an Apply runs. An offline fence makes sure no test reaches the internet. |
 | **charts** | `helm lint` and a full render with the example settings and every combination of setup card and module. The schema refuses what it should: an image tagged `latest`, a misspelled setting, an action whose module is off, an unknown device role. helm-unittest keeps the rules the rendered charts must hold. Every pod is hardened (non-root, read-only root filesystem, no privilege escalation, capabilities dropped). The NetworkPolicies and AuthorizationPolicies are in place. Agents have read-only RBAC and no Secrets. Write access is given only to the actions that are switched on. Every image is pinned. kubeconform checks every object in strict mode against the cluster's Kubernetes version, with schemas for the Prometheus, Istio, cert-manager, and Gateway API kinds. A memory budget: the memory requests in each setup card's render must fit what the docs say that card needs. |
 | **alerts** | `promtool check rules`, and a `promtool test rules` unit test for every rule. Every metric a rule or a dashboard uses must appear in the recorded `/metrics` of the exporter it comes from, so a renamed metric fails here instead of silently never firing. `amtool check-config`, and tests of the routing: critical alerts reach you, the Watchdog reaches the dead man's switch, and maintenance windows and the network's layout hold back what they should. Loki's rules go through Loki's own checker. |
-| **dashboards** | Grafana's dashboard-linter. Every panel uses a datasource that exists, with no `${DS_*}` left behind. The vendored dashboards' local patches still apply. |
+| **dashboards** | Grafana's dashboard-linter. Every panel uses a datasource that exists, with no `${DS_*}` left behind. ok3d's changes to the vendored dashboards, made in place, still hold (`tests/test_dashboards.py`). |
 | **images** | Both images built for amd64 and arm64 and started once (`--version`). Trivy fails on any fixable high or critical CVE (exceptions in `.trivyignore`, each with its reason). Grype gives a second opinion, as a report only. |
 | **docs** | Every link leads somewhere, the house style holds, `docs/settings.md` matches what the schema generates, every alert has a runbook, every `.env` key is in `.env.example` and the docs, and every setup card is documented. The install doc's commands are pulled out and run by the smoke test, so the doc can't drift from what works. |
 | **end-to-end smoke test** | A k3d cluster on the runner, with agents off to fit the runner's memory. The installer runs in CI mode, then Check and Apply go through the Dashboard's own API, the way a browser would. Then a planned `ok3d test`: the targets are up, a test rule fires and reaches a test receiver, syslog arrives in both formats over UDP and TCP, the gateway serves TLS and redirects to sign-in, a NetworkPolicy blocks what it should, and the data survives the cluster being recreated. Secrets used in the test are canaries, and the run fails if any of them shows up in a log, a trace, a page, or an alert. The upgrade test (install the previous release, then upgrade) runs on the test VM before each release, not in CI. |
@@ -250,7 +250,7 @@ The other workflows:
 | `dependency review` | every pull request | Blocks a pull request that adds a dependency with a known vulnerability or an incompatible license. |
 | `scorecard` | weekly | OpenSSF Scorecard: how well the repository itself is protected (pinned actions, branch protection, token permissions, signed releases), in the Security tab. |
 | `mutation` | weekly (not built yet) | Mutation testing (mutmut) on the code that guards something: the helper, the action runner's guardrails, and the MCP tools' handling of untrusted text. If a change to that code gets past every test, a test is missing. |
-| `upstream` | weekly (not built yet) | Whether the vendored dashboards have newer revisions. Opens an issue, never a change. |
+| `upstream` | weekly (not built yet) | Whether the vendored dashboards have newer revisions. Opens an issue, never a change: taking a new revision means making ok3d's changes to it again. |
 | `images` and `image scan` | from 0.5.0 | Build the Dashboard's image (and the in-cluster one, once the first tool that runs in the cluster arrives), scan with Trivy before pushing, push, attach an SBOM and a provenance attestation, and scan the published images weekly. |
 | `release` | a merge to `main` that changes the version | Tags the release and publishes its notes from `CHANGELOG.md`. Not built yet: releases are made by hand (CONTRIBUTING.md). A workflow can't sign the tag without a signing key in CI, which would be a decision of its own. |
 
@@ -578,8 +578,9 @@ on to 0.6.0.dev0 only in the pull request that brings 0.6's first part.
 ### 0.7: The NOC
 
 - The NOC board: every device as a tile (up, degraded, down), the internet link, active
-  alerts, maintenance windows, and recent changes. The UniFi dashboards vendored at a
-  pinned revision, with local edits kept as patches applied on top.
+  alerts, maintenance windows, and recent changes. The UniFi dashboards are vendored at a
+  pinned revision, with ok3d's changes made in place (decided in 0.5.2, instead of patches
+  applied on top) and checked by `tests/test_dashboards.py`.
 - Alerts that know the layout, built from UniFi's uplinks and `devices.yaml`.
 - Alerts on targets for the internet link, DNS, Wi-Fi, and the NOC's pages.
 - Your internet link: the outage record, the speed test, and the monthly report.

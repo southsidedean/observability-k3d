@@ -79,25 +79,18 @@
       "type": "dashboards"
     },
     {
-      "icon": "question",
-      "tags": [],
-      "title": "Help",
-      "type": "link",
-      "url": "https://golift.io/unifi-poller/issues"
-    },
-    {
       "icon": "doc",
       "tags": [],
-      "title": "Wiki",
+      "title": "ok3d: UniFi",
       "type": "link",
-      "url": "https://golift.io/unifi-poller/wiki"
+      "url": "https://github.com/southsidedean/observability-k3d/blob/main/docs/devices.md#unifi"
     },
     {
-      "icon": "bolt",
+      "icon": "external link",
       "tags": [],
-      "title": "Discord",
+      "title": "unpoller",
       "type": "link",
-      "url": "https://discord.gg/KnyKYt2"
+      "url": "https://unpoller.com/"
     }
   ],
   "panels": [
@@ -187,7 +180,8 @@
           "value": "null"
         }
       ],
-      "valueName": "current"
+      "valueName": "current",
+      "description": "How many UniFi switches there are, across every site the controller has."
     },
     {
       "cacheTimeout": null,
@@ -275,7 +269,8 @@
           "value": "null"
         }
       ],
-      "valueName": "current"
+      "valueName": "current",
+      "description": "How many UniFi access points there are, across every site the controller has."
     },
     {
       "cacheTimeout": null,
@@ -363,7 +358,8 @@
           "value": "null"
         }
       ],
-      "valueName": "current"
+      "valueName": "current",
+      "description": "How many UniFi gateways there are, across every site the controller has."
     },
     {
       "cacheTimeout": null,
@@ -451,10 +447,11 @@
           "value": "null"
         }
       ],
-      "valueName": "current"
+      "valueName": "current",
+      "description": "How many clients are connected now, across every site the controller has."
     },
     {
-      "content": "Each site contains 5 subsystems: wan, lan, wlan, www, vpn. Each subsystem contains data specific to that system. \nAll subsystems except vpn have data rate. VPN has data transfer though.\nThere's not a ton of juicy info here, and most of it can be gleaned on other the dashboards.\nThe row below is purposely collapsed because some installationd have hundreds of sites. \nLoading them all at once is often not possible.\n",
+      "content": "Each site reports five subsystems: wan, lan, wlan, www, and vpn. All but vpn report a data rate; vpn reports data transferred. Most of this is also on the other UniFi dashboards.\nThe row below starts collapsed, since some controllers have hundreds of sites, too many to load at once.\n",
       "gridPos": {
         "h": 4,
         "w": 12,
@@ -468,7 +465,8 @@
       "timeFrom": null,
       "timeShift": null,
       "title": "Information",
-      "type": "text"
+      "type": "text",
+      "description": "What a UniFi site reports, and why the row below starts collapsed."
     },
     {
       "collapsed": true,
@@ -573,7 +571,8 @@
               "value": "null"
             }
           ],
-          "valueName": "current"
+          "valueName": "current",
+          "description": "How long the site's internet link has been up, as the controller reports it."
         },
         {
           "aliasColors": {},
@@ -743,7 +742,6 @@
                 "color": {
                   "mode": "thresholds"
                 },
-                "decimals": 0,
                 "mappings": [
                   {
                     "id": 0,
@@ -753,8 +751,8 @@
                     "value": "null"
                   }
                 ],
-                "max": 400,
-                "min": 10,
+                "max": 0.4,
+                "min": 0,
                 "nullValueMode": "connected",
                 "thresholds": {
                   "mode": "absolute",
@@ -765,11 +763,11 @@
                     },
                     {
                       "color": "rgba(237, 129, 40, 0.89)",
-                      "value": 100
+                      "value": 0.1
                     },
                     {
                       "color": "#d44a3a",
-                      "value": 200
+                      "value": 0.2
                     }
                   ]
                 },
@@ -802,7 +800,8 @@
           "timeFrom": null,
           "timeShift": null,
           "title": "",
-          "type": "gauge"
+          "type": "gauge",
+          "description": "The internet link's latency, as the UniFi controller measures it: green under 100 ms, orange to 200 ms, red above."
         },
         {
           "cacheTimeout": null,
@@ -854,7 +853,7 @@
                   ]
                 },
                 "title": "Speed Test Ping",
-                "unit": "s"
+                "unit": "ms"
               },
               "overrides": [],
               "values": false
@@ -881,7 +880,8 @@
           "timeFrom": null,
           "timeShift": null,
           "title": "",
-          "type": "gauge"
+          "type": "gauge",
+          "description": "The ping time in the controller's last speed test: green under 50 ms, orange to 100 ms, red above."
         },
         {
           "aliasColors": {},
@@ -1006,7 +1006,7 @@
           "dashes": false,
           "datasource": "${DS_PROMETHEUS}",
           "decimals": 0,
-          "description": "This graphs shows clients connected to the site.",
+          "description": "Clients at the site, by subsystem: users, guests, VPN users, and all stations.",
           "fill": 0,
           "fillGradient": 0,
           "gridPos": {
@@ -1135,7 +1135,7 @@
           "dashes": false,
           "datasource": "${DS_PROMETHEUS}",
           "decimals": 0,
-          "description": "This graphs shows clients connected to the site.",
+          "description": "Bytes a second VPN users send and receive; received is on the negative axis.",
           "fill": 0,
           "fillGradient": 0,
           "gridPos": {
@@ -1250,7 +1250,7 @@
           "dashes": false,
           "datasource": "${DS_PROMETHEUS}",
           "decimals": 0,
-          "description": "This graph only works if DPI is enabled on the controller and DPI collection is enabled in UniFi Poller. Rx is on the negative axis.",
+          "description": "Empty in ok3d, which has unpoller leave DPI out. With DPI collected, it shows data by category; received is on the negative axis.",
           "fill": 0,
           "fillGradient": 0,
           "gridPos": {
@@ -1457,11 +1457,6 @@
         "name": "Smooth",
         "options": [
           {
-            "selected": false,
-            "text": "30s",
-            "value": "30s"
-          },
-          {
             "selected": true,
             "text": "1m",
             "value": "1m"
@@ -1482,7 +1477,7 @@
             "value": "10m"
           }
         ],
-        "query": "30s,1m,2m,5m,10m",
+        "query": "1m,2m,5m,10m",
         "skipUrlSync": false,
         "type": "custom"
       }

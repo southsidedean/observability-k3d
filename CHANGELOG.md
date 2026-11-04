@@ -92,6 +92,12 @@
 - The simulated network's devices answer a POST whose length is negative or not a number
   with an error, where one used to stop the handler or wait for the client to hang up, and
   drop a client that goes quiet for 10 seconds.
+- The UniFi dashboards: every panel says what it shows when you hover over its title. The
+  clock panel, which needed a plugin ok3d's Grafana doesn't have, is gone, and the pie charts
+  use Grafana's own pie chart settings. The site latency gauge's colors match its units, and
+  the speed test ping reads in milliseconds. The links lead to ok3d's UniFi docs and
+  unpoller's site, the 30-second smoothing (which drew nothing) is gone, and the upstream
+  author's notes are rewritten for ok3d.
 - The docs, from the review: the README's commands clone the latest release instead of
   `main`, and name Helm 3.13. Upgrading from 0.5.0 or 0.4 now deletes the cluster and backs
   up the data root before Apply. `SECURITY.md` says which protections hold now and which
