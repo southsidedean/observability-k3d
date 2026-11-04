@@ -76,9 +76,10 @@ helper_python=${OK3D_HELPER_PYTHON:-/usr/bin/python3}
 # The inotify limits two k3d clusters on one machine need (the defaults run out).
 min_instances=1024
 min_watches=1048576
-# Free memory below this gets a warning: the whole stack needs about 11 GiB, and about 7 with
-# agents off (PLAN.md, "The host").
-warn_memory_gib=7
+# Free memory below this gets a warning. ok3d 0.5 uses about 2 GiB (measured on the test VM:
+# the cluster's node 1.9 GiB, Grafana 420 MiB of it); 4 leaves room for history and UniFi.
+# Logs, the mesh, and agents need more as they come (PLAN.md, "The host").
+warn_memory_gib=4
 
 # Where releases come from, for ./ok3d upgrade. OK3D_REPO names another, for a test; the
 # helper never passes it on.
@@ -274,7 +275,7 @@ check_linux_limits() {
 		if [ "$available_gib" -ge "$warn_memory_gib" ]; then
 			pass "$available_gib GiB of memory free"
 		else
-			warn "$available_gib GiB of memory free: the whole stack needs about 11 GiB (7 with agents off)"
+			warn "$available_gib GiB of memory free: ok3d needs about $warn_memory_gib GiB, to have room to spare"
 		fi
 	fi
 }

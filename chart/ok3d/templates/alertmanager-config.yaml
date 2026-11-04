@@ -32,7 +32,7 @@ tests/test_alertmanager.py checks the routing with amtool.
     "repeat_interval" $a.repeatWarning
     "routes" (list
       (dict "receiver" (ternary "deadman" "nobody" $a.deadman.enabled) "matchers" (list "alertname = \"Watchdog\"")
-        "group_wait" "0s" "group_interval" "1m" "repeat_interval" "1m")
+        "group_wait" "0s" "group_interval" "1m" "repeat_interval" "50s")
       (dict "receiver" "nobody" "matchers" (list "alertname = \"InfoInhibitor\""))
       (dict "receiver" "nobody" "matchers" (list "severity = \"info\""))
       (dict "receiver" "you" "matchers" (list "severity = \"critical\"") "repeat_interval" $a.repeatCritical)))

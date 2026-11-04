@@ -389,6 +389,13 @@ def test_the_gateway_runs_hardened_with_its_password_only_from_the_secret() -> N
     assert "type: LoadBalancer" in service
 
 
+def test_the_admin_logins_hash_is_cheap_to_check() -> None:
+    # The gateway checks it on every request: at bcrypt cost 12, each took about 400 ms on the
+    # test VM, for every request a Prometheus or Alertmanager page makes.
+    gateway = next(d for d in documents(render(), "Deployment") if "name: ok3d-gateway" in d)
+    assert re.search(r"htpasswd -niB -C 5 ", gateway)
+
+
 def test_dashboards_have_their_datasources_and_dpi_stays_out() -> None:
     dashboards = [d for d in documents(render(), "ConfigMap") if 'grafana_dashboard: "1"' in d and "ok3d-dashboard-" in d]
     names = sorted(d.split("name: ok3d-dashboard-", 1)[1].split("\n", 1)[0] for d in dashboards)

@@ -116,13 +116,16 @@ spec:
           type: RuntimeDefault
       initContainers:
         # ok3d's admin password, turned into the bcrypt file the basic auth reads. The
-        # password comes from the ok3d-admin Secret and goes to htpasswd on its stdin.
+        # password comes from the ok3d-admin Secret and goes to htpasswd on its stdin. The
+        # gateway checks the hash on every request, so its cost is low (5, about 3 ms; 12
+        # was about 400 ms, for every request a page makes): the password ok3d makes is 18
+        # random bytes, which no cost changes, and the hash stays inside this pod.
         - name: password-hash
           image: {{ .Values.gateway.images.htpasswd }}
           command:
             - /bin/sh
             - -c
-            - printf '%s' "$ADMIN_PASSWORD" | htpasswd -niB -C 12 "$ADMIN_USER" >/auth/htpasswd
+            - printf '%s' "$ADMIN_PASSWORD" | htpasswd -niB -C 5 "$ADMIN_USER" >/auth/htpasswd
           env:
             - name: ADMIN_USER
               valueFrom:

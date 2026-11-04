@@ -72,7 +72,11 @@ def test_the_watchdog_is_routed_first_every_minute_and_stops_there(tmp_path: Pat
     # or send it on to you as well.
     routes = yaml.safe_load(config(tmp_path, *EVERYTHING_ON).read_text())["route"]["routes"]
     assert routes[0]["matchers"] == ['alertname = "Watchdog"']
-    assert routes[0]["repeat_interval"] == "1m" and not routes[0].get("continue", False)
+    assert not routes[0].get("continue", False)
+    # A repeat is sent at a group_interval tick once repeat_interval has passed. Equal, the tick
+    # lands a moment short and the repeat waits for the next: every 2 minutes, as the test VM
+    # showed. Just under it, every tick sends.
+    assert routes[0]["group_interval"] == "1m" and routes[0]["repeat_interval"] == "50s"
 
 
 def test_critical_and_warning_alerts_repeat_at_their_own_pace(tmp_path: Path) -> None:
