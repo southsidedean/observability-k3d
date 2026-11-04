@@ -66,10 +66,11 @@ envfile=${OK3D_ENV:-$root/.env}
 # needs.
 min_k3d=5.9.0
 min_helm=3.0.0
-# The helper, apply_plan (for Check), and maintenance run on the server's python3, and use
-# what 3.12 brought (Ubuntu 24.04's). The helper's service runs the system's own,
-# /usr/bin/python3 (OK3D_HELPER_PYTHON names another, for a test), so install checks that
-# one, and Check the one on your PATH, which the others use.
+# The helper, apply_plan (for Check), maintenance, and install's move of the Dashboard's
+# certificate run on the server's python3, and use what 3.12 brought (Ubuntu 24.04's). The
+# helper's service runs the system's own, /usr/bin/python3 (OK3D_HELPER_PYTHON names
+# another, for a test), so install checks that one, and Check the one on your PATH, which
+# the others use.
 min_python=3.12
 helper_python=${OK3D_HELPER_PYTHON:-/usr/bin/python3}
 # The inotify limits two k3d clusters on one machine need (the defaults run out).
@@ -885,7 +886,7 @@ cmd_install() {
 	# The service file holds these paths, so they're kept to characters it reads plainly.
 	case "$root$DATA_ROOT$helper_python" in
 	*[!A-Za-z0-9._/-]*)
-		echo "The ok3d folder ($root) and the data root ($DATA_ROOT) may have only letters, digits, and . _ / -." >&2
+		echo "The ok3d folder ($root), the data root ($DATA_ROOT), and the helper's Python ($helper_python) may have only letters, digits, and . _ / -." >&2
 		exit 1
 		;;
 	esac

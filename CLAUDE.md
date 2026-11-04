@@ -122,8 +122,8 @@ scripts/screenshots.sh [--setup]                   # on a test VM; --setup on a 
   into, such as a log line. Choose names accordingly.
 - Releases: user-facing changes go under the next version in `CHANGELOG.md`, marked
   unreleased. The release pull request sets the version to `X.Y.Z` (`src/ok3d/__init__.py`,
-  and `version` and `appVersion` in both `chart/*/Chart.yaml`), the date, and the roadmap's
-  status; then the signed tag, `gh release create` with that changelog section as the notes,
+  and `version` and `appVersion` in both `chart/*/Chart.yaml`), the date, the roadmap's
+  status, and the release README.md's `git clone --branch` takes; then the signed tag, `gh release create` with that changelog section as the notes,
   a check that the Dashboard's image (and, once it exists, the in-cluster one) was published
   for amd64 and arm64 and scanned, and a "Start X.Y.Z.dev0" pull request, which moves the
   same places on (`X.Y.Z.dev0`, and `X.Y.Z-dev0` for the charts' `version`).
@@ -132,7 +132,7 @@ scripts/screenshots.sh [--setup]                   # on a test VM; --setup on a 
 
 No host names, domains, personal email addresses, home paths, LAN addresses, account names,
 or ntfy topics in code, docs, screenshots, commit messages, pull request bodies, or release
-notes. Examples use stand-ins: `192.168.1.20`, `192.0.2.x`, `fd00::5`, `my-server.lan`,
+notes. The repository's own GitHub URL and its `ghcr.io` image name are the one exception. Examples use stand-ins: `192.168.1.20`, `192.0.2.x`, `fd00::5`, `my-server.lan`,
 `noc.home.arpa`. The user's own names live in `.git/hooks/private-names`, which is never
 committed.
 

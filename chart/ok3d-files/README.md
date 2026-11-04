@@ -6,8 +6,8 @@ anchors, merge keys, and flow style are read exactly as `./ok3d apply` would rea
 
 - `settings/`: a settings file may hold only your settings (`settingsVersion`, `cluster`,
   `host`, `tls`, `modules`, `metrics`, `unifi`, `alerts`), never the chart's own sections
-  (`kube-prometheus-stack`, `prometheus-blackbox-exporter`, `gateway`, `global`), which choose
-  images and how pods run. Its template prints the settings only you may change on the
+  (`kube-prometheus-stack`, `prometheus-blackbox-exporter`, `gateway`), which choose images
+  and how pods run; `global` only empty, as Helm adds it. Its template prints the settings only you may change on the
   server, which the helper compares before it saves settings the Dashboard sent.
 - `devices/`: a devices file may hold only `devices`.
 

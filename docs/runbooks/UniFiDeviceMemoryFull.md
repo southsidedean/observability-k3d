@@ -6,7 +6,7 @@ A UniFi device's memory has been above 90% for 15 minutes.
 
 ## What to check
 
-1. Some UniFi devices run with high memory use as normal. If it's been steady for weeks, raise nothing and watch it.
+1. Some UniFi devices run with high memory use as normal. If it's been steady for weeks, it's probably normal for that device: leave it and keep an eye on it.
 2. If it keeps climbing, restart the device in the UniFi app, and look for a firmware update that fixes a leak.
 
 ## When it clears

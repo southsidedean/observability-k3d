@@ -49,7 +49,7 @@ Follow these in order. Every step is safe to repeat.
 1. **Check the server**, and list what's missing, with how you'd install each, before
    installing anything:
    - Linux with systemd, and you're running as an ordinary user, not root;
-   - about 8 GB of memory free;
+   - at least 7 GiB (about 7.5 GB) of memory free (`./ok3d check` warns below that);
    - `git`, `curl`, `openssl`, and Python 3.12 or newer at `/usr/bin/python3`;
    - Docker, running, and usable without `sudo` (`docker info` works);
    - [k3d](https://k3d.io) 5.9 or newer, [Helm](https://helm.sh), and `kubectl`;
@@ -92,9 +92,9 @@ Follow these in order. Every step is safe to repeat.
 5. **Check it's running.** `docker ps` shows `ok3d-dashboard`, and
    `systemctl --user is-active ok3d-helper` says `active`.
 6. **Check the server is ready**, with `~/ok3d/ok3d check`. It changes nothing. Show the user
-   any line that starts with `FAIL`, and what it says to do. Two warnings are expected, that
-   there's no `devices.yaml` and that no alert destination is on: the user sets up both on
-   the Dashboard.
+   any line that starts with `FAIL`, and what it says to do. Expect a warning that there's
+   no `devices.yaml` and one that no alert destination is on: the user sets up both on the
+   Dashboard. Show the user any other warning.
 7. **Tell the user**, and stop:
    - the Dashboard's address, from the installer's last lines;
    - that its password is in `/srv/ok3d/dashboard/password`, and they can see it by running

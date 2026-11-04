@@ -4,6 +4,10 @@
 
 ### Upgrading
 
+- From 0.5.1, press **Look for a new release** on the Dashboard's Home, then **Upgrade now**
+  ([docs/upgrading.md](docs/upgrading.md#from-the-dashboard-from-051)), or run
+  `./ok3d upgrade v0.5.2` on the server. From 0.5.0 or 0.4, run the installer again, then
+  upgrade from 0.5.1.
 - Check now refuses a `devices.yaml` with two devices of the same name, a `behind` that names
   itself or no device in the file, or one device with the same metrics port twice. The
   upgrade runs Check first, so with any of those it stops and moves back to 0.5.1, saying
@@ -15,7 +19,8 @@
 - Apply's question no longer says an upgrade restarts the gateway when it doesn't. Check
   counted any change to a running part as a restart, even the chart's version label, which
   every release changes and which restarts nothing. It now counts a restart only when the
-  part's pod template (or, for Prometheus and Alertmanager, their spec) changes. So the
+  part's pod template or replica count (or, for Prometheus and Alertmanager, their spec)
+  changes. So the
   upgrade from 0.5.0 to 0.5.1 never restarted the gateway, though 0.5.1's notes said it did.
 - The Maintenance page no longer says "No maintenance windows" before ok3d has read them from
   Alertmanager, after a fresh install, say. It says it hasn't read them yet, with **Read them
@@ -60,6 +65,13 @@
   when Docker isn't running.
 - When an upgrade's install fails and installing the old release again fails too, the
   upgrade says so, instead of saying everything is back.
+- The docs, from the review: the README's commands clone the latest release instead of
+  `main`, and name Helm 3.13. Upgrading from 0.5.0 or 0.4 backs up first, before the
+  installer runs. `SECURITY.md` says which protections hold now and which come later, and
+  that the ping checks need no extra capability. Smaller fixes in the architecture, demo,
+  certificate, AI install, and runbook pages, the bug report form, and the setup diagram.
+- The install message for a path the helper's service can't hold names the helper's Python
+  too.
 - For contributors: an emptied or unreadable private-names list now stops a commit instead of
   turning the check off, the privacy test shows as skipped without a list, an exact copy of
   git's scissors line typed into a message hides nothing, and the tests can no longer act on
@@ -70,7 +82,7 @@
 ### Upgrading
 
 - From 0.5.0 or 0.4, run the installer again, as for 0.5.0
-  ([docs/upgrading.md](docs/upgrading.md#to-051-from-050-or-04)). If ok3d isn't in `~/ok3d`,
+  ([docs/upgrading.md](docs/upgrading.md#from-050-or-04)). If ok3d isn't in `~/ok3d`,
   put `OK3D_DIR=/path/to/ok3d` before `sh`. Then **Check** and **Apply** on the Dashboard.
   Apply now asks first: from 0.5.0 it restarts the gateway, so ok3d's pages are unavailable
   for a moment, and the rest changes without stopping anything.

@@ -6,9 +6,12 @@ says which release brings each piece.
 
 ## The pieces
 
+This is how ok3d fits together at 1.0. Today there's no Authelia (each page has its own login
+until 0.8), no Loki and Alloy (0.6), and no kagent (0.9).
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../images/diagrams/overview-dark.png">
-  <img src="../images/diagrams/overview-light.png" alt="On the server, the Dashboard and the helper run outside the k3d cluster, and the helper creates and upgrades the cluster. Inside the cluster, agentgateway is the one way in for your browser or phone, in front of Authelia, Grafana, and kagent. Prometheus and Alertmanager take metrics and pings from your network and send alerts to your phone and email. Loki and Alloy take syslog. The cluster keeps its state in the data root.">
+  <img src="../images/diagrams/overview-light.png" alt="At 1.0, on the server, the Dashboard and the helper run outside the k3d cluster, and the helper creates and upgrades the cluster. Inside the cluster, agentgateway is the one way in for your browser or phone, in front of Authelia, Grafana, and kagent. Prometheus and Alertmanager take metrics and pings from your network and send alerts to your phone and email. Loki and Alloy take syslog. The cluster keeps its state in the data root.">
 </picture>
 
 - **The Dashboard and the helper** run on the server itself, outside the cluster. The
@@ -26,11 +29,11 @@ says which release brings each piece.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../images/diagrams/setup-flow-dark.png">
-  <img src="../images/diagrams/setup-flow-light.png" alt="Run the installer, which checks the server and installs the Dashboard and the helper. Open the Dashboard with the address and password the installer printed. Choose a setup card or the parts yourself, and fill in your settings and devices. Check: if it finds problems, fix them (each says how) and check again; with no problems, Apply makes the cluster and deploys ok3d. What's next: trust the certificate, open Grafana, and send a test alert. Later, a new release: back up, make the cluster again, and check.">
+  <img src="../images/diagrams/setup-flow-light.png" alt="Run the installer, which checks the server and installs the Dashboard and the helper. Open the Dashboard with the address and password the installer printed. Choose a setup card or the parts yourself, and fill in your settings and devices. Check: if it finds problems, fix them (each says how) and check again; with no problems, Apply makes the cluster and deploys ok3d. What's next: trust the certificate, open Grafana, and send a test alert. Later, a new release: check, back up, and make the cluster again.">
 </picture>
 
-Until the Dashboard arrives in 0.5, the same steps run in a terminal: copy
-`settings.example.yaml` to `settings.yaml`, then `./ok3d check` and `./ok3d apply`.
+You can do the same steps in a terminal instead: copy `settings.example.yaml` to
+`settings.yaml`, then `./ok3d check` and `./ok3d apply`.
 
 ## The diagrams
 

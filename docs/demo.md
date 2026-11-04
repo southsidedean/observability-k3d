@@ -12,7 +12,7 @@ anything real. ok3d's own tests and the screenshots in these docs use it too.
 
 ## Start it
 
-You need ok3d's settings (`settings.yaml`, from `settings.example.yaml`) and Docker. The
+You need ok3d's settings (`settings.yaml`, from `settings.example.yaml`), Docker, and Helm. The
 cluster doesn't have to exist yet: if it does, its node joins the demo network, and if it
 doesn't, `./ok3d apply` connects it later.
 
@@ -45,8 +45,8 @@ clash with your own network.
 ```
 
 The access point stops answering, and the fake controller stops reporting it, the way a real
-controller loses a device. Within a minute its checks fail, and from the next 0.4 change, an alert fires. Bring it back
-with:
+controller loses a device. Within a minute its checks fail, and after 2 minutes DeviceDown
+fires (you hear about it if alerts go somewhere). Bring it back with:
 
 ```sh
 ./ok3d demo fix upstairs-ap

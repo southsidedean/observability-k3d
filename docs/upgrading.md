@@ -42,8 +42,8 @@ Either way, the upgrade:
 
 It moves only forward, one upgrade at a time, and needs Linux with systemd, like the helper.
 The ok3d folder mustn't have changes of yours to ok3d's own files (your settings are safe:
-they're not ok3d's), and it waits for anything the helper is doing for the Dashboard (an
-Apply, say) to finish first.
+they're not ok3d's), and it won't start while the helper is carrying out something for the
+Dashboard (an Apply, say): wait for Home to show its answer, then upgrade.
 
 ### If an upgrade stops partway
 
@@ -93,11 +93,19 @@ Your settings go back to how they were, in case you changed them for the new rel
 Grafana's database goes back to how it was before the upgrade, which matters if the new
 release's Grafana changed it.
 
-### To 0.5.1, from 0.5.0 or 0.4
+### From 0.5.0 or 0.4
 
 Those releases don't have `./ok3d upgrade`, so run the installer again, on the server, as
-yourself. If you cloned ok3d somewhere other than `~/ok3d`, put `OK3D_DIR=/path/to/ok3d`
-before `sh`, or it makes a fresh copy there:
+yourself. First back up the data root's certificate authority, Grafana's database, and
+Alertmanager's silences (with your data root, if it isn't `/srv/ok3d`):
+
+```sh
+(umask 077 && mkdir -p /srv/ok3d/backups &&
+  tar -C /srv/ok3d -czf /srv/ok3d/backups/before-installer.tar.gz certs grafana alertmanager)
+```
+
+Then run the installer. If you cloned ok3d somewhere other than `~/ok3d`, put
+`OK3D_DIR=/path/to/ok3d` before `sh`, or it makes a fresh copy in `~/ok3d`:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/southsidedean/observability-k3d/main/install.sh | sh
@@ -107,8 +115,7 @@ It brings `~/ok3d` to the latest release, keeps your settings, devices, `.env`, 
 certificate authority, and starts the new release's Dashboard. From 0.4, this is also what
 first sets up the Dashboard. It stops if you changed ok3d's own files. (From 0.5.1 on, the
 installer won't move a checkout to a newer release: it sends you to `./ok3d upgrade`, which
-checks the release's signature.) Back up `grafana/` and
-`certs/` in the data root first. Then, on the Dashboard, **Check**, then **Apply**, which
+checks the release's signature.) Then, on the Dashboard, **Check**, then **Apply**, which
 brings the cluster up to date with the new release.
 
 Either way, Prometheus's history, Alertmanager's silences, Grafana's database, and the

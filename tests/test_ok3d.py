@@ -647,7 +647,7 @@ def test_install_sets_up_the_helper_and_the_dashboard(linux: dict[str, str], tmp
     unit = (tmp_path / "config" / "systemd" / "user" / "ok3d-helper.service").read_text()
     python = linux["OK3D_HELPER_PYTHON"]
     assert f"ExecStart={python} -I {ROOT}/src/ok3d/helper.py watch --ok3d-dir {ROOT} --data-root {data}" in unit
-    for placeholder in ("@DIR@", "@DATA_ROOT@", "@PATH@"):
+    for placeholder in ("@DIR@", "@DATA_ROOT@", "@PATH@", "@PYTHON@"):
         assert placeholder not in unit
     log = calls(linux)
     assert "systemctl --user daemon-reload" in log
@@ -780,6 +780,17 @@ def test_the_password_is_shown_only_on_a_terminal(linux: dict[str, str]) -> None
     assert result.returncode == 0, result.stdout + result.stderr
     assert "kxq7-m2pa-9fht-3bnd" not in result.stdout
     assert "Its password is in" in result.stdout
+
+
+def test_install_names_the_helpers_python_when_its_path_cant_go_in_the_service(linux: dict[str, str],
+                                                                               tmp_path: Path) -> None:
+    odd = tmp_path / "my python" / "python3"
+    odd.parent.mkdir()
+    odd.write_text("#!/bin/sh\necho 3.12\n")
+    odd.chmod(0o755)
+    result = ok3d({**linux, "OK3D_HELPER_PYTHON": str(odd)}, "install")
+    assert result.returncode == 1
+    assert f"the helper's Python ({odd}) may have only letters" in result.stderr
 
 
 def test_install_refuses_one_port_for_both(linux: dict[str, str]) -> None:

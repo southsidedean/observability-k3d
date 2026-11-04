@@ -8,3 +8,5 @@
 - [ ] Every new or changed image was looked at, has alt text, and was committed with `IMAGES_CHECKED=1`
 - [ ] `CHANGELOG.md` has a line under the next version if users will notice the change
 - [ ] `docs/roadmap.md` shows what this finishes, starts, or changes
+- [ ] This description passes `scripts/private-names.sh check` (run on a copy of it before posting)
+- [ ] An independent review, with no spot checks, read every file in scope; its findings are fixed with new commits, each reviewed again

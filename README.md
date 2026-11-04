@@ -10,22 +10,21 @@ tells you, on your phone or by email, when something breaks, before anyone in th
 tells you. It runs on one Linux server, in a small Kubernetes cluster (k3d) that it builds
 and looks after itself.
 
-- **Every device, checked.** List your devices once, in `devices.yaml`: your router,
-  switches, access points, NAS, servers, printer. ok3d pings each one and checks its pages
-  and ports every 30 seconds.
-- **Alerts that reach you.** ntfy on your phone, email, or both, with a runbook for every
-  alert. A dead man's switch tells you when ok3d itself stops. When a device is down, you hear
-  about the device, not about each of its checks.
-- **UniFi, in detail.** With a view-only API key, ok3d reads your UniFi controller: each
-  device's load, ports, clients, and the internet link's traffic, with UniFi's own dashboards.
-- **Your computers.** Disks filling up, memory running low, a failed RAID disk, from
-  node_exporter on each computer.
-- **Pages that are yours.** Grafana, Prometheus, and Alertmanager over HTTPS, at names under
-  your own domain, with a certificate authority of ok3d's own that you trust once on each
-  device. Nothing is sent anywhere you didn't set up, and nothing else in the cluster is
-  reachable from your network.
-- **Data that lasts.** History, settings, and the certificate authority live in a folder on
-  the server, so upgrading means making the cluster again, and it picks up where it left off.
+- You list your devices once, in `devices.yaml`: your router, switches, access points, NAS,
+  servers, printer. ok3d pings each one and checks its pages and ports every 30 seconds.
+- Alerts go to ntfy on your phone, email, or both, each with a runbook. A dead man's switch
+  tells you when ok3d itself stops, and when a device is down you hear about the device, not
+  about each of its checks.
+- With a view-only API key, ok3d reads your UniFi controller: each device's load, ports,
+  clients, and the internet link's traffic, with UniFi's own dashboards.
+- On your computers, node_exporter tells it about disks filling up, memory running low, and
+  failed RAID disks.
+- Grafana, Prometheus, and Alertmanager are served over HTTPS, at names under your own
+  domain, with a certificate authority of ok3d's own that you trust once on each device.
+  Nothing is sent anywhere you didn't set up, and nothing else in the cluster is reachable
+  from your network.
+- History, settings, and the certificate authority live in a folder on the server, so
+  upgrading means making the cluster again, and it picks up where it left off.
 
 ok3d is being built release by release: [docs/roadmap.md](docs/roadmap.md) says where it
 stands, and [PLAN.md](PLAN.md) says where it's going, with the reasons. From 0.5 you set it
@@ -36,7 +35,7 @@ every page, and AI agents that explain what went wrong.
 
 - A Linux server with systemd and about 8 GB of memory free (more once agents arrive in 0.9),
   [Docker](https://docs.docker.com/engine/install/), [k3d](https://k3d.io) 5.9 or newer,
-  [Helm](https://helm.sh), [`kubectl`](https://kubernetes.io/docs/tasks/tools/), `git`,
+  [Helm](https://helm.sh) 3.13 or newer, [`kubectl`](https://kubernetes.io/docs/tasks/tools/), `git`,
   `curl`, `openssl`, and Python 3.12 or newer (Ubuntu 24.04's).
 - A folder for ok3d's data, on a filesystem of its own if you can.
 - A way to add a name to your local DNS: most routers can, and so can Pi-hole.
@@ -75,8 +74,8 @@ computer.
 **With commands instead.** Everything the Dashboard does is an `./ok3d` command too:
 
 ```sh
-git clone https://github.com/southsidedean/observability-k3d.git ok3d && cd ok3d
-cp settings.example.yaml settings.yaml        # edit it: at least the data folder
+git clone --branch v0.5.1 https://github.com/southsidedean/observability-k3d.git ok3d && cd ok3d
+cp settings.example.yaml settings.yaml        # change host.dataRoot if it isn't /srv/ok3d
 sudo install -d -o "$USER" -m 0755 /srv/ok3d  # the data folder, owned by you
 ./ok3d check                                  # is this server ready?
 ./ok3d demo up                                # optional: a simulated network to watch

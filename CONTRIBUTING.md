@@ -7,7 +7,8 @@ each decision.
 ## Setting up
 
 You need git, Python 3.12 or newer, and shellcheck. For the workflow checks, also
-[actionlint](https://github.com/rhysd/actionlint) and Node.js (for `npx`).
+[actionlint](https://github.com/rhysd/actionlint) and Node.js (for `npx`); for the charts,
+[Helm](https://helm.sh) and [kubeconform](https://github.com/yannh/kubeconform).
 
 ```sh
 python3 -m venv .venv
@@ -96,6 +97,7 @@ one. Look at every image before committing it, strip its metadata, and commit wi
 | zizmor, actionlint | the GitHub workflows |
 | Renovate's validator | `renovate.json5` |
 | pytest | the tests, including privacy (no real network details), docs (links, alt text, style), the git hooks, and the network fence that keeps tests offline |
+| helm lint, kubeconform | both charts render, and every object is valid for the cluster's Kubernetes version |
 
 CI also runs CodeQL, dependency review on pull requests, and OpenSSF Scorecard.
 
@@ -112,7 +114,9 @@ commands.
 1. User-facing changes collect in `CHANGELOG.md` under the next version, marked unreleased.
 2. A release pull request sets the version (`src/ok3d/__init__.py`, and `version` and
    `appVersion` in `chart/ok3d/Chart.yaml` and `chart/ok3d-platform/Chart.yaml`), the date
-   in the changelog, and the release's status in `docs/roadmap.md`.
+   in the changelog, the release's status in `docs/roadmap.md`, and the release that
+   README.md's "With commands instead" clones (a test holds it to the newest dated changelog
+   entry).
 3. After it merges: a signed tag (`git tag -s vX.Y.Z`), then `gh release create` with that
    version's changelog section as the notes.
 4. Check that the Dashboard's image (and, once it exists, the in-cluster one) was published
