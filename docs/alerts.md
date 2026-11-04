@@ -2,7 +2,7 @@
 
 When something on your network needs you, ok3d tells you: on your phone through ntfy, by
 email, or both. A dead man's switch tells you when ok3d itself stops. You choose where alerts
-go. The alerts themselves are built in (listed below).
+go. The alerts themselves are built in ([the list](#the-alerts)).
 
 Prometheus checks the alert rules every 30 seconds. When one fires, Alertmanager sends it,
 and sends it again while it's still firing: every hour for a critical alert, every 12 hours

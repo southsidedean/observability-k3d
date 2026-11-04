@@ -6,8 +6,9 @@ says which release brings each piece.
 
 ## The pieces
 
-This is how ok3d fits together at 1.0. Today there's no Authelia (each page has its own login
-until 0.8), no Loki and Alloy (0.6), and no kagent (0.9).
+This is how ok3d fits together at 1.0. Today there's no Authelia (until 0.8, Grafana has its
+own login and the gateway asks for ok3d's admin login before the others), no Loki and Alloy
+(0.6), and no kagent (0.9).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../images/diagrams/overview-dark.png">
@@ -22,8 +23,9 @@ until 0.8), no Loki and Alloy (0.6), and no kagent (0.9).
 - **The data root** is a folder on the server that holds everything worth keeping:
   Prometheus's history, Grafana's database, the certificate authority, and more. A new
   cluster picks up where the old one left off.
-- **agentgateway** is the one way into the cluster's web pages, over HTTPS, behind each
-  page's own login, and from 0.8 one sign-in through Authelia.
+- **agentgateway** is the one way into the cluster's web pages, over HTTPS: Grafana has its
+  own login, and the gateway asks for ok3d's admin login before Prometheus and Alertmanager.
+  From 0.8, one sign-in through Authelia covers every page.
 
 ## Setting it up
 

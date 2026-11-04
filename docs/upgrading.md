@@ -96,30 +96,32 @@ release's Grafana changed it.
 ### From 0.5.0 or 0.4
 
 Those releases don't have `./ok3d upgrade`, so run the installer again, on the server, as
-yourself. First delete the cluster, so nothing writes to the data root, and back up its
-certificate authority, Grafana's database, and Alertmanager's silences (with your data root
-for `/srv/ok3d`, and leaving out of the `tar` line any of the three folders it doesn't
-have). Your data stays, and Apply makes the cluster again below:
-
-```sh
-~/ok3d/ok3d delete --yes
-(umask 077 && mkdir -p /srv/ok3d/backups &&
-  tar -C /srv/ok3d -czf /srv/ok3d/backups/before-installer.tar.gz certs grafana alertmanager)
-```
-
-Then run the installer. If you cloned ok3d somewhere other than `~/ok3d`, put
-`OK3D_DIR=/path/to/ok3d` before `sh`, or it makes a fresh copy in `~/ok3d`:
+yourself. If you cloned ok3d somewhere other than `~/ok3d`, put `OK3D_DIR=/path/to/ok3d`
+before `sh`, or it makes a fresh copy in `~/ok3d`:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/southsidedean/observability-k3d/main/install.sh | sh
 ```
 
-It brings `~/ok3d` to the latest release, keeps your settings, devices, `.env`, and the
+It brings your copy to the latest release, keeps your settings, devices, `.env`, and the
 certificate authority, and starts the new release's Dashboard. From 0.4, this is also what
-first sets up the Dashboard. It stops if you changed ok3d's own files. (From 0.5.1 on, the
-installer won't move a checkout to a newer release: it sends you to `./ok3d upgrade`, which
-checks the release's signature.) Then, on the Dashboard, **Check**, then **Apply**, which
-makes the cluster again with the new release.
+first sets up the Dashboard. It stops if you changed ok3d's own files, and then nothing has
+changed. (From 0.5.1 on, the installer won't move a checkout to a newer release: it sends you
+to `./ok3d upgrade`, which checks the release's signature.)
+
+Then, as `./ok3d upgrade` does, delete the cluster so nothing writes to the data root, and
+back up its certificate authority, Grafana's database, and Alertmanager's silences, in your
+ok3d folder (with your data root for `/srv/ok3d`). Deleting the cluster keeps the data root.
+
+```sh
+cd ~/ok3d
+./ok3d delete --yes
+(umask 077 && mkdir -p /srv/ok3d/backups &&
+  tar -C /srv/ok3d -czf /srv/ok3d/backups/before-installer.tar.gz certs grafana alertmanager)
+```
+
+Leave out of the `tar` line any of the three folders your data root doesn't have. Then, on
+the Dashboard, **Check**, then **Apply**, which makes the cluster again with the new release.
 
 Either way, Prometheus's history, Alertmanager's silences, Grafana's database, and the
 certificate authority come through unchanged, so your devices keep trusting the pages.

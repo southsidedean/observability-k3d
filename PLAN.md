@@ -171,10 +171,10 @@ README only says to use one if you can.
 
 The data root itself is yours to make (`ok3d` prints the `sudo install -d` command).
 `./ok3d apply`, and the command that needs one (install, upgrade, demo), makes any missing
-folder in it, with the owner and mode its app runs as; Check only checks. No folder is world-writable.
-Before an upgrade, `./ok3d upgrade` archives `certs/`, `grafana/`, and `alertmanager/` into
-`backups/`, since they migrate forward only or can't be made again (`authelia/` joins them
-in 0.8). `ok3d backup`, to another machine, comes in 0.7.
+folder in it, with the owner and mode its app runs as; Check only checks. No folder is
+world-writable. Before an upgrade, `./ok3d upgrade` archives `certs/`, `grafana/`, and
+`alertmanager/` into `backups/`, since they migrate forward only or can't be made again
+(`authelia/` joins them in 0.8). `ok3d backup`, to another machine, comes in 0.7.
 
 ## The host
 
@@ -220,12 +220,12 @@ all of them, so nothing is skipped there).
 Built so far (0.5.2):
 
 - lint and security checks, without the JSON check, hadolint, the color check, or axe;
-- pytest, which also holds the privacy, Grafana dashboard, and docs tests;
-- charts, which also runs the promtool and amtool tests, without helm-unittest or the memory
-  budget;
+- pytest, which also holds the privacy and docs tests;
+- charts, which also runs the Grafana dashboards' datasource tests and the promtool and amtool
+  tests, without helm-unittest or the memory budget;
 - the Dashboard's image.
 
-Not built yet: the JSON check, hadolint, the color and accessibility checks, helm-unittest,
+Not built yet: the JSON check, Grype, hadolint, the color and accessibility checks, helm-unittest,
 the dashboard linter, a separate docs job, the end-to-end smoke test, and `mesh`.
 
 The jobs:

@@ -337,7 +337,8 @@ itself, and never needs a terminal. Everything is inside one function called on 
 line, so a download cut short runs nothing. An existing checkout must be ok3d's, with no
 changes of yours to ok3d's own files. It's moved to the release, fetched from the same place
 the release was found (`OK3D_REPO`), only if it's from before 0.5.1. A newer one is refused,
-with a pointer to `./ok3d upgrade`, which checks the release's signature.
+with a pointer to `./ok3d upgrade`, which checks the release's signature, unless it's on that
+release already (then it's installed again) or `OK3D_VERSION` is `main`.
 
 ## Running it from the checkout
 
