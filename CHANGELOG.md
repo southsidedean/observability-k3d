@@ -6,8 +6,9 @@
 
 - From 0.5.1, press **Look for a new release** on the Dashboard's Home, then **Upgrade now**
   ([docs/upgrading.md](docs/upgrading.md#from-the-dashboard-from-051)), or run
-  `./ok3d upgrade v0.5.2` on the server. From 0.5.0 or 0.4, run the installer again, then
-  upgrade from 0.5.1.
+  `./ok3d upgrade v0.5.2` on the server. From 0.5.0 or 0.4, run the installer again, which
+  moves straight to 0.5.2 ([docs/upgrading.md](docs/upgrading.md#from-050-or-04)), then
+  **Check** and **Apply** on the Dashboard.
 - Check now refuses a `devices.yaml` with two devices of the same name, a `behind` that names
   itself or no device in the file, or one device with the same metrics port twice. The
   upgrade runs Check first, so with any of those it stops and moves back to 0.5.1, saying
@@ -20,8 +21,8 @@
   counted any change to a running part as a restart, even the chart's version label, which
   every release changes and which restarts nothing. It now counts a restart only when the
   part's pod template or replica count (or, for Prometheus and Alertmanager, their spec)
-  changes. So the
-  upgrade from 0.5.0 to 0.5.1 never restarted the gateway, though 0.5.1's notes said it did.
+  changes. So the upgrade from 0.5.0 to 0.5.1 never restarted the gateway, though 0.5.1's
+  notes said it did.
 - The Maintenance page no longer says "No maintenance windows" before ok3d has read them from
   Alertmanager, after a fresh install, say. It says it hasn't read them yet, with **Read them
   now**. And when lines in the helper's note can't be read (a damaged file, say), it says how
@@ -97,8 +98,8 @@
   certificate, AI install, alerts, and runbook pages, both under-the-hood pages (running the
   Dashboard from the checkout now works as written), the bug report form, and the setup
   diagram. The Settings page's screenshot, which no page showed, is no longer taken.
-- The install message for a path the helper's service can't hold names the helper's Python
-  too.
+- When a path can't go in the helper's service file, `./ok3d install` now names the helper's
+  Python too.
 - For contributors: an emptied or unreadable private-names list now stops a commit instead of
   turning the check off, the privacy test shows as skipped without a list, an exact copy of
   git's scissors line typed into a message hides nothing, and the tests can no longer act on

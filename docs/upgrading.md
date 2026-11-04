@@ -96,10 +96,13 @@ release's Grafana changed it.
 ### From 0.5.0 or 0.4
 
 Those releases don't have `./ok3d upgrade`, so run the installer again, on the server, as
-yourself. First back up the data root's certificate authority, Grafana's database, and
-Alertmanager's silences (with your data root, if it isn't `/srv/ok3d`):
+yourself. First delete the cluster, so nothing writes to the data root, and back up its
+certificate authority, Grafana's database, and Alertmanager's silences (with your data root
+for `/srv/ok3d`, and leaving out of the `tar` line any of the three folders it doesn't
+have). Your data stays, and Apply makes the cluster again below:
 
 ```sh
+~/ok3d/ok3d delete --yes
 (umask 077 && mkdir -p /srv/ok3d/backups &&
   tar -C /srv/ok3d -czf /srv/ok3d/backups/before-installer.tar.gz certs grafana alertmanager)
 ```
@@ -116,7 +119,7 @@ certificate authority, and starts the new release's Dashboard. From 0.4, this is
 first sets up the Dashboard. It stops if you changed ok3d's own files. (From 0.5.1 on, the
 installer won't move a checkout to a newer release: it sends you to `./ok3d upgrade`, which
 checks the release's signature.) Then, on the Dashboard, **Check**, then **Apply**, which
-brings the cluster up to date with the new release.
+makes the cluster again with the new release.
 
 Either way, Prometheus's history, Alertmanager's silences, Grafana's database, and the
 certificate authority come through unchanged, so your devices keep trusting the pages.

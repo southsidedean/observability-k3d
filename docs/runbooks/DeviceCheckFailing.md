@@ -2,7 +2,7 @@
 
 **Severity:** warning
 
-A device answers ping, but one of its other checks (http, https, or tcp:<port>) has failed for 5 minutes. The device is up; a service on it isn't.
+A device answers ping, but one of its other checks (http, https, or tcp:<port>) has failed for 5 minutes: a service on it is down.
 
 ## What to check
 

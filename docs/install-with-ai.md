@@ -52,7 +52,7 @@ Follow these in order. Every step is safe to repeat.
    - at least 7 GiB (about 7.5 GB) of memory free (`./ok3d check` warns below that);
    - `git`, `curl`, `openssl`, and Python 3.12 or newer at `/usr/bin/python3`;
    - Docker, running, and usable without `sudo` (`docker info` works);
-   - [k3d](https://k3d.io) 5.9 or newer, [Helm](https://helm.sh), and `kubectl`;
+   - [k3d](https://k3d.io) 5.9 or newer, [Helm](https://helm.sh) 3.13 or newer, and `kubectl`;
    - the inotify limits: `/proc/sys/fs/inotify/max_user_instances` at least 1024, and
      `/proc/sys/fs/inotify/max_user_watches` at least 1048576.
 2. **Install what's missing**, with the user running each `sudo` command:

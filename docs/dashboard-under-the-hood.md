@@ -299,9 +299,10 @@ settings, if they look like a domain and a port, and the defaults if not.
 `./ok3d install` needs Linux with systemd, and runs as you, never as root. It's safe to run
 again: it brings each part up to date. In order, it:
 
-1. Reads your settings, and checks the data root is there and that you can write to it. The
-   ok3d folder and the data root may have only letters, digits, and `. _ / -`, since the
-   service file holds them.
+1. Reads your settings, checks that the helper's Python (`/usr/bin/python3`) is 3.12 or
+   newer, and checks the data root is there and that you can write to it. The ok3d folder,
+   the data root, and the helper's Python may have only letters, digits, and `. _ / -`,
+   since the service file holds them.
 2. Makes `dashboard/`, `dashboard/outbox/`, and `helper/` in the data root, readable only by
    you.
 3. Makes ok3d's certificate authority if there's none (the same one the pages use).
@@ -334,8 +335,9 @@ release (or `OK3D_VERSION`) into `~/ok3d` (or `OK3D_DIR`), makes `settings.yaml`
 what to run if the data root needs `sudo`, and runs `./ok3d install`. It never uses `sudo`
 itself, and never needs a terminal. Everything is inside one function called on its last
 line, so a download cut short runs nothing. An existing checkout must be ok3d's, with no
-changes of yours to ok3d's own files, and it's moved to the release fetched from the same
-place the release was found (`OK3D_REPO`).
+changes of yours to ok3d's own files. It's moved to the release, fetched from the same place
+the release was found (`OK3D_REPO`), only if it's from before 0.5.1. A newer one is refused,
+with a pointer to `./ok3d upgrade`, which checks the release's signature.
 
 ## Running it from the checkout
 

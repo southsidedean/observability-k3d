@@ -22,8 +22,8 @@ until 0.8), no Loki and Alloy (0.6), and no kagent (0.9).
 - **The data root** is a folder on the server that holds everything worth keeping:
   Prometheus's history, Grafana's database, the certificate authority, and more. A new
   cluster picks up where the old one left off.
-- **agentgateway** is the one way into the cluster's web pages, over HTTPS, behind a
-  sign-in through Authelia.
+- **agentgateway** is the one way into the cluster's web pages, over HTTPS, behind each
+  page's own login, and from 0.8 one sign-in through Authelia.
 
 ## Setting it up
 

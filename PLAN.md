@@ -122,7 +122,7 @@ On the hosts you monitor, not in the cluster:
 
 | Piece | Job |
 |---|---|
-| Alloy (Linux) or **node_exporter** (macOS) | Each computer's own numbers and, with Alloy, its system log. The docs give a ready config. |
+| Alloy (Linux) or node_exporter (macOS) | Each computer's own numbers and, with Alloy, its system log. The docs give a ready config. |
 | Syslog | Routers, switches, access points, and anything else that can only send syslog. |
 
 ## Actions
@@ -169,11 +169,12 @@ README only says to use one if you can.
 └── kagent-ate/      kagent's sandbox state, mounted at /var/lib/ate on the server node
 ```
 
-The data root itself is yours to make (`ok3d` prints the `sudo install -d` command); Apply
-makes any missing folder in it, with the owner and mode its app runs as, and Check only
-checks. No folder is world-writable. Before an upgrade, `./ok3d upgrade` archives `certs/`,
-`grafana/`, and `alertmanager/` into `backups/`, since they migrate forward only or can't be
-made again (`authelia/` joins them in 0.8). `ok3d backup`, to another machine, comes in 0.7.
+The data root itself is yours to make (`ok3d` prints the `sudo install -d` command).
+`./ok3d apply`, and the command that needs one (install, upgrade, demo), makes any missing
+folder in it, with the owner and mode its app runs as; Check only checks. No folder is world-writable.
+Before an upgrade, `./ok3d upgrade` archives `certs/`, `grafana/`, and `alertmanager/` into
+`backups/`, since they migrate forward only or can't be made again (`authelia/` joins them
+in 0.8). `ok3d backup`, to another machine, comes in 0.7.
 
 ## The host
 
@@ -209,17 +210,25 @@ applied that day).
 
 ### Workflows
 
-Every action is pinned to an exact commit, and every workflow runs with the
-least permissions it needs. Each job in `tests` is a required check on `main`. All of it
-also runs locally with `scripts/check.sh`, which skips a tool you don't have installed (CI
-installs all of them, so nothing is skipped there).
+Every action is pinned to an exact commit, and every workflow runs with the least
+permissions it needs. Each job in `tests` is a required check on `main`. All of it also runs
+locally with `scripts/check.sh`, which skips a tool you don't have installed (CI installs
+all of them, so nothing is skipped there).
 
-`tests` runs on every push and pull request, and weekly. The table is the design. Built so
-far (0.5.2): lint and security checks, without hadolint, the color check, or axe; pytest,
-which also holds the alert-rule, Alertmanager, dashboard, and docs tests; charts, without
-helm-unittest or the memory budget; and the Dashboard's image. Not built yet: hadolint, the
-color and accessibility checks, helm-unittest, the dashboard linter, a separate docs job, the
-end-to-end smoke test, and `mesh`. Its jobs:
+`tests` runs on every push and pull request, and weekly. The table below is the design.
+
+Built so far (0.5.2):
+
+- lint and security checks, without the JSON check, hadolint, the color check, or axe;
+- pytest, which also holds the privacy, Grafana dashboard, and docs tests;
+- charts, which also runs the promtool and amtool tests, without helm-unittest or the memory
+  budget;
+- the Dashboard's image.
+
+Not built yet: the JSON check, hadolint, the color and accessibility checks, helm-unittest,
+the dashboard linter, a separate docs job, the end-to-end smoke test, and `mesh`.
+
+The jobs:
 
 | Job | What it checks |
 |---|---|
@@ -247,77 +256,76 @@ The other workflows:
 
 ### Updates
 
-Renovate keeps the pinned versions current: the actions, the Helm chart
-dependencies in `Chart.yaml`, the image tags and base images (by digest), and the Python
+Renovate keeps the pinned versions current: the actions, the Helm chart dependencies in
+`Chart.yaml`, the image tags (the demo's and the tools' by digest), and the Python
 dependencies. Dependabot handles Helm dependencies and image tags in values poorly. Renovate
 opens one grouped pull request a month, for releases at least a week old, and security fixes
 right away. Dependabot stays on only for security alerts.
 
 ### Considered for later (2026-10-29)
 
-A self-hosted runner on a test VM, so the real
-cluster, agents included, runs on every pull request instead of by hand (never run anything
-by hand on it, or its runs break); and on that runner, a weekly job outside pull requests
-that deploys the newest kagent and agentgateway, to catch a break in either before Renovate
-proposes it (kia runs a weekly check of its own fast-moving upstream). GitHub's runners can't:
-the smoke test there runs with agents off to fit their memory.
+A self-hosted runner on a test VM, so the real cluster, agents included, runs on every pull
+request instead of by hand (never run anything by hand on it, or its runs break); and on
+that runner, a weekly job outside pull requests that deploys the newest kagent and
+agentgateway, to catch a break in either before Renovate proposes it (kia runs a weekly
+check of its own fast-moving upstream). GitHub's runners can't: the smoke test there runs
+with agents off to fit their memory.
 
 ### Left to the test VM
 
-CI can't do these, so the test VM does: kagent with a real model, a real UniFi
-controller, an ntfy notification on a real phone, trusting the certificate authority in a
-real browser, and Tailscale. They're on the release checklist.
+CI can't do these, so the test VM does: kagent with a real model, a real UniFi controller,
+an ntfy notification on a real phone, trusting the certificate authority in a real browser,
+and Tailscale. They're on the release checklist.
 
 ### Files
 
-`LICENSE` (AGPL-3.0), `SECURITY.md` (how to report a problem privately, and how
-the stack limits the damage), `CONTRIBUTING.md` (branches, hooks, checks, releases),
-`CHANGELOG.md`, a pull request template with its checklist, and issue templates for bugs
-and features, with a link to private security reports (and to troubleshooting, once that
-page is written).
+`LICENSE` (AGPL-3.0), `SECURITY.md` (how to report a problem privately, and how the stack
+limits the damage), `CONTRIBUTING.md` (branches, hooks, checks, releases), `CHANGELOG.md`, a
+pull request template with its checklist, and issue templates for bugs and features, with a
+link to private security reports (and to troubleshooting, once that page is written).
 
 ### Git hooks
 
-With `git config core.hooksPath .githooks`, pre-commit refuses commits on `main`,
-of anyone's own settings files, of secrets, and of private names or addresses outside the
+With `git config core.hooksPath .githooks`, pre-commit refuses commits on `main`, of
+anyone's own settings files, of secrets, and of private names or addresses outside the
 examples, anywhere in what the commit would hold and in its files' names; commit-msg refuses
 them in the message. Private names come from a list kept in `.git/hooks/private-names`, on
 your own machine and never committed: your host names, domains, and addresses, each plain
-name also matched in its other spellings. The same check (`scripts/private-names.sh`) runs on pull
-request descriptions and release notes before they're posted. A commit that adds or
+name also matched in its other spellings. The same check (`scripts/private-names.sh`) runs
+on pull request descriptions and release notes before they're posted. A commit that adds or
 changes an image needs `IMAGES_CHECKED=1`, set only after every image was looked at and its
 metadata stripped. Pre-push runs the quick checks.
 
 ### Committing
 
-Files are staged by name, never with `git add -A`, so nothing untracked (a
-screenshot dropped into `images/`, say) goes in by mistake. Examples use stand-ins: addresses
-like `192.168.1.20`, `192.0.2.x`, and `fd00::5`, and names like `my-server.lan` and
+Files are staged by name, never with `git add -A`, so nothing untracked (a screenshot
+dropped into `images/`, say) goes in by mistake. Examples use stand-ins: addresses like
+`192.168.1.20`, `192.0.2.x`, and `fd00::5`, and names like `my-server.lan` and
 `noc.home.arpa`.
 
 ### Releasing
 
-User-facing changes collect in `CHANGELOG.md` under the next version, marked
-unreleased. A release pull request sets the version and the date. Then the signed tag,
-`gh release create` with that version's changelog section as the notes, a check that the
-images (the Dashboard's, and the in-cluster one once it exists) were published for both
-architectures and scanned, and a "Start X.Y.Z.dev0" pull request for the next one.
+User-facing changes collect in `CHANGELOG.md` under the next version, marked unreleased. A
+release pull request sets the version and the date. Then the signed tag, `gh release create`
+with that version's changelog section as the notes, a check that the images (the
+Dashboard's, and the in-cluster one once it exists) were published for both architectures
+and scanned, and a "Start X.Y.Z.dev0" pull request for the next one.
 
 ### Testing before a release
 
-CI covers what a runner can. Each release is also installed on
-a test VM from scratch through the Dashboard, with the certificate authority trusted in a
-browser, and upgraded from the release before, before production moves to it.
+CI covers what a runner can. Each release is also installed on a test VM from scratch
+through the Dashboard, with the certificate authority trusted in a browser, and upgraded
+from the release before, before production moves to it.
 
 ### The test VM
 
 The test VM (decided 2026-10-27) is a generic home server, the case most people have: a
-Multipass VM with Ubuntu 24.04 LTS, 8 CPUs, 16 GiB of memory, Docker, k3d, Helm, kubectl, the
-raised inotify limits, and an empty data root at `/srv/ok3d`. Its setup is a cloud-init file
-in `tests/vm/`, so anyone can make the same VM. It keeps snapshots: `base` (the prerequisites
-and nothing of ok3d), restored before every install test and every screenshot run so each
-starts clean, and one per release once installed, for upgrade tests. The same VM is the
-screenshot environment.
+Multipass VM with Ubuntu 24.04 LTS, 8 CPUs, 16 GiB of memory, Docker, k3d, Helm, kubectl,
+the raised inotify limits, and an empty data root at `/srv/ok3d`. Its setup is a cloud-init
+file in `tests/vm/`, so anyone can make the same VM. It keeps snapshots: `base` (the
+prerequisites and nothing of ok3d), restored before every install test and every screenshot
+run so each starts clean, and one per release once installed, for upgrade tests. The same VM
+is the screenshot environment.
 
 ## Quality, security, and docs (decided 2026-10-27)
 
@@ -359,8 +367,8 @@ Security is built in from 0.3, and the review before 1.0 checks it:
 
 - A threat model in `docs/security/threat-model.md`, updated with every release that adds a
   piece. It was planned for 0.3 and isn't written yet: it's due before 1.0, with the
-  architectural review, and `SECURITY.md` says so. It covers who's on the network, what each piece can reach, and
-  what an attacker gets by taking over each one.
+  architectural review. It covers who's on the network, what each piece can reach, and what
+  an attacker gets by taking over each one.
 - Least privilege everywhere: every pod hardened, and every ok3d namespace enforcing Kubernetes'
   `restricted` Pod Security Standard. The only exception expected is istio-cni
   (0.8), with its reason written next to it. The blackbox exporter pings without `NET_RAW`,
@@ -381,16 +389,16 @@ Security is built in from 0.3, and the review before 1.0 checks it:
 - Each subject goes from easy to advanced: the simplest path first, then the options, then
   the advanced parts, then an "under the hood" page that describes the code as it is. An
   under-the-hood page changes in the same pull request as the code it describes.
-- The docs checks: links and a runbook per alert run in pytest today; the style checks, the
-  generated settings reference, and the install doc's commands run for real are planned.
+- The docs checks: links, alt text, the diagrams' sources, no dashes, and a runbook per alert
+  are checked in pytest today; the rest of the style checks, the generated settings
+  reference, and running the install doc's commands are planned.
 - Before each release, the install doc is followed on a fresh test VM exactly as written, and
   anything that had to be guessed gets fixed.
 
 ### Pictures in the docs (decided 2026-10-27)
 
-Screenshots and diagrams go wherever they help
-someone understand: every Dashboard page, every Grafana dashboard, each step of the install,
-and how the pieces fit.
+Screenshots and diagrams go wherever they help someone understand: every Dashboard page,
+every Grafana dashboard, each step of the install, and how the pieces fit.
 
 - Diagrams start as Mermaid files in `docs/diagrams/`. `scripts/diagrams.sh` renders each
   one to PNG in `images/diagrams/`, in a light and a dark version at twice the size for sharp
@@ -400,12 +408,11 @@ and how the pieces fit.
 - Screenshots are made by `scripts/screenshots.sh`, never by hand. It runs on the test VM,
   restored from its clean snapshot first (in CI, on a container running k3d), starts ok3d on
   the simulated network, and drives a headless browser from a pinned container image through
-  the list in
-  `docs/screenshots.json` (JSON, since Playwright's image has no YAML library): each page,
-  what to wait for, what to crop to, and light or dark.
-  It strips the metadata and records the ok3d version each was taken with (making the
-  files smaller is still to do: 16 pictures are about 5.4 MB). Docs and releases can then
-  refresh every screenshot in one run.
+  the list in `docs/screenshots.json` (JSON, since Playwright's image has no YAML library):
+  each page, what to wait for, what to crop to, and light or dark. It strips the metadata
+  and records the ok3d version each was taken with (making the files smaller is still to
+  do: 14 pictures are about 5 MB). Docs and releases can then refresh every screenshot in
+  one run.
 - The docs show both versions with a `<picture>` tag, so GitHub picks the one for the
   reader's theme. Every image has alt text that says what it shows, and the docs job fails
   on an image without it.
@@ -725,18 +732,19 @@ Written for someone who has never seen the project, in plain words, with diagram
 Mermaid files. A page marked planned isn't written yet; the rest are in `docs/`.
 
 - `README.md`: what it is, what it shows, and what you need.
-- `docs/install.md` (planned): from a bare Linux server to alerts on your phone: the data root (with
-  LVM), local DNS, the installer, the Dashboard, the first apply, trusting the certificate
-  authority, and the first test alert.
+- `docs/install.md` (planned): from a bare Linux server to alerts on your phone: the data
+  root (with LVM), local DNS, the installer, the Dashboard, the first apply, trusting the
+  certificate authority, and the first test alert.
 - `docs/dashboard.md`: every page of the Dashboard, and the `ok3d` command each one equals.
 - `docs/install-with-ai.md`: the prompt for an AI assistant, and the steps it follows.
-- `docs/settings.md` (planned): every setting, generated from the values schema so it can't drift.
+- `docs/settings.md` (planned): every setting, generated from the values schema so it can't
+  drift.
 - `docs/devices.md`: adding devices, protected devices, and what each check does.
 - `docs/alerts.md`: every alert, what it means, and where it's sent.
 - `docs/runbooks/`: one page per alert: what to check, in order.
 - `docs/sign-in.md` (planned, 0.8): accounts, groups, roles, and second factors.
-- `docs/agents.md` (planned, 0.9): what the agents can and can't do, the actions and their guardrails,
-  approvals, and what the agents cost.
+- `docs/agents.md` (planned, 0.9): what the agents can and can't do, the actions and their
+  guardrails, approvals, and what the agents cost.
 - `docs/upgrading.md`: upgrading from the Dashboard, what's backed up first, and moving from
   the old stack.
 - `docs/architecture.md`: how the pieces fit, and why each choice was made.
