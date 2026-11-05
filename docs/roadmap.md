@@ -4,8 +4,8 @@ Where ok3d is, release by release. Every pull request updates this page when it 
 starts, or changes something here. [PLAN.md](../PLAN.md#roadmap) has the detail of each
 release and the reasons behind it.
 
-**Now:** 0.5.2 is released. 0.5.3 is in progress: fixes for what 0.5.2's release test found.
-0.6.0, logs and changes, comes next.
+**Now:** 0.5.3 is being released: fixes for what 0.5.2's release test found. 0.6.0, logs and
+changes, comes next.
 
 | Release | What it brings | Status |
 |---|---|---|
@@ -15,7 +15,7 @@ release and the reasons behind it.
 | 0.5.0 | The Dashboard: set up and change ok3d from a web page, and screenshots in the docs | Released ([v0.5.0](https://github.com/southsidedean/observability-k3d/releases/tag/v0.5.0)) |
 | 0.5.1 | The Dashboard's second step: upgrades, maintenance windows, and Apply asking first | Released ([v0.5.1](https://github.com/southsidedean/observability-k3d/releases/tag/v0.5.1)) |
 | 0.5.2 | Small fixes from 0.5.1, and the first release test that upgrades from the Dashboard alone | Released ([v0.5.2](https://github.com/southsidedean/observability-k3d/releases/tag/v0.5.2)) |
-| 0.5.3 | Fixes for what 0.5.2's release test found: maintenance windows kept through an upgrade, and Apply recovering from a restart partway | In progress |
+| 0.5.3 | Fixes for what 0.5.2's release test found: maintenance windows kept through an upgrade, and Apply recovering from a restart partway | Being released |
 | 0.6.0 | Logs and changes: syslog, host logs, what-changed markers, new devices | Planned |
 | 0.7.0 | The NOC: the board, alerts that know the layout, the internet link's record, backups | Planned |
 | 0.8.0 | One sign-in for every page, the mesh, and traces | Planned |
@@ -92,7 +92,7 @@ release and the reasons behind it.
 | The upgrade's output on Home without k3d's color codes, and the steps for going back that work without a `.env` | Done ([#62](https://github.com/southsidedean/observability-k3d/pull/62)) |
 | The steps from 0.5.0 or 0.4, tested from the 0.4.0 snapshot with v0.5.2 | Done ([#62](https://github.com/southsidedean/observability-k3d/pull/62)) |
 | The screenshots retaken to show a released version | Planned |
-| Release 0.5.3, tested with an upgrade from 0.5.2 from the Dashboard alone, with a maintenance window added just before and a restart partway | Planned |
+| Release 0.5.3, tested with an upgrade from 0.5.2 from the Dashboard alone, with a maintenance window added just before and a restart partway | In progress |
 
 ## Found in the 0.5.2 review, for later
 

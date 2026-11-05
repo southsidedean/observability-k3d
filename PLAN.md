@@ -1,9 +1,9 @@
 # Plan: ok3d, a home network operations center on k3d, with AI agents
 
-Status: 0.5.2 is released and 0.5.3 is in progress; `docs/roadmap.md` has where each
-release stands. `v0.2.0` was the old stack's last version (the
-`scripts/cluster-setup-k3d-observability-everything.sh` stack), and 0.4.0 replaced it. The
-plan was written on 2026-10-27, before anything was built, and the roadmap ends in 1.x.
+Status: 0.5.3 is being released; `docs/roadmap.md` has where each release stands. `v0.2.0`
+was the old stack's last version (the `scripts/cluster-setup-k3d-observability-everything.sh`
+stack), and 0.4.0 replaced it. The plan was written on 2026-10-27, before anything was
+built, and the roadmap ends in 1.x.
 
 ## Goal
 
