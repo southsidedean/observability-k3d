@@ -87,11 +87,11 @@ release and the reasons behind it.
 
 | Part | Status |
 |---|---|
-| A maintenance window added in the 15 minutes before an upgrade comes through: Alertmanager is stopped cleanly, so it saves its silences, before the cluster is deleted | Planned |
+| A maintenance window added or changed in the 15 minutes before an upgrade comes through: Alertmanager is stopped cleanly, so it saves its silences, before the cluster is deleted | Planned |
 | After a restart partway through an upgrade, Check and Apply on the Dashboard finish it, instead of failing on Helm's unfinished release | Planned |
 | The upgrade's output on Home without k3d's color codes, and the steps for going back that work without a `.env` | Planned |
 | The steps from 0.5.0 or 0.4, tested from the 0.4.0 snapshot, and the screenshots retaken to show a released version | Planned |
-| Release 0.5.3, tested with an upgrade from 0.5.2 from the Dashboard alone, with a restart partway | Planned |
+| Release 0.5.3, tested with an upgrade from 0.5.2 from the Dashboard alone, with a maintenance window added just before and a restart partway | Planned |
 
 ## Found in the 0.5.2 review, for later
 
