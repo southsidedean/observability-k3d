@@ -1,8 +1,8 @@
 # Plan: ok3d, a home network operations center on k3d, with AI agents
 
-Status: 0.5.1 is released and 0.5.2 is in progress; `docs/roadmap.md` has where each release
-stands. `v0.2.0` was the old stack's last version (the
-`scripts/cluster-setup-k3d-observability-everything.sh` stack), and 0.4.0 replaced it. The
+Status: 0.5.2 is being released; `docs/roadmap.md` has where each release stands. `v0.2.0`
+was the old stack's last version (the `scripts/cluster-setup-k3d-observability-everything.sh`
+stack), and 0.4.0 replaced it. The
 plan was written on 2026-10-27, before anything was built, and the roadmap ends in 1.x.
 
 ## Goal
@@ -222,7 +222,7 @@ all of them, so nothing is skipped there).
 Built so far (0.5.2):
 
 - lint and security checks, without the JSON check, hadolint, the color check, or axe;
-- pytest, which also holds the privacy, docs, and UniFi dashboard tests;
+- pytest, which also holds the privacy, docs, and Grafana dashboard tests;
 - charts, which also runs the Grafana dashboards' datasource tests and the promtool and amtool
   tests, without helm-unittest or the memory budget;
 - the Dashboard's image.

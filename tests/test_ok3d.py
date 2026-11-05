@@ -359,6 +359,16 @@ def test_a_missing_dotenv_is_said_once_not_as_every_secret_being_empty(env: dict
     assert "in .env is empty" not in result.stdout
 
 
+def test_a_dotenv_that_is_a_folder_is_called_that_not_missing(env: dict[str, str], tmp_path: Path) -> None:
+    folder = tmp_path / ".env"
+    folder.mkdir()
+    env.update(OK3D_ENV=str(folder))
+    result = ok3d(env, "check")
+    assert result.returncode == 1
+    assert f"FAIL  {folder} is a folder, not a file" in result.stdout
+    assert "No .env" not in result.stdout + result.stderr
+
+
 def test_install_says_when_docker_isnt_running(linux: dict[str, str]) -> None:
     result = ok3d({**linux, "FAKE_DOCKER_STATUS": "1"}, "install")
     assert result.returncode == 1

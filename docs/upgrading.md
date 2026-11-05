@@ -109,10 +109,10 @@ first sets up the Dashboard. It stops if you changed ok3d's own files, and then 
 changed. (From 0.5.1 on, the installer won't move a checkout to a newer release: it sends you
 to `./ok3d upgrade`, which checks the release's signature.)
 
-Then, as `./ok3d upgrade` does, check your settings and devices with the new release, delete
-the cluster so nothing writes to the data root, and back up its certificate authority,
-Grafana's database, and Alertmanager's silences, in your ok3d folder (with your data root for
-`/srv/ok3d`). Deleting the cluster keeps the data root. If Check finds a problem, it says
+Then do what `./ok3d upgrade` does, in your ok3d folder, with your data root for `/srv/ok3d`.
+Check your settings and devices with the new release, and delete the cluster so nothing
+writes to the data root (deleting it keeps the data root). Then back up the data root's
+certificate authority, Grafana's database, and Alertmanager's silences. If Check finds a problem, it says
 what, and nothing after it runs: fix it, then run the lines again.
 
 ```sh

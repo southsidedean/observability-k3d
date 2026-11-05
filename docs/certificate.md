@@ -16,8 +16,9 @@ ok3d made the first time: it's in `admin-password` in the data root, readable on
 you choose your own, make it long and random (`openssl rand -base64 18`): the gateway doesn't
 slow down wrong passwords, and `./ok3d check` warns about one shorter than 20 characters.
 
-To change it on an ok3d that's running, set the new one in `.env` (or empty the line, and
-ok3d makes one), then `./ok3d apply`, which gives it to the gateway. Grafana takes the admin
+To change it on an ok3d that's running, set the new one in `.env`, then `./ok3d apply`, which
+gives it to the gateway. (If you empty the line instead, ok3d goes back to the one in
+`admin-password`, and makes one only if that file isn't there.) Grafana takes the admin
 password only when it makes its database, so give it the new one too:
 
 ```sh

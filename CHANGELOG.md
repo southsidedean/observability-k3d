@@ -1,15 +1,15 @@
 # Changelog
 
-## 0.5.2 (unreleased)
+## 0.5.2 (2026-11-05)
 
 ### Upgrading
 
 - From 0.5.1, press **Look for a new release** on the Dashboard's Home, then **Upgrade now**
   ([docs/upgrading.md](docs/upgrading.md#from-the-dashboard-from-051)), or run
   `./ok3d upgrade v0.5.2` on the server. From 0.5.0 or 0.4, run the installer again, which
-  moves straight to 0.5.2, then delete the cluster and back up the data root as
-  [docs/upgrading.md](docs/upgrading.md#from-050-or-04) shows, then **Check** and **Apply**
-  on the Dashboard.
+  moves straight to 0.5.2. Then check your settings, delete the cluster, and back up the data
+  root as [docs/upgrading.md](docs/upgrading.md#from-050-or-04) shows, and finish with
+  **Check** and **Apply** on the Dashboard.
 - Check now refuses a `devices.yaml` with two devices of the same name, a `behind` that names
   itself or no device in the file, or one device with the same metrics port twice. The
   upgrade runs Check first, so with any of those it stops and moves back to 0.5.1, saying
@@ -99,8 +99,8 @@
   unpoller's site, the 30-second smoothing (which drew nothing) is gone, and the upstream
   author's notes are rewritten for ok3d.
 - The docs, from the review: the README's commands clone the latest release instead of
-  `main`, and name Helm 3.13. Upgrading from 0.5.0 or 0.4 now deletes the cluster and backs
-  up the data root before Apply. `SECURITY.md` says which protections hold now and which
+  `main`, and name Helm 3.13. Upgrading from 0.5.0 or 0.4 now checks your settings,
+  deletes the cluster, and backs up the data root before Apply. `SECURITY.md` says which protections hold now and which
   come later, and that the ping checks need no extra capability. Smaller fixes in the
   architecture, demo, certificate, AI install, alerts, and runbook pages, both
   under-the-hood pages (running the Dashboard from the checkout now works as written), the
@@ -116,7 +116,8 @@
   Check now warns when an `OK3D_ADMIN_PASSWORD` of yours in `.env` is shorter than 20
   characters, and docs/certificate.md says how to change it, Grafana's copy included.
 - Check refuses a `.env` that others can read even with every part switched off. It used to
-  say Ready, and Apply then stopped partway.
+  say Ready, and Apply then stopped partway. When `.env` is a folder, Check says so, instead
+  of saying there's no `.env`.
 - The dead man's switch hears from ok3d every minute, as the docs say. It was every 2
   minutes, since Alertmanager skipped every other repeat.
 - Check warns below 4 GiB of free memory, not 7: ok3d 0.5 uses about 2 GiB. The README and
