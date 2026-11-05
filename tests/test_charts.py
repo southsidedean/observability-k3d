@@ -337,8 +337,8 @@ def test_the_gateway_serves_https_for_every_name_with_the_pages_certificate(tmp_
     # Prometheus and Alertmanager have no login of their own, so the gateway asks; Grafana has one.
     for page in ("prometheus", "alertmanager"):
         assert by_name[page]["policies"]["basicAuth"]["htpasswd"]["file"] == "/auth/htpasswd"
-        # A page load makes 20 or more requests at once, so the burst is large; the refill is
-        # what slows down guessing. At 20 at once, a page load on the test VM had 10 refused.
+        # A page load makes 20 or more requests at once, so the burst is large: at 20, a burst
+        # of 30 at once on the test VM had 10 refused. Wrong passwords are refused before it.
         limit = by_name[page]["policies"]["localRateLimit"]
         assert limit == [{"maxTokens": 100, "tokensPerFill": 5, "fillInterval": "1s"}]
         # The admin login is the gateway's, so it goes no further.

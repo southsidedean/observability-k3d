@@ -320,6 +320,12 @@ check_secrets() {
 	[ "$ALERTS_NTFY" != true ] || [ "$ALERTS_NTFY_TOKEN" != true ] || need_secret alerts.ntfy.useToken NTFY_TOKEN
 	[ "$ALERTS_EMAIL" != true ] || need_secret alerts.email SMTP_PASSWORD
 	[ "$ALERTS_DEADMAN" != true ] || need_secret alerts.deadman DEADMAN_URL
+	# The gateway checks the admin login quickly and doesn't limit wrong passwords, so one you
+	# choose must be too long to guess. ok3d's own is 24 characters, from 18 random bytes.
+	admin=$(env_value_if_any OK3D_ADMIN_PASSWORD 2>/dev/null) || admin=""
+	if [ -n "$admin" ] && [ "${#admin}" -lt 20 ]; then
+		warn "OK3D_ADMIN_PASSWORD in .env is shorter than 20 characters, so a device on your network could guess it at the Prometheus and Alertmanager pages: use a long random one (openssl rand -base64 18), or leave it empty and ok3d makes one"
+	fi
 }
 
 cmd_check() {

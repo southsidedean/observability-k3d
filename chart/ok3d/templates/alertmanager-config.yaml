@@ -8,9 +8,9 @@ Where alerts go:
 - Alertmanager's always-firing Watchdog alert goes to the dead man's switch every minute, so
   it hears from ok3d while all is well and tells you when it stops. Without one, nowhere.
   Alertmanager repeats only at a group_interval tick, once repeat_interval has passed since
-  the last notification: at 1m each, the tick comes a moment short and every other one is
-  skipped. So repeat_interval is 50s, and Alertmanager's log warns that it's less than
-  group_interval, which is expected here.
+  the last notification: at 1m each, the tick comes a moment short of repeat_interval, and
+  every other one is skipped. So repeat_interval is 50s, and Alertmanager's log warns that
+  it's less than group_interval, which is expected here.
 - Info alerts, and the operator's InfoInhibitor, go nowhere: they're for the board, not your
   phone.
 - Everything else goes to you (ntfy, email, or both). Critical alerts repeat every
