@@ -139,7 +139,7 @@ fi""",
     "systemctl": 'echo "systemctl $*" >>"$FAKE_LOG"',
     # Apply's 5-second waits for the cluster to be steady (wait_for_cluster) are logged and
     # skipped, so each test that deploys doesn't spend 10 seconds there. Any other wait is real.
-    "sleep": 'case "$*" in 5) echo "sleep 5" >>"$FAKE_LOG" ;; *) exec /bin/sleep "$@" ;; esac',
+    "sleep": 'case "$*" in 5) echo "sleep 5" >>"$FAKE_LOG" ;; *) exec "$REAL_SLEEP" "$@" ;; esac',
     # Whether a helm is running now: FAKE_HELM_RUNNING=0 says one is.
     "pgrep": 'exit "${FAKE_HELM_RUNNING:-1}"',
     # As util-linux's flock -n FD (macOS has none): the same kernel lock, taken on the shell's
@@ -173,6 +173,7 @@ def env(tmp_path: Path) -> dict[str, str]:
         "FAKE_DATA_ROOT": str(data_root),
         "OK3D_SETTINGS": str(settings),
         "REAL_PYTHON3": shutil.which("python3") or "python3",
+        "REAL_SLEEP": shutil.which("sleep") or "/bin/sleep",
     }
 
 
@@ -616,6 +617,8 @@ def test_apply_finishes_what_a_helm_that_was_cut_off_left(env: dict[str, str], n
     cleared = next(i for i, line in enumerate(log) if line.startswith(clears))
     deployed = next(i for i, line in enumerate(log) if line.startswith(f"helm upgrade --install {name} "))
     assert cleared < deployed
+    # A rollback doesn't wait (with a shorter limit than the deploy's): the deploy does.
+    assert not any(line.startswith("helm rollback") and "--wait" in line for line in log)
 
 
 @pytest.mark.parametrize("status", ["pending-install", "failed"])

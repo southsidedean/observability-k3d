@@ -570,9 +570,10 @@ wait_for_cluster() {
 
 # finish_release NAME NAMESPACE: clears what a Helm run that was cut off (the server restarted
 # partway through, say) left, so Apply can carry on. An upgrade or rollback goes back to the
-# revision before it (the deploy that follows waits for everything). An install that never finished is forgotten, and Helm's
-# install then takes over what it had made, since Helm marked it as its own: uninstalling
-# instead would wait on volumes that are still in use. A Helm that's running now isn't cut
+# revision before it, without waiting: the deploy that follows waits for everything. An
+# install that never finished is forgotten, and Helm's install then takes over what it had
+# made, since Helm marked it as its own: uninstalling instead would wait on volumes that are
+# still in use. A Helm that's running now isn't cut
 # off, so Apply stops instead. (pgrep sees any helm on this machine, for any cluster: Apply
 # then stops when it needn't, which is the safe way to be wrong.)
 finish_release() {
@@ -1012,18 +1013,20 @@ cmd_install() {
 stop_cleanly() {
 	k3d cluster get "$CLUSTER_NAME" >/dev/null 2>&1 || return 0
 	echo "Stopping Alertmanager, Prometheus, and Grafana, so they save their data first."
-	m="kubectl --context $context --namespace monitoring --request-timeout=20s"
+	# The waits have their own time limits; every other request gets 20 seconds.
+	m="kubectl --context $context --namespace monitoring"
+	t=--request-timeout=20s
 	# shellcheck disable=SC2086 # $m is split into words, on purpose
-	if ! { $m scale deployment ok3d-kube-prometheus-stack-operator --replicas=0 &&
+	if ! { $m scale deployment ok3d-kube-prometheus-stack-operator --replicas=0 $t &&
 		{ $m wait pod --selector app=kube-prometheus-stack-operator --for=delete --timeout=60s || :; } &&
-		$m scale deployment --all --replicas=0 && $m scale statefulset --all --replicas=0; } >/dev/null 2>&1; then
+		$m scale deployment --all --replicas=0 $t && $m scale statefulset --all --replicas=0 $t; } >/dev/null 2>&1; then
 		echo "Couldn't stop them: deleting the cluster anyway."
 		return 0
 	fi
 	# A wait finds nothing to wait for once every pod has gone, and says so as an error.
 	# shellcheck disable=SC2086
 	$m wait pod --all --for=delete --timeout=120s >/dev/null 2>&1 ||
-		[ -z "$($m get pods --output name 2>/dev/null)" ] ||
+		[ -z "$($m get pods --output name $t 2>/dev/null)" ] ||
 		echo "Not all of them stopped within 2 minutes: deleting the cluster anyway."
 }
 

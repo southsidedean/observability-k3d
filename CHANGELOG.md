@@ -11,7 +11,7 @@
 - After the server restarts partway through an Apply or an upgrade, **Check** and **Apply**
   on the Dashboard finish it. Helm left the release it was changing unfinished, and Apply
   failed with "another operation (install/upgrade/rollback) is in progress". Apply now goes
-  back to the version before (or starts an unfinished install again) first, and
+  back to the version before it (or starts an unfinished install again) first, and
   Check says it will, as it now does after a Helm run that failed. Apply also waits until a
   cluster that has just started again is steady: its API server answered, then didn't, and
   Helm failed partway.

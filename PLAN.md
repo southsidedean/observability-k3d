@@ -580,9 +580,9 @@ upgrade worked. It also found two problems that 0.5.1 had too, listed as known i
   the cluster first, brought it back. Apply will clear a release Helm left unfinished, and
   Check will say Apply does that, so Check and Apply on the Dashboard finish the upgrade.
   Decided 2026-11-05: an upgrade or rollback Helm left unfinished is rolled back to the
-  revision before it, and the deploy that follows waits for everything. An install that never finished is forgotten (Helm's record of it is
-  deleted), and the next install takes over what it had made, since Helm marked those as its
-  own. Uninstalling it instead would wait on Prometheus's and Alertmanager's volumes, which
+  revision before it, and the deploy that follows waits for everything. An install that
+  never finished is forgotten (Helm's record of it is deleted), and the next install takes
+  over what it had made, since Helm marked those as its own. Uninstalling it instead would wait on Prometheus's and Alertmanager's volumes, which
   their claims still hold. A Helm that's running now is left alone, and Apply stops. A run
   that Helm was told to stop (the server shut down in the usual way) is marked failed
   instead, which the next Apply already tried again; Check now says so instead of "Apply will
