@@ -114,7 +114,9 @@
   far too many to guess at any speed. The gateway's limit lets 100 requests through at once
   (it was 20), so a page load isn't refused. The limit never applied to wrong passwords, so
   Check now warns when an `OK3D_ADMIN_PASSWORD` of yours in `.env` is shorter than 20
-  characters.
+  characters, and docs/certificate.md says how to change it, Grafana's copy included.
+- Check refuses a `.env` that others can read even with every part switched off. It used to
+  say Ready, and Apply then stopped partway.
 - The dead man's switch hears from ok3d every minute, as the docs say. It was every 2
   minutes, since Alertmanager skipped every other repeat.
 - Check warns below 4 GiB of free memory, not 7: ok3d 0.5 uses about 2 GiB. The README and
