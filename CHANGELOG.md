@@ -108,6 +108,20 @@
   showed, is no longer taken.
 - When a path can't go in the helper's service file, `./ok3d install` now names the helper's
   Python too.
+- Prometheus's and Alertmanager's pages are quicker: the gateway checked the admin login's
+  hash at bcrypt cost 12 on every request, about 400 ms each time, for every request a page
+  makes. It's cost 5 now, a few milliseconds. ok3d's own admin password is 18 random bytes,
+  far too many to guess at any speed. The gateway's limit lets 100 requests through at once
+  (it was 20), so a page load isn't refused. The limit never applied to wrong passwords, so
+  Check now warns when an `OK3D_ADMIN_PASSWORD` of yours in `.env` is shorter than 20
+  characters, and docs/certificate.md says how to change it, Grafana's copy included.
+- Check refuses a `.env` that others can read even with every part switched off. It used to
+  say Ready, and Apply then stopped partway.
+- The dead man's switch hears from ok3d every minute, as the docs say. It was every 2
+  minutes, since Alertmanager skipped every other repeat.
+- Check warns below 4 GiB of free memory, not 7: ok3d 0.5 uses about 2 GiB. The README and
+  the AI install's steps say the same, and the first Apply is said to take about 25 minutes,
+  as it did on the test VM.
 - For contributors: an emptied or unreadable private-names list now stops a commit instead of
   turning the check off, the privacy test shows as skipped without a list, an exact copy of
   git's scissors line typed into a message hides nothing, and the tests can no longer act on

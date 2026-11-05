@@ -184,7 +184,9 @@ What the server needs, and what the host check checks before anything is created
   (pod certificates), and k3d 5.9 can run `rancher/k3s:v1.37.x`. The installer says which
   are missing and how to get them.
 - About 11 GiB of free memory for everything (kagent's node alone measured 1.7 GiB at rest;
-  the mesh and Tempo add about 1 GiB), and about 7 GiB with agents off.
+  the mesh and Tempo add about 1 GiB), and about 7 GiB with agents off: estimates for the
+  full stack. ok3d 0.5 uses about 2 GiB (measured on the test VM in 0.5.2), so Check warns
+  below 4 GiB until later releases need more.
 - An x86-64-v2 processor or newer. Some images need more, and the check names any that won't
   run on this processor.
 - inotify limits of at least 1024 instances and 1M watches (two k3d clusters on one host

@@ -12,7 +12,18 @@ one port, over HTTPS:
 | The Dashboard | `https://dashboard.noc.home.arpa:8444/` | its own password, which `./ok3d install` prints |
 
 The admin password is `OK3D_ADMIN_PASSWORD` from `.env`, or, if you left that empty, the one
-ok3d made the first time: it's in `admin-password` in the data root, readable only by you.
+ok3d made the first time: it's in `admin-password` in the data root, readable only by you. If
+you choose your own, make it long and random (`openssl rand -base64 18`): the gateway doesn't
+slow down wrong passwords, and `./ok3d check` warns about one shorter than 20 characters.
+
+To change it on an ok3d that's running, set the new one in `.env` (or empty the line, and
+ok3d makes one), then `./ok3d apply`, which gives it to the gateway. Grafana takes the admin
+password only when it makes its database, so give it the new one too:
+
+```sh
+kubectl --context k3d-ok3d -n monitoring exec deploy/ok3d-grafana -c grafana -- \
+  grafana cli admin reset-admin-password "<the new password>"
+```
 
 Two things make the pages open cleanly: your devices finding the names, and your devices
 trusting ok3d's certificate authority.
@@ -84,4 +95,4 @@ and renews itself a month before it runs out.
 - **A certificate warning:** the device doesn't trust the authority yet (step 2).
 - **"Not found":** the name is right but isn't one of ok3d's pages: check the spelling.
 - **A login prompt that won't take the password:** it's `admin` and the admin password. After
-  changing `OK3D_ADMIN_PASSWORD`, run `./ok3d apply`.
+  changing `OK3D_ADMIN_PASSWORD`, run `./ok3d apply`, and reset Grafana's as above.

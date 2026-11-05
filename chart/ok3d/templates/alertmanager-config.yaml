@@ -7,6 +7,10 @@ and Alertmanager reads at /etc/alertmanager/secrets/ok3d-alerts/.
 Where alerts go:
 - Alertmanager's always-firing Watchdog alert goes to the dead man's switch every minute, so
   it hears from ok3d while all is well and tells you when it stops. Without one, nowhere.
+  Alertmanager repeats only at a group_interval tick, once repeat_interval has passed since
+  the last notification: at 1m each, the tick comes a moment short of repeat_interval, and
+  every other one is skipped. So repeat_interval is 50s, and Alertmanager's log warns that
+  it's less than group_interval, which is expected here.
 - Info alerts, and the operator's InfoInhibitor, go nowhere: they're for the board, not your
   phone.
 - Everything else goes to you (ntfy, email, or both). Critical alerts repeat every
@@ -32,7 +36,7 @@ tests/test_alertmanager.py checks the routing with amtool.
     "repeat_interval" $a.repeatWarning
     "routes" (list
       (dict "receiver" (ternary "deadman" "nobody" $a.deadman.enabled) "matchers" (list "alertname = \"Watchdog\"")
-        "group_wait" "0s" "group_interval" "1m" "repeat_interval" "1m")
+        "group_wait" "0s" "group_interval" "1m" "repeat_interval" "50s")
       (dict "receiver" "nobody" "matchers" (list "alertname = \"InfoInhibitor\""))
       (dict "receiver" "nobody" "matchers" (list "severity = \"info\""))
       (dict "receiver" "you" "matchers" (list "severity = \"critical\"") "repeat_interval" $a.repeatCritical)))

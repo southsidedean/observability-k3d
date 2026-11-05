@@ -477,6 +477,27 @@ def test_check_finds_a_missing_alert_secret_and_warns_with_no_destination(env: d
     assert "alerts.ntfy is on, but NTFY_TOPIC in .env is empty" in result.stdout
 
 
+@pytest.mark.parametrize(("password", "warned"), [("short-one", True), ("x" * 19, True), ("x" * 20, False), ("", False)])
+def test_check_warns_about_a_short_admin_password_without_showing_it(env: dict[str, str], tmp_path: Path,
+                                                                     password: str, warned: bool) -> None:
+    # The gateway doesn't slow down wrong passwords, so a short one of yours could be guessed.
+    dotenv(tmp_path, env, f"OK3D_ADMIN_PASSWORD={password}\n")
+    result = ok3d(env, "check")
+    assert ("WARN  OK3D_ADMIN_PASSWORD in .env is shorter than 20 characters" in result.stdout) == warned
+    if password:
+        assert password not in result.stdout + result.stderr
+
+
+def test_check_refuses_a_dotenv_others_can_read_even_with_everything_off(env: dict[str, str], tmp_path: Path) -> None:
+    # Apply reads .env for the admin password whatever is switched on, and would stop partway.
+    dotenv(tmp_path, env, "OK3D_ADMIN_PASSWORD=a-long-random-password-here\n")
+    (tmp_path / ".env").chmod(0o644)
+    result = ok3d(env, "check")
+    assert result.returncode == 1
+    assert "can be read by others" in result.stdout
+    assert "a-long-random-password-here" not in result.stdout + result.stderr
+
+
 def test_apply_keeps_an_existing_cluster_and_authority(env: dict[str, str]) -> None:
     certs = Path(env["FAKE_DATA_ROOT"]) / "certs"
     certs.mkdir(mode=0o700)

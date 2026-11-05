@@ -79,6 +79,7 @@ that upgrades from the Dashboard alone. 0.6.0, logs and changes, comes next.
 | Fixes from the 0.5.2 review: the Dashboard, the helper, and maintenance windows | Done ([#55](https://github.com/southsidedean/observability-k3d/pull/55)) |
 | Fixes from the 0.5.2 review: the UniFi dashboards' panel descriptions, plugins, and upstream text | Done ([#58](https://github.com/southsidedean/observability-k3d/pull/58)) |
 | Fixes from the 0.5.2 review: the docs, `PLAN.md`, and `SECURITY.md` | Done ([#57](https://github.com/southsidedean/observability-k3d/pull/57)) |
+| Fixes from the 0.5.2 test VM pass: the gateway's login speed, the dead man's switch's pace, the memory figure | Done ([#59](https://github.com/southsidedean/observability-k3d/pull/59)) |
 | Release 0.5.2, tested with an upgrade from 0.5.1 from the Dashboard alone | Planned |
 
 ## Found in the 0.5.2 review, for later
@@ -94,4 +95,5 @@ for the release named, or for a decision.
 | NetworkPolicies for cert-manager and kube-system, and between monitoring's own parts | 0.8, with the mesh |
 | A warning when a silence made on Alertmanager's own page covers the Watchdog | 0.7 |
 | The Dashboard's sign-in pause, which any device on the network can keep on for everyone by guessing, and its 32 connections, which one device can fill: limits per address instead | 0.8, with the new sign-in |
+| Prometheus's and Alertmanager's basic auth doesn't limit wrong passwords (so a password you choose must be long, and Check warns about a short one): the new sign-in replaces it | 0.8, with the new sign-in |
 | The NOC with agents setup card can't be chosen: it needs `modules.agents`, which only the server may change. Decide how the Dashboard turns agents on, and say so on the card | 0.9 |

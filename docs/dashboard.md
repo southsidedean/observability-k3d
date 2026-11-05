@@ -54,7 +54,7 @@ Home is where you start and finish each change:
    arrive.
 3. **Apply** turns on once a Check finds no problems, and off again if you change
    `settings.yaml` or `devices.yaml` on the server after it. The first Apply makes the
-   cluster and takes about 20 minutes; later ones bring it up to date with your settings,
+   cluster and takes about 25 minutes; later ones bring it up to date with your settings,
    and are quicker. Once a cluster is running, Check also lists what Apply would change:
    the parts it would restart (Grafana, say, after a change to its settings), stop (a part
    you switched off), or start. If Apply would restart or stop anything, or Check couldn't

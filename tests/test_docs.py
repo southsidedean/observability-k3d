@@ -176,3 +176,18 @@ def test_the_readme_clones_the_latest_release() -> None:
     assert released, "CHANGELOG.md has no released version"
     clones = re.findall(r"git clone --branch (v\S+) ", (ROOT / "README.md").read_text())
     assert clones == [f"v{released[0]}"], f"README.md should clone v{released[0]}, the latest release"
+
+
+def test_the_docs_give_the_memory_figure_check_warns_at() -> None:
+    # ./ok3d check warns below warn_memory_gib; the pages that say how much a server needs say
+    # the same figure, in GiB, as Check counts it.
+    found = re.search(r"^warn_memory_gib=(\d+)$", (ROOT / "ok3d").read_text(), re.M)
+    assert found
+    # Each page's own sentence, so another figure elsewhere on the page (16 GiB, say) can't stand in.
+    for page, sentence in (("README.md", "at least {} GiB of memory free"),
+                           ("docs/install-with-ai.md", "at least {} GiB of memory free"),
+                           ("PLAN.md", "Check warns below {} GiB")):  # fmt: skip
+        text = " ".join((ROOT / page).read_text().split())
+        said = re.search(re.escape(sentence).replace(r"\{\}", r"(\d+)"), text)
+        assert said, f"{page} no longer says {sentence.format('N')!r}"
+        assert said.group(1) == found.group(1), f"{page}: {said.group(1)} GiB, Check: {found.group(1)}"

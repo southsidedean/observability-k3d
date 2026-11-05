@@ -76,9 +76,10 @@ helper_python=${OK3D_HELPER_PYTHON:-/usr/bin/python3}
 # The inotify limits two k3d clusters on one machine need (the defaults run out).
 min_instances=1024
 min_watches=1048576
-# Free memory below this gets a warning: the whole stack needs about 11 GiB, and about 7 with
-# agents off (PLAN.md, "The host").
-warn_memory_gib=7
+# Free memory below this gets a warning. ok3d 0.5 uses about 2 GiB (measured on the test VM:
+# the cluster's node 1.9 GiB, Grafana 420 MiB of it); 4 leaves room for history and UniFi.
+# Logs, the mesh, and agents need more as they come (PLAN.md, "The host").
+warn_memory_gib=4
 
 # Where releases come from, for ./ok3d upgrade. OK3D_REPO names another, for a test; the
 # helper never passes it on.
@@ -274,7 +275,7 @@ check_linux_limits() {
 		if [ "$available_gib" -ge "$warn_memory_gib" ]; then
 			pass "$available_gib GiB of memory free"
 		else
-			warn "$available_gib GiB of memory free: the whole stack needs about 11 GiB (7 with agents off)"
+			warn "$available_gib GiB of memory free: Check warns below $warn_memory_gib GiB, which leaves room to spare"
 		fi
 	fi
 }
@@ -303,8 +304,9 @@ check_data_root() {
 # The UniFi module and each alert destination that's on need their secret in .env. A .env
 # that's missing or that others can read is said once, instead of as each secret being empty.
 check_secrets() {
-	if [ "$MODULE_UNIFI" = true ] || [ "$ALERTS_NTFY" = true ] || [ "$ALERTS_EMAIL" = true ] ||
-		[ "$ALERTS_DEADMAN" = true ]; then
+	# Whenever there's a .env (Apply reads it for the admin password too), or a part needs one.
+	if [ -e "$envfile" ] || [ "$MODULE_UNIFI" = true ] || [ "$ALERTS_NTFY" = true ] ||
+		[ "$ALERTS_EMAIL" = true ] || [ "$ALERTS_DEADMAN" = true ]; then
 		problem=$(env_value OK3D_NO_SUCH_KEY 2>&1 >/dev/null) || true
 		if [ -n "$problem" ]; then
 			fail "$problem"
@@ -319,6 +321,12 @@ check_secrets() {
 	[ "$ALERTS_NTFY" != true ] || [ "$ALERTS_NTFY_TOKEN" != true ] || need_secret alerts.ntfy.useToken NTFY_TOKEN
 	[ "$ALERTS_EMAIL" != true ] || need_secret alerts.email SMTP_PASSWORD
 	[ "$ALERTS_DEADMAN" != true ] || need_secret alerts.deadman DEADMAN_URL
+	# The gateway checks the admin login quickly and doesn't limit wrong passwords, so one you
+	# choose must be too long to guess. ok3d's own is 24 characters, from 18 random bytes.
+	admin=$(env_value_if_any OK3D_ADMIN_PASSWORD)
+	if [ -n "$admin" ] && [ "${#admin}" -lt 20 ]; then
+		warn "OK3D_ADMIN_PASSWORD in .env is shorter than 20 characters, so a device on your network could guess it at the Prometheus and Alertmanager pages: use a long random one (openssl rand -base64 18), or leave it empty and ok3d makes one (docs/certificate.md says how to change it)"
+	fi
 }
 
 cmd_check() {

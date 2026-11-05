@@ -136,6 +136,9 @@ Alertmanager's log says why:
 kubectl --context k3d-ok3d -n monitoring logs alertmanager-ok3d-kube-prometheus-stack-alertmanager-0 -c alertmanager
 ```
 
+A warning there that "repeat_interval is less than group_interval" is expected: it's how the
+dead man's switch hears from ok3d every minute.
+
 `./ok3d check` also says when a destination is on but its secret in `.env` is empty.
 
 ## Under the hood

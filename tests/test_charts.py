@@ -337,7 +337,10 @@ def test_the_gateway_serves_https_for_every_name_with_the_pages_certificate(tmp_
     # Prometheus and Alertmanager have no login of their own, so the gateway asks; Grafana has one.
     for page in ("prometheus", "alertmanager"):
         assert by_name[page]["policies"]["basicAuth"]["htpasswd"]["file"] == "/auth/htpasswd"
-        assert by_name[page]["policies"]["localRateLimit"]
+        # A page load makes 20 or more requests at once, so the burst is large: at 20, a burst
+        # of 30 at once on the test VM had 10 refused. Wrong passwords didn't use it up there.
+        limit = by_name[page]["policies"]["localRateLimit"]
+        assert limit == [{"maxTokens": 100, "tokensPerFill": 5, "fillInterval": "1s"}]
         # The admin login is the gateway's, so it goes no further.
         assert by_name[page]["policies"]["requestHeaderModifier"]["remove"] == ["authorization"]
     assert "basicAuth" not in by_name["grafana"]["policies"]
@@ -387,6 +390,13 @@ def test_the_gateway_runs_hardened_with_its_password_only_from_the_secret() -> N
     assert "name: ok3d-admin" in gateway and "admin-password" in gateway
     service = next(d for d in documents(render(), "Service") if "name: ok3d-gateway\n" in d)
     assert "type: LoadBalancer" in service
+
+
+def test_the_admin_logins_hash_is_cheap_to_check() -> None:
+    # The gateway checks it on every request: at bcrypt cost 12, each took about 400 ms on the
+    # test VM, for every request a Prometheus or Alertmanager page makes.
+    gateway = next(d for d in documents(render(), "Deployment") if "name: ok3d-gateway" in d)
+    assert re.search(r"htpasswd -niB -C 5 ", gateway)
 
 
 def test_dashboards_have_their_datasources_and_dpi_stays_out() -> None:

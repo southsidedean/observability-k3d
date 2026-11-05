@@ -72,7 +72,11 @@ when the cluster is down.
 - Passwords are checked one at a time. After 5 wrong passwords from one address in 5
   minutes, that address waits a minute, so a device guessing can't lock you out from
   another. After 50 wrong passwords from anywhere in 5 minutes, sign-in pauses for everyone
-  for a minute. Each wrong password also waits half a second.
+  for a minute. Each wrong password also waits half a second. The address is the one Docker
+  passes on: another computer's own, but for a browser on the server that opens it as
+  `localhost`, the address of Docker's bridge network, which everything there shares. It's
+  published only on IPv4, on `cluster.publishAddress` (`0.0.0.0`, every address, by
+  default).
 
 ## Every request
 
