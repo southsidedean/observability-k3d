@@ -59,9 +59,12 @@ The Dashboard's Home, or what `./ok3d upgrade` printed, says which step it stopp
   stopped before "Moving to", nothing changed: upgrade again. If it stopped during "Moving
   to", `git -C ~/ok3d status` may show ok3d's files half moved; put them back with
   `git -C ~/ok3d checkout --force` and the release (or branch) you had, such as `v0.5.1`,
-  then upgrade again. If it stopped later, the ok3d folder is already on the new release, so
-  finish by hand on the server, with the steps the upgrade would have taken (with your data
-  root for `/srv/ok3d`):
+  then upgrade again. If it stopped while making the cluster again (its last step), **Check**
+  and **Apply** on the Dashboard finish it: Apply waits for the cluster to be steady, and
+  first clears what Helm left unfinished. If it stopped in between, while deleting the
+  cluster or backing up, the ok3d folder is already on the new release, so finish by hand on
+  the server, with the steps the upgrade would have taken (with your data root for
+  `/srv/ok3d`):
 
   ```sh
   cd ~/ok3d

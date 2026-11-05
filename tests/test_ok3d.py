@@ -646,8 +646,25 @@ def test_apply_waits_for_a_cluster_that_has_just_started(env: dict[str, str]) ->
     log = calls(env)
     first_helm = next(i for i, line in enumerate(log) if line.startswith("helm upgrade --install"))
     asks = [line for line in log[:first_helm] if "get --raw /readyz" in line or line == "sleep 5"]
-    assert asks == ["kubectl --context k3d-ok3d get --raw /readyz", "sleep 5"] * 3 + [  # one no, then three yeses
-        "kubectl --context k3d-ok3d get --raw /readyz"]
+    ask = "kubectl --context k3d-ok3d --request-timeout=5s get --raw /readyz"
+    assert asks == [ask, "sleep 5"] * 3 + [ask]  # one no, then three yeses
+
+
+def test_apply_gives_up_on_a_cluster_that_never_steadies(env: dict[str, str]) -> None:
+    env.update(FAKE_CLUSTER_GET="0", FAKE_NOT_READY="1000")
+    result = ok3d(env, "apply", "--yes")
+    assert result.returncode == 1
+    assert "isn't steady after 5 minutes" in result.stderr
+    log = calls(env)
+    assert sum("get --raw /readyz" in line for line in log) == 60 and log.count("sleep 5") == 59
+    assert not any(line.startswith("helm upgrade --install") for line in log)
+
+
+@pytest.mark.parametrize("not_ready", ["57", "58"])
+def test_the_third_yes_on_the_last_try_still_counts(env: dict[str, str], not_ready: str) -> None:
+    # 57 nos, then yeses on tries 58 to 60: steady. 58 nos leaves only two tries.
+    env.update(FAKE_CLUSTER_GET="0", FAKE_NOT_READY=not_ready)
+    assert ok3d(env, "apply", "--yes").returncode == (0 if not_ready == "57" else 1)
 
 
 def test_apply_leaves_a_helm_that_is_still_running_alone(env: dict[str, str]) -> None:

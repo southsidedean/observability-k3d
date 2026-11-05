@@ -36,8 +36,13 @@ VERSION = re.compile(r"v[0-9]{1,6}\.[0-9]{1,6}\.[0-9]{1,6}")
 UPGRADE_TAIL = 16 * 1024
 TIME = re.compile(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ")
 # A terminal's color and cursor codes, which k3d puts in its log lines even when it isn't
-# writing to a terminal. A page would show them as junk such as "[36mINFO[0m".
-TERMINAL_CODES = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]|\x1b[ -/]*[0-~]")
+# writing to a terminal, and its window title, with the title's text. A page would show them
+# as junk such as "[36mINFO[0m".
+TERMINAL_CODES = re.compile(
+    r"\x1b\][^\x07\x1b]{0,256}(?:\x07|\x1b\\)"  # a window title
+    r"|\x1b\[[0-?]*[ -/]*[@-~]"  # colors and cursor moves
+    r"|\x1b[ -/]*[0-~]"  # the rest
+)
 
 
 # How long the Dashboard waits for an answer to the request it last sent before it stops

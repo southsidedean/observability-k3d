@@ -552,27 +552,29 @@ unfinished_release() {
 wait_for_cluster() {
 	ready=0
 	tries=0
-	while [ "$ready" -lt 3 ]; do
-		if kubectl --context "$context" get --raw /readyz >/dev/null 2>&1; then
+	while :; do
+		if kubectl --context "$context" --request-timeout=5s get --raw /readyz >/dev/null 2>&1; then
 			ready=$((ready + 1))
 		else
 			ready=0
 		fi
+		[ "$ready" -lt 3 ] || return 0
 		tries=$((tries + 1))
 		if [ "$tries" -ge 60 ]; then
 			echo "The cluster's API server isn't steady after 5 minutes: try Apply again in a while." >&2
 			exit 1
 		fi
-		[ "$ready" -ge 3 ] || sleep 5
+		sleep 5
 	done
 }
 
 # finish_release NAME NAMESPACE: clears what a Helm run that was cut off (the server restarted
 # partway through, say) left, so Apply can carry on. An upgrade or rollback goes back to the
-# last version that finished. An install that never finished is forgotten, and Helm's
+# revision before it (the deploy that follows waits for everything). An install that never finished is forgotten, and Helm's
 # install then takes over what it had made, since Helm marked it as its own: uninstalling
 # instead would wait on volumes that are still in use. A Helm that's running now isn't cut
-# off, so Apply stops instead.
+# off, so Apply stops instead. (pgrep sees any helm on this machine, for any cluster: Apply
+# then stops when it needn't, which is the safe way to be wrong.)
 finish_release() {
 	status=$(unfinished_release "$1" "$2")
 	case "$status" in pending-*) ;; *) return 0 ;; esac
@@ -588,7 +590,7 @@ finish_release() {
 		;;
 	*)
 		echo "Helm's last change to $1 was cut off: going back to the version before it first."
-		helm rollback "$1" --kube-context "$context" --namespace "$2" --wait --timeout 10m
+		helm rollback "$1" --kube-context "$context" --namespace "$2"
 		;;
 	esac
 }
