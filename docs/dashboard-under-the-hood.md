@@ -251,7 +251,8 @@ restarts everything, or Helm's last run of a release didn't finish (the server r
 partway, say). In that last case, Apply waits for the cluster's API server to be steady,
 rolls back an upgrade Helm left unfinished, or forgets an install it left unfinished so the
 next one takes over, and then deploys as usual. Check says why: Helm's own error line when
-Helm failed, and its own words otherwise. A Check that finds problems after reading your settings empties the file.
+Helm failed, and its own words otherwise. A Check that finds problems after reading your
+settings empties the file.
 
 Home shows the plan only once a Check has passed, so a Check that stops partway (on a
 setting it can't read, say) and leaves the file as it was makes no difference. Only the ok3d

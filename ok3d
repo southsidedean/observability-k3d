@@ -1019,7 +1019,8 @@ stop_cleanly() {
 	# shellcheck disable=SC2086 # $m is split into words, on purpose
 	if ! { $m scale deployment ok3d-kube-prometheus-stack-operator --replicas=0 $t &&
 		{ $m wait pod --selector app=kube-prometheus-stack-operator --for=delete --timeout=60s || :; } &&
-		$m scale deployment --all --replicas=0 $t && $m scale statefulset --all --replicas=0 $t; } >/dev/null 2>&1; then
+		$m scale deployment --all --replicas=0 $t &&
+		$m scale statefulset --all --replicas=0 $t; } >/dev/null 2>&1; then
 		echo "Couldn't stop them: deleting the cluster anyway."
 		return 0
 	fi
