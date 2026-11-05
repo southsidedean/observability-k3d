@@ -1,6 +1,6 @@
 # Plan: ok3d, a home network operations center on k3d, with AI agents
 
-Status: 0.5.2 is being released; `docs/roadmap.md` has where each release stands. `v0.2.0`
+Status: 0.5.2 is released and 0.5.3 is in progress; `docs/roadmap.md` has where each release stands. `v0.2.0`
 was the old stack's last version (the `scripts/cluster-setup-k3d-observability-everything.sh`
 stack), and 0.4.0 replaced it. The plan was written on 2026-10-27, before anything was
 built, and the roadmap ends in 1.x.
@@ -563,6 +563,23 @@ on to 0.6.0.dev0 only in the pull request that brings 0.6's first part.
   the vendored UniFi dashboards' panel descriptions. What's too big for a patch release is
   listed in docs/roadmap.md for the release that takes it.
 - Test: an upgrade from 0.5.1 from the Dashboard alone, with no terminal.
+
+### 0.5.3: What 0.5.2's release test found
+
+0.5.2's release test (2026-11-05) upgraded from 0.5.1 from the Dashboard alone, and the
+upgrade worked. It also found two problems that 0.5.1 had too, listed as known issues in
+0.5.2's release notes:
+
+- A maintenance window added in the 15 minutes before an upgrade was lost. Alertmanager
+  saves its silences to the data root every 15 minutes and when it stops cleanly, and
+  `k3d cluster delete` stops it without that. `./ok3d delete` will stop Alertmanager cleanly
+  first.
+- After the server restarted while the upgrade was making the cluster again, Apply failed
+  with Helm's "another operation is in progress", where the docs say Check and Apply finish
+  the upgrade. Apply will clear a release Helm left unfinished.
+- Smaller: k3d's color codes show in the upgrade's output on Home, and the steps for going
+  back copy a `.env` that may not be there.
+- Test: an upgrade from 0.5.2 from the Dashboard alone, with a restart partway through.
 
 ### 0.6: Logs and changes
 
