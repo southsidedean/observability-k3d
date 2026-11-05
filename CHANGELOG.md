@@ -5,10 +5,18 @@
 ### Upgrading
 
 - From 0.5.1 or 0.5.2, press **Look for a new release** on the Dashboard's Home, then
-  **Upgrade now** ([docs/upgrading.md](docs/upgrading.md#from-the-dashboard-from-051)), or run
+  **Upgrade to v0.5.3** and **Upgrade now**
+  ([docs/upgrading.md](docs/upgrading.md#from-the-dashboard-from-051)), or run
   `./ok3d upgrade v0.5.3` on the server. The upgrade runs the new release's `./ok3d delete`
-  and Apply, so the fixes below already apply to it. From 0.5.0 or 0.4, run the installer
-  again, then follow [docs/upgrading.md](docs/upgrading.md#from-050-or-04).
+  and Apply, so two of the fixes below already help it: a maintenance window you add just
+  before it comes through, and after a restart partway, **Check** and **Apply** on the
+  Dashboard finish it.
+- From 0.5.1, read 0.5.2's Upgrading notes too: Check now refuses some mistakes in
+  `devices.yaml`, and the upgrade stops on them.
+- From 0.5.0 or 0.4, run the installer again, which moves straight to 0.5.3. Then check your
+  settings, delete the cluster, and back up the data root as
+  [docs/upgrading.md](docs/upgrading.md#from-050-or-04) shows, and finish with **Check** and
+  **Apply** on the Dashboard.
 
 ### Changes
 
