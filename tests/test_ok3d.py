@@ -97,6 +97,10 @@ case "$*" in
 *"amtool"*"silence query"*) if [ -n "${FAKE_SILENCES:-}" ]; then cat "$FAKE_SILENCES"; else echo "[]"; fi ;;
 *"--filename -"*) cat >>"$FAKE_LOG.stdin" ;;
 *" scale "*) exit "${FAKE_SCALE_STATUS:-0}" ;;
+# The API server's readiness: not ready for the first FAKE_NOT_READY asks.
+*"get --raw /readyz"*)
+	n=$(cat "$FAKE_LOG.readyz" 2>/dev/null || echo 0); echo $((n + 1)) >"$FAKE_LOG.readyz"
+	[ "$n" -ge "${FAKE_NOT_READY:-0}" ] ;;
 *"--from-file=api-key=/dev/stdin"*) echo "stdin: $(cat)" >>"$FAKE_LOG.stdin"; echo "kind: Secret" ;;
 *"--from-env-file=/dev/stdin"*)
 	# Each Secret's contents in a file of its own, by namespace and name.
@@ -133,6 +137,9 @@ fi""",
     # whatever machine the tests run on.
     "uname": 'echo "${FAKE_UNAME:-Darwin}"',
     "systemctl": 'echo "systemctl $*" >>"$FAKE_LOG"',
+    # Apply's 5-second waits for the cluster to be steady (wait_for_cluster) are logged and
+    # skipped, so each test that deploys doesn't spend 10 seconds there. Any other wait is real.
+    "sleep": 'case "$*" in 5) echo "sleep 5" >>"$FAKE_LOG" ;; *) exec /bin/sleep "$@" ;; esac',
     # Whether a helm is running now: FAKE_HELM_RUNNING=0 says one is.
     "pgrep": 'exit "${FAKE_HELM_RUNNING:-1}"',
     # As util-linux's flock -n FD (macOS has none): the same kernel lock, taken on the shell's
@@ -611,13 +618,36 @@ def test_apply_finishes_what_a_helm_that_was_cut_off_left(env: dict[str, str], n
     assert cleared < deployed
 
 
-def test_check_says_apply_will_finish_what_helm_left(env: dict[str, str]) -> None:
+@pytest.mark.parametrize("status", ["pending-install", "failed"])
+def test_check_says_apply_will_finish_what_helm_left(env: dict[str, str], status: str) -> None:
+    # After a failed install, Check said Apply would change nothing that's running.
     result = ok3d(env | {"FAKE_CLUSTER_GET": "0", "FAKE_PENDING": "ok3d-platform",
-                         "FAKE_PENDING_STATUS": "pending-install"}, "check")  # fmt: skip
+                         "FAKE_PENDING_STATUS": status}, "check")  # fmt: skip
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "Helm's last run was cut off (the server restarted, say), and Apply will finish it" in result.stdout
+    assert "Helm's last run didn't finish (the server restarted, say), and Apply will finish it" in result.stdout
     assert not any(line.startswith(("helm rollback", "kubectl --context k3d-ok3d --namespace cert-manager delete"))
                    for line in calls(env))  # fmt: skip
+
+
+def test_apply_tries_a_failed_release_again_without_clearing_it(env: dict[str, str]) -> None:
+    env.update(FAKE_CLUSTER_GET="0", FAKE_PENDING="ok3d", FAKE_PENDING_STATUS="failed")
+    result = ok3d(env, "apply", "--yes")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "cut off" not in result.stdout
+    assert not any(line.startswith(("helm rollback", "kubectl --context k3d-ok3d --namespace monitoring delete secret"))
+                   for line in calls(env))  # fmt: skip
+
+
+def test_apply_waits_for_a_cluster_that_has_just_started(env: dict[str, str]) -> None:
+    # Right after the server restarted, the API server answered, then didn't, and Helm failed.
+    env.update(FAKE_CLUSTER_GET="0", FAKE_NOT_READY="1")
+    result = ok3d(env, "apply", "--yes")
+    assert result.returncode == 0, result.stdout + result.stderr
+    log = calls(env)
+    first_helm = next(i for i, line in enumerate(log) if line.startswith("helm upgrade --install"))
+    asks = [line for line in log[:first_helm] if "get --raw /readyz" in line or line == "sleep 5"]
+    assert asks == ["kubectl --context k3d-ok3d get --raw /readyz", "sleep 5"] * 3 + [  # one no, then three yeses
+        "kubectl --context k3d-ok3d get --raw /readyz"]
 
 
 def test_apply_leaves_a_helm_that_is_still_running_alone(env: dict[str, str]) -> None:

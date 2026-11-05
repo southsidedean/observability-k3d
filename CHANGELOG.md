@@ -12,7 +12,9 @@
   on the Dashboard finish it. Helm left the release it was changing unfinished, and Apply
   failed with "another operation (install/upgrade/rollback) is in progress". Apply now goes
   back to the last version that finished (or starts an unfinished install again) first, and
-  Check says it will.
+  Check says it will, as it now does after a Helm run that failed. Apply also waits until a
+  cluster that has just started again is steady: its API server answered, then didn't, and
+  Helm failed partway.
 - The output on Home no longer shows k3d's color codes as `[36mINFO[0m`.
 - The steps for going back to the release you had (docs/upgrading.md) no longer fail when
   you have no `.env`.

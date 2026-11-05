@@ -536,12 +536,35 @@ load_alert_secrets() {
 		kubectl --context "$context" apply --filename - >/dev/null
 }
 
-# pending_release NAME NAMESPACE: Helm's status for a release it was installing, upgrading, or
-# rolling back when it was cut off (pending-install, pending-upgrade, or pending-rollback), or
-# nothing. Helm then refuses to touch it again: "another operation is in progress".
-pending_release() {
-	helm list --kube-context "$context" --namespace "$2" --pending --filter "^$1\$" --output json 2>/dev/null |
-		sed -n 's/.*"status":"\(pending-[a-z]*\)".*/\1/p'
+# unfinished_release NAME NAMESPACE: Helm's status for a release whose last run didn't finish,
+# or nothing. A run that was cut off without warning (the power went, say) leaves it
+# pending-install, pending-upgrade, or pending-rollback, and Helm then refuses to touch it
+# again: "another operation is in progress". One that was stopped, or that failed, leaves it
+# failed, which the next Apply tries again by itself.
+unfinished_release() {
+	helm list --kube-context "$context" --namespace "$2" --pending --failed --filter "^$1\$" --output json 2>/dev/null |
+		sed -n -E 's/.*"status":"(pending-[a-z]*|failed)".*/\1/p'
+}
+
+# A cluster that has just started again (after the server restarted, say) answers before it's
+# steady, and a Helm run then fails partway. Waits for its API server to say it's ready three
+# times in a row, 5 seconds apart, for up to 5 minutes.
+wait_for_cluster() {
+	ready=0
+	tries=0
+	while [ "$ready" -lt 3 ]; do
+		if kubectl --context "$context" get --raw /readyz >/dev/null 2>&1; then
+			ready=$((ready + 1))
+		else
+			ready=0
+		fi
+		tries=$((tries + 1))
+		if [ "$tries" -ge 60 ]; then
+			echo "The cluster's API server isn't steady after 5 minutes: try Apply again in a while." >&2
+			exit 1
+		fi
+		[ "$ready" -ge 3 ] || sleep 5
+	done
 }
 
 # finish_release NAME NAMESPACE: clears what a Helm run that was cut off (the server restarted
@@ -551,8 +574,8 @@ pending_release() {
 # instead would wait on volumes that are still in use. A Helm that's running now isn't cut
 # off, so Apply stops instead.
 finish_release() {
-	status=$(pending_release "$1" "$2")
-	[ -n "$status" ] || return 0
+	status=$(unfinished_release "$1" "$2")
+	case "$status" in pending-*) ;; *) return 0 ;; esac
 	if pgrep -x helm >/dev/null 2>&1; then
 		echo "Helm is running already (another Apply?): wait for it to finish, then Apply again." >&2
 		exit 1
@@ -571,6 +594,7 @@ finish_release() {
 }
 
 deploy() {
+	wait_for_cluster
 	finish_release ok3d-platform cert-manager
 	echo "Deploying the platform: cert-manager and the Prometheus operator's definitions."
 	helm upgrade --install ok3d-platform chart/ok3d-platform \
@@ -640,10 +664,10 @@ apply_plan() {
 	trap 'exit 130' INT TERM HUP
 	if ! k3d cluster get "$CLUSTER_NAME" >/dev/null 2>&1; then
 		plan="state=new"
-	elif [ -n "$(pending_release ok3d-platform cert-manager)$(pending_release ok3d monitoring)" ]; then
-		# finish_release clears it first, then deploys as usual.
+	elif [ -n "$(unfinished_release ok3d-platform cert-manager)$(unfinished_release ok3d monitoring)" ]; then
+		# finish_release clears one that was cut off first, then Apply deploys as usual.
 		plan="state=unknown"
-		plan_why="Helm's last run was cut off (the server restarted, say), and Apply will finish it"
+		plan_why="Helm's last run didn't finish (the server restarted, say), and Apply will finish it"
 	elif helm status ok3d --kube-context "$context" --namespace ok3d-system >/dev/null 2>&1; then
 		# A 0.3 release, which Apply moves (move_release_from_0_3): everything restarts.
 		plan="state=unknown"
