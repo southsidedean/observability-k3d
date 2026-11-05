@@ -2,8 +2,8 @@
 
 Status: 0.5.2 is being released; `docs/roadmap.md` has where each release stands. `v0.2.0`
 was the old stack's last version (the `scripts/cluster-setup-k3d-observability-everything.sh`
-stack), and 0.4.0 replaced it. The
-plan was written on 2026-10-27, before anything was built, and the roadmap ends in 1.x.
+stack), and 0.4.0 replaced it. The plan was written on 2026-10-27, before anything was
+built, and the roadmap ends in 1.x.
 
 ## Goal
 

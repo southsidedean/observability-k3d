@@ -19,7 +19,8 @@ slow down wrong passwords, and `./ok3d check` warns about one shorter than 20 ch
 To change it on an ok3d that's running, set the new one in `.env`, then `./ok3d apply`, which
 gives it to the gateway. (If you empty the line instead, ok3d goes back to the one in
 `admin-password`, and makes one only if that file isn't there.) Grafana takes the admin
-password only when it makes its database, so give it the new one too:
+password only when it makes its database, so give it the new one too (the one in
+`admin-password`, if you emptied the line):
 
 ```sh
 kubectl --context k3d-ok3d -n monitoring exec deploy/ok3d-grafana -c grafana -- \
