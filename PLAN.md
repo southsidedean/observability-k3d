@@ -579,6 +579,11 @@ upgrade worked. It also found two problems that 0.5.1 had too, listed as known i
   installing was left unfinished. Only the steps by hand in docs/upgrading.md, which delete
   the cluster first, brought it back. Apply will clear a release Helm left unfinished, and
   Check will say Apply does that, so Check and Apply on the Dashboard finish the upgrade.
+  Decided 2026-11-05: an upgrade or rollback Helm left unfinished is rolled back to the last
+  version that finished. An install that never finished is forgotten (Helm's record of it is
+  deleted), and the next install takes over what it had made, since Helm marked those as its
+  own. Uninstalling it instead would wait on Prometheus's and Alertmanager's volumes, which
+  their claims still hold. A Helm that's running now is left alone, and Apply stops.
 - Smaller: k3d's color codes show in the upgrade's output on Home. The steps in
   docs/upgrading.md for going back copy `.env` by name, since `cp .../* .` skips it, so they
   fail without one, and the comment on the `cp` line says it copies `.env` too.

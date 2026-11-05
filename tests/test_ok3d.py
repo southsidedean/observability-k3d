@@ -43,6 +43,13 @@ case "$*" in
 "version --short") echo "v${FAKE_HELM_VERSION:-4.3.1}+g0" ;;
 "dependency list"*) ;;
 "status ok3d"*) exit "${FAKE_OLD_RELEASE:-1}" ;;
+# A release Helm was changing when it was cut off: FAKE_PENDING is its name, FAKE_PENDING_STATUS
+# what Helm says about it.
+"list "*--pending*)
+	case "$*" in
+	*"^${FAKE_PENDING:-none}\$"*) echo "[{\"name\":\"$FAKE_PENDING\",\"revision\":\"2\",\"status\":\"${FAKE_PENDING_STATUS:-pending-upgrade}\"}]" ;;
+	*) echo "[]" ;;
+	esac ;;
 # The release as it's deployed, and what Apply would deploy: from FAKE_MANIFEST and
 # FAKE_DRY_RUN. Without FAKE_MANIFEST, helm says FAKE_MANIFEST_ERROR (there's no release).
 "get manifest ok3d"*)
@@ -89,6 +96,7 @@ case "$*" in
 	echo 54c2bf37-5a0a-45d7-91a0-30e0c9b716b6 ;;
 *"amtool"*"silence query"*) if [ -n "${FAKE_SILENCES:-}" ]; then cat "$FAKE_SILENCES"; else echo "[]"; fi ;;
 *"--filename -"*) cat >>"$FAKE_LOG.stdin" ;;
+*" scale "*) exit "${FAKE_SCALE_STATUS:-0}" ;;
 *"--from-file=api-key=/dev/stdin"*) echo "stdin: $(cat)" >>"$FAKE_LOG.stdin"; echo "kind: Secret" ;;
 *"--from-env-file=/dev/stdin"*)
 	# Each Secret's contents in a file of its own, by namespace and name.
@@ -125,6 +133,8 @@ fi""",
     # whatever machine the tests run on.
     "uname": 'echo "${FAKE_UNAME:-Darwin}"',
     "systemctl": 'echo "systemctl $*" >>"$FAKE_LOG"',
+    # Whether a helm is running now: FAKE_HELM_RUNNING=0 says one is.
+    "pgrep": 'exit "${FAKE_HELM_RUNNING:-1}"',
     # As util-linux's flock -n FD (macOS has none): the same kernel lock, taken on the shell's
     # open file, so it's held until the shell ends.
     "flock": 'exec python3 -c "import fcntl, sys; fcntl.flock(int(sys.argv[1]), fcntl.LOCK_EX | fcntl.LOCK_NB)" "$2" 2>/dev/null',
@@ -552,6 +562,70 @@ def test_delete_with_yes_deletes_the_cluster_and_keeps_the_data(env: dict[str, s
     assert result.returncode == 0
     assert "k3d cluster delete ok3d" in calls(env)
     assert keep.is_dir()
+
+
+def test_delete_stops_what_keeps_data_cleanly_first(env: dict[str, str]) -> None:
+    # Alertmanager saves its silences when it stops; a delete that only killed it lost them.
+    env["FAKE_CLUSTER_GET"] = "0"
+    result = ok3d(env, "delete", "--yes")
+    assert result.returncode == 0, result.stdout + result.stderr
+    log = calls(env)
+    steps = [next(i for i, line in enumerate(log) if want in line) for want in (
+        "scale deployment ok3d-kube-prometheus-stack-operator --replicas=0",
+        "scale deployment --all --replicas=0", "scale statefulset --all --replicas=0",
+        "wait pod --all --for=delete", "k3d cluster delete ok3d")]  # fmt: skip
+    assert steps == sorted(steps)
+    assert all("--namespace monitoring" in log[i] for i in steps[:-1])
+
+
+def test_delete_goes_ahead_when_nothing_can_be_stopped(env: dict[str, str]) -> None:
+    result = ok3d(env | {"FAKE_CLUSTER_GET": "0", "FAKE_SCALE_STATUS": "1"}, "delete", "--yes")
+    assert result.returncode == 0
+    assert "deleting the cluster anyway" in result.stdout
+    assert "k3d cluster delete ok3d" in calls(env)
+
+
+def test_delete_without_a_cluster_stops_nothing(env: dict[str, str]) -> None:
+    assert ok3d(env, "delete", "--yes").returncode == 0
+    assert not any(" scale " in line for line in calls(env))
+
+
+@pytest.mark.parametrize(("name", "status", "clears"), [
+    ("ok3d-platform", "pending-install", "kubectl --context k3d-ok3d --namespace cert-manager delete secret "
+                                         "--selector owner=helm,name=ok3d-platform,status=pending-install"),
+    ("ok3d", "pending-install", "kubectl --context k3d-ok3d --namespace monitoring delete secret "
+                                "--selector owner=helm,name=ok3d,status=pending-install"),
+    ("ok3d", "pending-upgrade", "helm rollback ok3d --kube-context k3d-ok3d --namespace monitoring"),
+    ("ok3d-platform", "pending-rollback", "helm rollback ok3d-platform --kube-context k3d-ok3d --namespace cert-manager"),
+])  # fmt: skip
+def test_apply_finishes_what_a_helm_that_was_cut_off_left(env: dict[str, str], name: str, status: str,
+                                                          clears: str) -> None:
+    # After a restart partway, Helm said "another operation is in progress" to every Apply.
+    env.update(FAKE_CLUSTER_GET="0", FAKE_PENDING=name, FAKE_PENDING_STATUS=status)
+    result = ok3d(env, "apply", "--yes")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "was cut off" in result.stdout
+    log = calls(env)
+    cleared = next(i for i, line in enumerate(log) if line.startswith(clears))
+    deployed = next(i for i, line in enumerate(log) if line.startswith(f"helm upgrade --install {name} "))
+    assert cleared < deployed
+
+
+def test_check_says_apply_will_finish_what_helm_left(env: dict[str, str]) -> None:
+    result = ok3d(env | {"FAKE_CLUSTER_GET": "0", "FAKE_PENDING": "ok3d-platform",
+                         "FAKE_PENDING_STATUS": "pending-install"}, "check")  # fmt: skip
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Helm's last run was cut off (the server restarted, say), and Apply will finish it" in result.stdout
+    assert not any(line.startswith(("helm rollback", "kubectl --context k3d-ok3d --namespace cert-manager delete"))
+                   for line in calls(env))  # fmt: skip
+
+
+def test_apply_leaves_a_helm_that_is_still_running_alone(env: dict[str, str]) -> None:
+    env.update(FAKE_CLUSTER_GET="0", FAKE_PENDING="ok3d", FAKE_HELM_RUNNING="0")
+    result = ok3d(env, "apply", "--yes")
+    assert result.returncode == 1
+    assert "Helm is running already" in result.stderr
+    assert not any(line.startswith(("helm rollback", "helm upgrade --install ok3d ")) for line in calls(env))
 
 
 def test_an_apply_that_works_is_recorded_for_whats_next_and_delete_clears_it(env: dict[str, str]) -> None:

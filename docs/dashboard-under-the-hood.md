@@ -151,7 +151,8 @@ Each page reads only the helper's folder, mounted read-only at `/helper`:
 - `newest-release`: when `./ok3d upgrade` last looked for a release, and the newer one it
   found. One that isn't a time and a `vX.Y.Z` (or `none`) is ignored.
 - `upgrade` and `upgrade-output`: how the last upgrade went, and the last 16 KB of what it
-  printed, which Home shows escaped.
+  printed. Home shows this, and what the last answer printed, escaped and without a
+  terminal's color codes (k3d colors its log lines even when no terminal reads them).
 
 Every button leaves one request in `/state/outbox/request`, written to a temporary file and
 renamed into place, then sends you to Home, where the answer appears. The Dashboard keeps the

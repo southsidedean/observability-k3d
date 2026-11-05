@@ -32,7 +32,8 @@ Either way, the upgrade:
    back and stops (after a failed install, it installs the old helper and Dashboard again):
    nothing else changed. Read what the check said, and the release's Upgrading notes, then
    try again.
-4. Deletes the cluster, and backs up the certificate authority (`certs/`), Grafana's database
+4. Stops Alertmanager, Prometheus, and Grafana, so each saves its data, then deletes the
+   cluster. It backs up the certificate authority (`certs/`), Grafana's database
    (`grafana/`), and Alertmanager's silences (`alertmanager/`) while nothing is writing to
    them, to `backups/before-<release>-<time>.tar.gz` in the data root. The last three are
    kept. Prometheus's history is left out, since it's large; the new cluster picks it up as
@@ -81,8 +82,7 @@ the cluster again from it:
 ```sh
 cd ~/ok3d
 git switch --detach v0.5.1                   # the release you had
-cp local/backups/before-v0.5.2-<time>/* .    # your settings, devices, and .env from before
-cp local/backups/before-v0.5.2-<time>/.env .
+cp -a local/backups/before-v0.5.2-<time>/. .   # your settings, devices, and .env from before
 ./ok3d install
 ./ok3d delete --yes
 tar -C /srv/ok3d -xzf /srv/ok3d/backups/before-v0.5.2-<time>.tar.gz   # your data root
