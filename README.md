@@ -74,7 +74,7 @@ computer.
 **With commands instead.** Everything the Dashboard does is an `./ok3d` command too:
 
 ```sh
-git clone --branch v0.5.2 https://github.com/southsidedean/observability-k3d.git ok3d && cd ok3d
+git clone --branch v0.5.3 https://github.com/southsidedean/observability-k3d.git ok3d && cd ok3d
 cp settings.example.yaml settings.yaml        # change host.dataRoot if it isn't /srv/ok3d
 sudo install -d -o "$USER" -m 0755 /srv/ok3d  # the data folder, owned by you
 ./ok3d check                                  # is this server ready?

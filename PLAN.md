@@ -1,9 +1,9 @@
 # Plan: ok3d, a home network operations center on k3d, with AI agents
 
-Status: 0.5.2 is released and 0.5.3 is in progress; `docs/roadmap.md` has where each
-release stands. `v0.2.0` was the old stack's last version (the
-`scripts/cluster-setup-k3d-observability-everything.sh` stack), and 0.4.0 replaced it. The
-plan was written on 2026-10-27, before anything was built, and the roadmap ends in 1.x.
+Status: 0.5.3 is being released; `docs/roadmap.md` has where each release stands. `v0.2.0`
+was the old stack's last version (the `scripts/cluster-setup-k3d-observability-everything.sh`
+stack), and 0.4.0 replaced it. The plan was written on 2026-10-27, before anything was
+built, and the roadmap ends in 1.x.
 
 ## Goal
 
@@ -572,13 +572,13 @@ upgrade worked. It also found two problems that 0.5.1 had too, listed as known i
 
 - A maintenance window added (or changed) in the 15 minutes before an upgrade was lost. Alertmanager
   saves its silences to the data root every 15 minutes and when it stops cleanly, and
-  `k3d cluster delete` stops it without that. `./ok3d delete` will stop Alertmanager cleanly
+  `k3d cluster delete` stops it without that. `./ok3d delete` now stops Alertmanager cleanly
   first.
 - After the server restarted while the upgrade was making the cluster again, Apply on the
   Dashboard failed with Helm's "another operation is in progress": the release Helm was
   installing was left unfinished. Only the steps by hand in docs/upgrading.md, which delete
-  the cluster first, brought it back. Apply will clear a release Helm left unfinished, and
-  Check will say Apply does that, so Check and Apply on the Dashboard finish the upgrade.
+  the cluster first, brought it back. Apply now clears a release Helm left unfinished, and
+  Check says Apply will do that, so Check and Apply on the Dashboard finish the upgrade.
   Decided 2026-11-05: an upgrade or rollback Helm left unfinished is rolled back to the
   revision before it, and the deploy that follows waits for everything. An install that never
   finished is forgotten (Helm's record of it is deleted), and the next install takes over what

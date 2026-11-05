@@ -1,6 +1,22 @@
 # Changelog
 
-## 0.5.3 (unreleased)
+## 0.5.3 (2026-11-05)
+
+### Upgrading
+
+- From 0.5.1 or 0.5.2, press **Look for a new release** on the Dashboard's Home, then
+  **Upgrade to v0.5.3** and **Upgrade now**
+  ([docs/upgrading.md](docs/upgrading.md#from-the-dashboard-from-051)), or run
+  `./ok3d upgrade v0.5.3` on the server. The upgrade runs the new release's `./ok3d delete`
+  and Apply, so two of the fixes below already help it: a maintenance window you add just
+  before it comes through, and after a restart partway, **Check** and **Apply** on the
+  Dashboard finish it.
+- From 0.5.1, read 0.5.2's Upgrading notes too: Check now refuses some mistakes in
+  `devices.yaml`, and the upgrade stops on them.
+- From 0.5.0 or 0.4, run the installer again, which moves straight to 0.5.3. Then check your
+  settings, delete the cluster, and back up the data root as
+  [docs/upgrading.md](docs/upgrading.md#from-050-or-04) shows, and finish with **Check** and
+  **Apply** on the Dashboard.
 
 ### Changes
 
@@ -8,13 +24,12 @@
   `./ok3d delete`, which the upgrade runs, now stops Alertmanager, Prometheus, and Grafana
   before it deletes the cluster, so each saves its data: Alertmanager saved its silences only
   every 15 minutes, and deleting the cluster lost the rest.
-- After the server restarts partway through an Apply or an upgrade, **Check** and **Apply**
-  on the Dashboard finish it. Helm left the release it was changing unfinished, and Apply
-  failed with "another operation (install/upgrade/rollback) is in progress". Apply now goes
-  back to the version before it (or starts an unfinished install again) first, and
-  Check says it will, as it now does after a Helm run that failed. Apply also waits until a
-  cluster that has just started again is steady: its API server answered, then didn't, and
-  Helm failed partway.
+- After the server restarts partway through an Apply or an upgrade, **Check** and **Apply** on
+  the Dashboard finish it. Helm left the release it was changing unfinished, and Apply failed
+  with "another operation (install/upgrade/rollback) is in progress". Apply now goes back to the
+  version before it (or starts an unfinished install again) first, and Check says it will, as it
+  now does after a Helm run that failed. Apply also waits until a cluster that has just started
+  again is steady: its API server answered, then didn't, and Helm failed partway.
 - The output on Home no longer shows k3d's color codes as `[36mINFO[0m`.
 - The steps for going back to the release you had (docs/upgrading.md) no longer fail when
   you have no `.env`.

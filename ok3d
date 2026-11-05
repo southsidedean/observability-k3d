@@ -570,12 +570,12 @@ wait_for_cluster() {
 
 # finish_release NAME NAMESPACE: clears what a Helm run that was cut off (the server restarted
 # partway through, say) left, so Apply can carry on. An upgrade or rollback goes back to the
-# revision before it, without waiting: the deploy that follows waits for everything. An
-# install that never finished is forgotten, and Helm's install then takes over what it had
-# made, since Helm marked it as its own: uninstalling instead would wait on volumes that are
-# still in use. A Helm that's running now isn't cut
-# off, so Apply stops instead. (pgrep sees any helm on this machine, for any cluster: Apply
-# then stops when it needn't, which is the safe way to be wrong.)
+# revision before it, without waiting: the deploy that follows waits for everything. An install
+# that never finished is forgotten, and Helm's install then takes over what it had made, since
+# Helm marked it as its own: uninstalling instead would wait on volumes that are still in use. A
+# Helm that's running now isn't cut off, so Apply stops instead. (pgrep sees any helm on this
+# machine, for any cluster: Apply then stops when it needn't, which is the safe way to be
+# wrong.)
 finish_release() {
 	status=$(unfinished_release "$1" "$2")
 	case "$status" in pending-*) ;; *) return 0 ;; esac
