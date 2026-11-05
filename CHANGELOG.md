@@ -12,9 +12,9 @@
   **Check** and **Apply** on the Dashboard.
 - Check now refuses a `devices.yaml` with two devices of the same name, a `behind` that names
   itself or no device in the file, or one device with the same metrics port twice, instead of
-  making objects that clash. The upgrade runs Check first, so with any of those it stops and moves
-  back to 0.5.1, saying which device: fix it in `devices.yaml` (on the Dashboard's Devices page,
-  or on the server), then upgrade again.
+  making objects that clash. The upgrade runs Check first, so with any of those it stops and
+  moves back to 0.5.1, saying which device: fix it in `devices.yaml` (on the Dashboard's
+  Devices page, or on the server), then upgrade again.
 
 ### Changes
 
@@ -59,11 +59,10 @@
   `/usr/bin/python3`, which the helper runs, is 3.12 or newer. ok3d also refuses a checkout,
   settings, or devices path with a space or `*`, `?`, or `[` in it, which broke Check and
   Apply.
-- When openssl can't make the certificate authority, Apply says why. A missing or unsafe
-  `.env` is said once among Check's problems, not as every secret being empty, a `.env` that's
-  a folder is called one, and a `.env` that's a link is judged by the file it leads to. A
-  value in `.env` loses its quotes only when they match. Install says when Docker isn't
-  running.
+- When openssl can't make the certificate authority, Apply says why. A missing or unsafe `.env`
+  is said once among Check's problems, not as every secret being empty, Check says when `.env`
+  is a folder, and a `.env` that's a link is judged by the file it leads to. A value in `.env`
+  loses its quotes only when they match. Install says when Docker isn't running.
 - When an upgrade's install fails and installing the old release again fails too, the
   upgrade says so, instead of saying everything is back.
 - Apply turns off again when `settings.yaml` or `devices.yaml` changes on the server after
@@ -97,13 +96,14 @@
   the speed test ping reads in milliseconds. The links lead to ok3d's UniFi docs and
   unpoller's site, the 30-second smoothing (which drew nothing) is gone, and the upstream
   author's notes are rewritten for ok3d.
-- The docs, from the review: the README's commands clone the latest release instead of `main`, and
-  name Helm 3.13. The steps for upgrading from 0.5.0 or 0.4 now check your settings, delete the
-  cluster, and back up the data root before Apply. `SECURITY.md` says which protections hold now
-  and which come later, and that the ping checks need no extra capability. Smaller fixes in the
-  architecture, demo, certificate, AI install, alerts, and runbook pages, both under-the-hood
-  pages (running the Dashboard from the checkout now works as written), the bug report form, and
-  the setup diagram. The Settings page's screenshot, which no page showed, is no longer taken.
+- The docs, from the review: the README's commands clone the latest release instead of `main`,
+  and name Helm 3.13. The steps for upgrading from 0.5.0 or 0.4 now check your settings, delete
+  the cluster, and back up the data root before Apply. `SECURITY.md` says which protections
+  hold now and which come later, and that the ping checks need no extra capability. Smaller
+  fixes in the architecture, demo, certificate, AI install, alerts, and runbook pages, both
+  under-the-hood pages (running the Dashboard from the checkout now works as written), the bug
+  report form, and the setup diagram. The Settings page's screenshot, which no page showed, is
+  no longer taken.
 - When a path can't go in the helper's service file, `./ok3d install` now names the helper's
   Python too.
 - Prometheus's and Alertmanager's pages are quicker: the gateway checked the admin login's
