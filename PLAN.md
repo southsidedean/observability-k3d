@@ -1,9 +1,9 @@
 # Plan: ok3d, a home network operations center on k3d, with AI agents
 
-Status: 0.5.2 is being released; `docs/roadmap.md` has where each release stands. `v0.2.0`
-was the old stack's last version (the `scripts/cluster-setup-k3d-observability-everything.sh`
-stack), and 0.4.0 replaced it. The plan was written on 2026-10-27, before anything was
-built, and the roadmap ends in 1.x.
+Status: 0.5.2 is released and 0.5.3 is in progress; `docs/roadmap.md` has where each
+release stands. `v0.2.0` was the old stack's last version (the
+`scripts/cluster-setup-k3d-observability-everything.sh` stack), and 0.4.0 replaced it. The
+plan was written on 2026-10-27, before anything was built, and the roadmap ends in 1.x.
 
 ## Goal
 
@@ -563,6 +563,29 @@ on to 0.6.0.dev0 only in the pull request that brings 0.6's first part.
   the vendored UniFi dashboards' panel descriptions. What's too big for a patch release is
   listed in docs/roadmap.md for the release that takes it.
 - Test: an upgrade from 0.5.1 from the Dashboard alone, with no terminal.
+
+### 0.5.3: What 0.5.2's release test found
+
+0.5.2's release test (2026-11-05) upgraded from 0.5.1 from the Dashboard alone, and the
+upgrade worked. It also found two problems that 0.5.1 had too, listed as known issues in
+0.5.2's release notes:
+
+- A maintenance window added (or changed) in the 15 minutes before an upgrade was lost. Alertmanager
+  saves its silences to the data root every 15 minutes and when it stops cleanly, and
+  `k3d cluster delete` stops it without that. `./ok3d delete` will stop Alertmanager cleanly
+  first.
+- After the server restarted while the upgrade was making the cluster again, Apply on the
+  Dashboard failed with Helm's "another operation is in progress": the release Helm was
+  installing was left unfinished. Only the steps by hand in docs/upgrading.md, which delete
+  the cluster first, brought it back. Apply will clear a release Helm left unfinished, and
+  Check will say Apply does that, so Check and Apply on the Dashboard finish the upgrade.
+- Smaller: k3d's color codes show in the upgrade's output on Home. The steps in
+  docs/upgrading.md for going back copy `.env` by name, since `cp .../* .` skips it, so they
+  fail without one, and the comment on the `cp` line says it copies `.env` too.
+- What 0.5.2's release test didn't run: the steps from 0.5.0 or 0.4, from the 0.4.0
+  snapshot, and the screenshots retaken to show a released version.
+- Test: an upgrade from 0.5.2 from the Dashboard alone, with a maintenance window added
+  just before it (still there after), and a restart partway through.
 
 ### 0.6: Logs and changes
 

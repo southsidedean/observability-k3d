@@ -1,5 +1,7 @@
 # Changelog
 
+## 0.5.3 (unreleased)
+
 ## 0.5.2 (2026-11-05)
 
 ### Upgrading
@@ -126,6 +128,18 @@
   this repository when the pre-push hook runs them. Dashboard and helper tests that could
   pass or fail by luck no longer can, and a new one checks that whatever a finished `./ok3d`
   left running is stopped.
+
+### Known issues
+
+Both were in 0.5.1 too. The fixes are planned for 0.5.3.
+
+- A maintenance window added or changed in the 15 minutes before an upgrade can be lost:
+  Alertmanager saves its silences every 15 minutes, and the upgrade deletes the cluster without
+  letting it save first. Add the window after the upgrade, or wait 15 minutes after adding it.
+- If the server restarts while an upgrade is making the cluster again, **Apply** on the
+  Dashboard fails with "another operation (install/upgrade/rollback) is in progress". Follow
+  [docs/upgrading.md](docs/upgrading.md#if-an-upgrade-stops-partway) for a restart, which
+  deletes the cluster first, or run `./ok3d delete --yes`, then `./ok3d apply`, on the server.
 
 ## 0.5.1 (2026-10-30)
 

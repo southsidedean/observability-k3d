@@ -4,8 +4,8 @@ Where ok3d is, release by release. Every pull request updates this page when it 
 starts, or changes something here. [PLAN.md](../PLAN.md#roadmap) has the detail of each
 release and the reasons behind it.
 
-**Now:** 0.5.2 is being released: small fixes, and the first release test that upgrades from
-the Dashboard alone. 0.6.0, logs and changes, comes next.
+**Now:** 0.5.2 is released. 0.5.3 is in progress: fixes for what 0.5.2's release test found.
+0.6.0, logs and changes, comes next.
 
 | Release | What it brings | Status |
 |---|---|---|
@@ -14,7 +14,8 @@ the Dashboard alone. 0.6.0, logs and changes, comes next.
 | 0.4.0 | Metrics, alerts that reach you, and a safe front door | Released ([v0.4.0](https://github.com/southsidedean/observability-k3d/releases/tag/v0.4.0)) |
 | 0.5.0 | The Dashboard: set up and change ok3d from a web page, and screenshots in the docs | Released ([v0.5.0](https://github.com/southsidedean/observability-k3d/releases/tag/v0.5.0)) |
 | 0.5.1 | The Dashboard's second step: upgrades, maintenance windows, and Apply asking first | Released ([v0.5.1](https://github.com/southsidedean/observability-k3d/releases/tag/v0.5.1)) |
-| 0.5.2 | Small fixes from 0.5.1, and the first release test that upgrades from the Dashboard alone | Being released |
+| 0.5.2 | Small fixes from 0.5.1, and the first release test that upgrades from the Dashboard alone | Released ([v0.5.2](https://github.com/southsidedean/observability-k3d/releases/tag/v0.5.2)) |
+| 0.5.3 | Fixes for what 0.5.2's release test found: maintenance windows kept through an upgrade, and Apply recovering from a restart partway | In progress |
 | 0.6.0 | Logs and changes: syslog, host logs, what-changed markers, new devices | Planned |
 | 0.7.0 | The NOC: the board, alerts that know the layout, the internet link's record, backups | Planned |
 | 0.8.0 | One sign-in for every page, the mesh, and traces | Planned |
@@ -80,7 +81,17 @@ the Dashboard alone. 0.6.0, logs and changes, comes next.
 | Fixes from the 0.5.2 review: the UniFi dashboards' panel descriptions, plugins, and upstream text | Done ([#58](https://github.com/southsidedean/observability-k3d/pull/58)) |
 | Fixes from the 0.5.2 review: the docs, `PLAN.md`, and `SECURITY.md` | Done ([#57](https://github.com/southsidedean/observability-k3d/pull/57)) |
 | Fixes from the 0.5.2 test VM pass: the gateway's login speed, the dead man's switch's pace, the memory figure | Done ([#59](https://github.com/southsidedean/observability-k3d/pull/59)) |
-| Release 0.5.2, tested with an upgrade from 0.5.1 from the Dashboard alone | In progress |
+| Release 0.5.2 ([#60](https://github.com/southsidedean/observability-k3d/pull/60)), tested with an upgrade from 0.5.1 from the Dashboard alone | Done |
+
+## 0.5.3, in detail
+
+| Part | Status |
+|---|---|
+| A maintenance window added or changed in the 15 minutes before an upgrade comes through: Alertmanager is stopped cleanly, so it saves its silences, before the cluster is deleted | Planned |
+| After a restart partway through an upgrade, Check and Apply on the Dashboard finish it, instead of Apply failing on Helm's unfinished release | Planned |
+| The upgrade's output on Home without k3d's color codes, and the steps for going back that work without a `.env` | Planned |
+| The steps from 0.5.0 or 0.4, tested from the 0.4.0 snapshot, and the screenshots retaken to show a released version | Planned |
+| Release 0.5.3, tested with an upgrade from 0.5.2 from the Dashboard alone, with a maintenance window added just before and a restart partway | Planned |
 
 ## Found in the 0.5.2 review, for later
 
