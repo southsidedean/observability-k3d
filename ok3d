@@ -304,8 +304,9 @@ check_data_root() {
 # The UniFi module and each alert destination that's on need their secret in .env. A .env
 # that's missing or that others can read is said once, instead of as each secret being empty.
 check_secrets() {
-	if [ "$MODULE_UNIFI" = true ] || [ "$ALERTS_NTFY" = true ] || [ "$ALERTS_EMAIL" = true ] ||
-		[ "$ALERTS_DEADMAN" = true ]; then
+	# Whenever there's a .env (Apply reads it for the admin password too), or a part needs one.
+	if [ -e "$envfile" ] || [ "$MODULE_UNIFI" = true ] || [ "$ALERTS_NTFY" = true ] ||
+		[ "$ALERTS_EMAIL" = true ] || [ "$ALERTS_DEADMAN" = true ]; then
 		problem=$(env_value OK3D_NO_SUCH_KEY 2>&1 >/dev/null) || true
 		if [ -n "$problem" ]; then
 			fail "$problem"
@@ -322,9 +323,9 @@ check_secrets() {
 	[ "$ALERTS_DEADMAN" != true ] || need_secret alerts.deadman DEADMAN_URL
 	# The gateway checks the admin login quickly and doesn't limit wrong passwords, so one you
 	# choose must be too long to guess. ok3d's own is 24 characters, from 18 random bytes.
-	admin=$(env_value_if_any OK3D_ADMIN_PASSWORD 2>/dev/null) || admin=""
+	admin=$(env_value_if_any OK3D_ADMIN_PASSWORD)
 	if [ -n "$admin" ] && [ "${#admin}" -lt 20 ]; then
-		warn "OK3D_ADMIN_PASSWORD in .env is shorter than 20 characters, so a device on your network could guess it at the Prometheus and Alertmanager pages: use a long random one (openssl rand -base64 18), or leave it empty and ok3d makes one"
+		warn "OK3D_ADMIN_PASSWORD in .env is shorter than 20 characters, so a device on your network could guess it at the Prometheus and Alertmanager pages: use a long random one (openssl rand -base64 18), or leave it empty and ok3d makes one (docs/certificate.md says how to change it)"
 	fi
 }
 

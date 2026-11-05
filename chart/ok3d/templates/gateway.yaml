@@ -9,10 +9,10 @@ Service in the cluster is reachable only from inside it.
 - prometheus.<domain> and alertmanager.<domain>: their own pages, which have no login of
   their own, so the gateway asks for ok3d's admin login (basic auth) first. Requests that
   pass it are limited to 100 at once, then 5 a second, for each page and everyone together; a
-  page load makes 20 or more at once. Wrong passwords are refused before the limit, so they
-  aren't slowed: the password itself has to be too long to guess (ok3d's own is 18 random
-  bytes, and Check warns about a short one in .env). (From 0.8, one sign-in for every page
-  replaces this.)
+  page load makes 20 or more at once. Wrong passwords don't use up the limit (on the test VM,
+  110 at once all got 401, and the right login worked straight after), so they aren't
+  slowed: the password itself has to be too long to guess. ok3d's own is 18 random bytes, and
+  Check warns about a short one in .env. From 0.8, one sign-in for every page replaces this.
 - ca.<domain>: the certificate authority's public certificate, to download and trust on your
   devices (docs/certificate.md).
 - Any other name: a plain 404.

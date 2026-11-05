@@ -488,6 +488,16 @@ def test_check_warns_about_a_short_admin_password_without_showing_it(env: dict[s
         assert password not in result.stdout + result.stderr
 
 
+def test_check_refuses_a_dotenv_others_can_read_even_with_everything_off(env: dict[str, str], tmp_path: Path) -> None:
+    # Apply reads .env for the admin password whatever is switched on, and would stop partway.
+    dotenv(tmp_path, env, "OK3D_ADMIN_PASSWORD=a-long-random-password-here\n")
+    (tmp_path / ".env").chmod(0o644)
+    result = ok3d(env, "check")
+    assert result.returncode == 1
+    assert "can be read by others" in result.stdout
+    assert "a-long-random-password-here" not in result.stdout + result.stderr
+
+
 def test_apply_keeps_an_existing_cluster_and_authority(env: dict[str, str]) -> None:
     certs = Path(env["FAKE_DATA_ROOT"]) / "certs"
     certs.mkdir(mode=0o700)
