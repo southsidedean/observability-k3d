@@ -195,6 +195,10 @@ env_value_if_any() {
 # env_value KEY: the value of KEY in .env, read as plain text (never run as shell), with
 # surrounding quotes removed. Refuses a .env that anyone else can read.
 env_value() {
+	if [ -d "$envfile" ]; then
+		echo "$envfile is a folder, not a file. Move it aside, copy .env.example to .env, fill it in, and chmod 600 .env." >&2
+		exit 1
+	fi
 	if [ ! -f "$envfile" ]; then
 		echo "No .env at $envfile. Copy .env.example to .env, fill it in, and chmod 600 .env." >&2
 		exit 1
