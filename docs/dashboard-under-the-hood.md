@@ -151,7 +151,8 @@ Each page reads only the helper's folder, mounted read-only at `/helper`:
 - `newest-release`: when `./ok3d upgrade` last looked for a release, and the newer one it
   found. One that isn't a time and a `vX.Y.Z` (or `none`) is ignored.
 - `upgrade` and `upgrade-output`: how the last upgrade went, and the last 16 KB of what it
-  printed, which Home shows escaped.
+  printed. Home shows this, and what the last answer printed, escaped and without a
+  terminal's color codes (k3d colors its log lines even when no terminal reads them).
 
 Every button leaves one request in `/state/outbox/request`, written to a temporary file and
 renamed into place, then sends you to Home, where the answer appears. The Dashboard keeps the
@@ -245,9 +246,13 @@ other=2
 release; `none` when nothing running would change; and `unknown` when Check couldn't tell.
 That's when the cluster didn't answer, the dry run failed (Helm older than 3.13 has no
 server-side dry run, and Check warns about that), an object in either manifest couldn't be
-read, there's no admin password yet, or Apply would first move a release from 0.3, which
-restarts everything. Check says why: Helm's own error line when Helm failed, and its own
-words otherwise. A Check that finds problems after reading your settings empties the file.
+read, there's no admin password yet, Apply would first move a release from 0.3, which
+restarts everything, or Helm's last run of a release didn't finish (the server restarted
+partway, say). In that last case, Apply waits for the cluster's API server to be steady,
+rolls back an upgrade Helm left unfinished, or forgets an install it left unfinished so the
+next one takes over, and then deploys as usual. Check says why: Helm's own error line when
+Helm failed, and its own words otherwise. A Check that finds problems after reading your
+settings empties the file.
 
 Home shows the plan only once a Check has passed, so a Check that stops partway (on a
 setting it can't read, say) and leaves the file as it was makes no difference. Only the ok3d

@@ -35,6 +35,14 @@ VERSION = re.compile(r"v[0-9]{1,6}\.[0-9]{1,6}\.[0-9]{1,6}")
 # How much of the end of an upgrade's output is shown.
 UPGRADE_TAIL = 16 * 1024
 TIME = re.compile(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ")
+# A terminal's color and cursor codes, which k3d puts in its log lines even when it isn't
+# writing to a terminal, and its window title, with the title's text. A page would show them
+# as junk such as "[36mINFO[0m".
+TERMINAL_CODES = re.compile(
+    r"\x1b\][^\x07\x1b]{0,256}(?:\x07|\x1b\\)"  # a window title
+    r"|\x1b\[[0-?]*[ -/]*[@-~]"  # colors and cursor moves
+    r"|\x1b[ -/]*[0-~]"  # the rest
+)
 
 
 # How long the Dashboard waits for an answer to the request it last sent before it stops
@@ -86,7 +94,7 @@ def answer(helper: Path) -> Answer | None:
     if text is None:
         return None
     head, _, output = text.partition("\n\n")
-    return Answer(dict(line.split("=", 1) for line in head.splitlines() if "=" in line), output)
+    return Answer(dict(line.split("=", 1) for line in head.splitlines() if "=" in line), plain(output))
 
 
 def current(helper: Path, name: str) -> str | None:
@@ -249,7 +257,12 @@ def upgrade(helper: Path) -> Upgrade | None:
     fields = fields_of(read(helper / "upgrade"))
     if fields.get("state") not in ("running", "finished", "failed"):
         return None
-    return Upgrade(fields, read_tail(helper / "upgrade-output", UPGRADE_TAIL))
+    return Upgrade(fields, plain(read_tail(helper / "upgrade-output", UPGRADE_TAIL)))
+
+
+def plain(text: str) -> str:
+    """Output without a terminal's color and cursor codes, as a terminal would show it."""
+    return TERMINAL_CODES.sub("", text)
 
 
 def read_tail(path: Path, limit: int) -> str:

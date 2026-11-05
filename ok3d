@@ -536,7 +536,69 @@ load_alert_secrets() {
 		kubectl --context "$context" apply --filename - >/dev/null
 }
 
+# unfinished_release NAME NAMESPACE: Helm's status for a release whose last run didn't finish,
+# or nothing. A run that was cut off without warning (the power went, say) leaves it
+# pending-install, pending-upgrade, or pending-rollback, and Helm then refuses to touch it
+# again: "another operation is in progress". One that was stopped, or that failed, leaves it
+# failed, which the next Apply tries again by itself.
+unfinished_release() {
+	helm list --kube-context "$context" --namespace "$2" --pending --failed --filter "^$1\$" --output json 2>/dev/null |
+		sed -n -E 's/.*"status":"(pending-[a-z]*|failed)".*/\1/p'
+}
+
+# A cluster that has just started again (after the server restarted, say) answers before it's
+# steady, and a Helm run then fails partway. Waits for its API server to say it's ready three
+# times in a row, 5 seconds apart, for up to 5 minutes.
+wait_for_cluster() {
+	ready=0
+	tries=0
+	while :; do
+		if kubectl --context "$context" --request-timeout=5s get --raw /readyz >/dev/null 2>&1; then
+			ready=$((ready + 1))
+		else
+			ready=0
+		fi
+		[ "$ready" -lt 3 ] || return 0
+		tries=$((tries + 1))
+		if [ "$tries" -ge 60 ]; then
+			echo "The cluster's API server isn't steady after 5 minutes: try Apply again in a while." >&2
+			exit 1
+		fi
+		sleep 5
+	done
+}
+
+# finish_release NAME NAMESPACE: clears what a Helm run that was cut off (the server restarted
+# partway through, say) left, so Apply can carry on. An upgrade or rollback goes back to the
+# revision before it, without waiting: the deploy that follows waits for everything. An
+# install that never finished is forgotten, and Helm's install then takes over what it had
+# made, since Helm marked it as its own: uninstalling instead would wait on volumes that are
+# still in use. A Helm that's running now isn't cut
+# off, so Apply stops instead. (pgrep sees any helm on this machine, for any cluster: Apply
+# then stops when it needn't, which is the safe way to be wrong.)
+finish_release() {
+	status=$(unfinished_release "$1" "$2")
+	case "$status" in pending-*) ;; *) return 0 ;; esac
+	if pgrep -x helm >/dev/null 2>&1; then
+		echo "Helm is running already (another Apply?): wait for it to finish, then Apply again." >&2
+		exit 1
+	fi
+	case "$status" in
+	pending-install)
+		echo "Helm's install of $1 was cut off: starting it again."
+		kubectl --context "$context" --namespace "$2" delete secret \
+			--selector "owner=helm,name=$1,status=pending-install" >/dev/null
+		;;
+	*)
+		echo "Helm's last change to $1 was cut off: going back to the version before it first."
+		helm rollback "$1" --kube-context "$context" --namespace "$2"
+		;;
+	esac
+}
+
 deploy() {
+	wait_for_cluster
+	finish_release ok3d-platform cert-manager
 	echo "Deploying the platform: cert-manager and the Prometheus operator's definitions."
 	helm upgrade --install ok3d-platform chart/ok3d-platform \
 		--kube-context "$context" --namespace cert-manager --create-namespace \
@@ -551,6 +613,7 @@ deploy() {
 	load_alert_secrets
 	password=$(admin_password)
 	load_admin_secret "$password"
+	finish_release ok3d monitoring
 	echo "Deploying ok3d."
 	# shellcheck disable=SC2046 # split into words, on purpose (values_args)
 	helm upgrade --install ok3d chart/ok3d $(chart_args "$password") \
@@ -604,6 +667,10 @@ apply_plan() {
 	trap 'exit 130' INT TERM HUP
 	if ! k3d cluster get "$CLUSTER_NAME" >/dev/null 2>&1; then
 		plan="state=new"
+	elif [ -n "$(unfinished_release ok3d-platform cert-manager)$(unfinished_release ok3d monitoring)" ]; then
+		# finish_release clears one that was cut off first, then Apply deploys as usual.
+		plan="state=unknown"
+		plan_why="Helm's last run didn't finish (the server restarted, say), and Apply will finish it"
 	elif helm status ok3d --kube-context "$context" --namespace ok3d-system >/dev/null 2>&1; then
 		# A 0.3 release, which Apply moves (move_release_from_0_3): everything restarts.
 		plan="state=unknown"
@@ -937,6 +1004,33 @@ cmd_install() {
 	echo "Point *.$DOMAIN at this computer and trust ok3d's certificate authority (docs/certificate.md)."
 }
 
+# Before the cluster is deleted: stops what keeps data in the data root, so each saves it
+# first. Deleting the cluster kills them without warning, and Alertmanager saves its silences
+# only every 15 minutes and when it's stopped: a maintenance window made just before an upgrade
+# was lost that way. Prometheus and Grafana then close their data cleanly too. The operator
+# goes first, so it doesn't start the others again. Each step has a time limit, and none can
+# stop the delete: a cluster that's stopped or broken is deleted all the same.
+stop_cleanly() {
+	k3d cluster get "$CLUSTER_NAME" >/dev/null 2>&1 || return 0
+	echo "Stopping Alertmanager, Prometheus, and Grafana, so they save their data first."
+	# The waits have their own time limits; every other request gets 20 seconds.
+	m="kubectl --context $context --namespace monitoring"
+	t=--request-timeout=20s
+	# shellcheck disable=SC2086 # $m is split into words, on purpose
+	if ! { $m scale deployment ok3d-kube-prometheus-stack-operator --replicas=0 $t &&
+		{ $m wait pod --selector app=kube-prometheus-stack-operator --for=delete --timeout=60s || :; } &&
+		$m scale deployment --all --replicas=0 $t &&
+		$m scale statefulset --all --replicas=0 $t; } >/dev/null 2>&1; then
+		echo "Couldn't stop them: deleting the cluster anyway."
+		return 0
+	fi
+	# A wait finds nothing to wait for once every pod has gone, and says so as an error.
+	# shellcheck disable=SC2086
+	$m wait pod --all --for=delete --timeout=120s >/dev/null 2>&1 ||
+		[ -z "$($m get pods --output name $t 2>/dev/null)" ] ||
+		echo "Not all of them stopped within 2 minutes: deleting the cluster anyway."
+}
+
 cmd_delete() {
 	yes=${1:-}
 	load_settings
@@ -953,6 +1047,7 @@ cmd_delete() {
 			exit 1
 		fi
 	fi
+	stop_cleanly
 	k3d cluster delete "$CLUSTER_NAME"
 	# The Dashboard's What's next is for a cluster that's there.
 	rm -f "$DATA_ROOT/helper/applied"

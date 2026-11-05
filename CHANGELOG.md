@@ -2,6 +2,23 @@
 
 ## 0.5.3 (unreleased)
 
+### Changes
+
+- A maintenance window comes through an upgrade, however recently you added it.
+  `./ok3d delete`, which the upgrade runs, now stops Alertmanager, Prometheus, and Grafana
+  before it deletes the cluster, so each saves its data: Alertmanager saved its silences only
+  every 15 minutes, and deleting the cluster lost the rest.
+- After the server restarts partway through an Apply or an upgrade, **Check** and **Apply**
+  on the Dashboard finish it. Helm left the release it was changing unfinished, and Apply
+  failed with "another operation (install/upgrade/rollback) is in progress". Apply now goes
+  back to the version before it (or starts an unfinished install again) first, and
+  Check says it will, as it now does after a Helm run that failed. Apply also waits until a
+  cluster that has just started again is steady: its API server answered, then didn't, and
+  Helm failed partway.
+- The output on Home no longer shows k3d's color codes as `[36mINFO[0m`.
+- The steps for going back to the release you had (docs/upgrading.md) no longer fail when
+  you have no `.env`.
+
 ## 0.5.2 (2026-11-05)
 
 ### Upgrading

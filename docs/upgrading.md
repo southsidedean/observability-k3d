@@ -32,7 +32,8 @@ Either way, the upgrade:
    back and stops (after a failed install, it installs the old helper and Dashboard again):
    nothing else changed. Read what the check said, and the release's Upgrading notes, then
    try again.
-4. Deletes the cluster, and backs up the certificate authority (`certs/`), Grafana's database
+4. Stops Alertmanager, Prometheus, and Grafana, so each saves its data, then deletes the
+   cluster. It backs up the certificate authority (`certs/`), Grafana's database
    (`grafana/`), and Alertmanager's silences (`alertmanager/`) while nothing is writing to
    them, to `backups/before-<release>-<time>.tar.gz` in the data root. The last three are
    kept. Prometheus's history is left out, since it's large; the new cluster picks it up as
@@ -58,9 +59,12 @@ The Dashboard's Home, or what `./ok3d upgrade` printed, says which step it stopp
   stopped before "Moving to", nothing changed: upgrade again. If it stopped during "Moving
   to", `git -C ~/ok3d status` may show ok3d's files half moved; put them back with
   `git -C ~/ok3d checkout --force` and the release (or branch) you had, such as `v0.5.1`,
-  then upgrade again. If it stopped later, the ok3d folder is already on the new release, so
-  finish by hand on the server, with the steps the upgrade would have taken (with your data
-  root for `/srv/ok3d`):
+  then upgrade again. If it stopped while making the cluster again (its last step), **Check**
+  and **Apply** on the Dashboard finish it: Apply waits for the cluster to be steady, and
+  first clears what Helm left unfinished. If it stopped in between, while deleting the
+  cluster or backing up, the ok3d folder is already on the new release, so finish by hand on
+  the server, with the steps the upgrade would have taken (with your data root for
+  `/srv/ok3d`):
 
   ```sh
   cd ~/ok3d
@@ -81,8 +85,7 @@ the cluster again from it:
 ```sh
 cd ~/ok3d
 git switch --detach v0.5.1                   # the release you had
-cp local/backups/before-v0.5.2-<time>/* .    # your settings, devices, and .env from before
-cp local/backups/before-v0.5.2-<time>/.env .
+cp -a local/backups/before-v0.5.2-<time>/. .   # your settings, devices, and .env from before
 ./ok3d install
 ./ok3d delete --yes
 tar -C /srv/ok3d -xzf /srv/ok3d/backups/before-v0.5.2-<time>.tar.gz   # your data root

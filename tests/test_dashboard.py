@@ -1129,6 +1129,20 @@ def test_home_says_how_the_last_upgrade_went(ready: Dashboard, state: str, says:
     assert 'action="/check"' in page
 
 
+def test_output_is_shown_without_a_terminals_color_codes(tmp_path: Path) -> None:
+    # k3d colors its log lines, and Home showed them as "[36mINFO[0m".
+    from ok3d.dashboard import helper_link
+
+    printed = ("\x1b]0;k3d\x07\x1b[36mINFO\x1b[0m[0009] Deleting cluster 'ok3d'\x1b(B\n"
+               "\x1b[?25l\x1b[2KDone [ok]\x1b]2;title\x1b\\\n")
+    (tmp_path / "upgrade").write_text("state=running\n")
+    (tmp_path / "upgrade-output").write_text(printed)
+    (tmp_path / "result").write_text("id=3f9a0c51d2e8b746\naction=apply\nstate=finished\nexit=0\n\n" + printed)
+    for shown in (helper_link.upgrade(tmp_path), helper_link.answer(tmp_path)):
+        assert shown is not None
+        assert shown.output == "INFO[0009] Deleting cluster 'ok3d'\nDone [ok]\n"
+
+
 def test_only_the_end_of_a_long_upgrade_is_shown(tmp_path: Path) -> None:
     from ok3d.dashboard import helper_link
 
