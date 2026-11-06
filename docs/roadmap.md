@@ -91,7 +91,7 @@ changes, comes next.
 | After a restart partway through an upgrade, Check and Apply on the Dashboard finish it, instead of Apply failing on Helm's unfinished release | Done ([#62](https://github.com/southsidedean/observability-k3d/pull/62)) |
 | The upgrade's output on Home without k3d's color codes, and the steps for going back that work without a `.env` | Done ([#62](https://github.com/southsidedean/observability-k3d/pull/62)) |
 | The steps from 0.5.0 or 0.4, tested from the 0.4.0 snapshot with v0.5.2 | Done ([#62](https://github.com/southsidedean/observability-k3d/pull/62)) |
-| The screenshots retaken to show a released version | Planned |
+| The screenshots retaken to show a released version | Done ([#64](https://github.com/southsidedean/observability-k3d/pull/64)) |
 | Release 0.5.3, tested with an upgrade from 0.5.2 from the Dashboard alone, with a maintenance window added just before and a restart partway | In progress |
 
 ## Found in the 0.5.2 review, for later
