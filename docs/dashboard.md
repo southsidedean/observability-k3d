@@ -39,7 +39,7 @@ minute.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../images/screenshots/dashboard-home-dark.png">
-  <img src="../images/screenshots/dashboard-home-light.png" alt="The Dashboard's Home page: ok3d 0.5.1, the helper running, the Check and Apply buttons with a note that Apply will change nothing that's running and the same commands on the server, a Before you Apply list saying alerts go nowhere yet, What's next with five steps and links to the certificate authority and Grafana, the helper's last answer, a Check that finished with exit status 0, with what ok3d check printed, and Releases, with a Look for a new release button." width="700">
+  <img src="../images/screenshots/dashboard-home-light.png" alt="The Dashboard's Home page: ok3d 0.5.3, the helper running, the Check and Apply buttons with a note that Apply will change nothing that's running and the same commands on the server, a Before you Apply list saying alerts go nowhere yet, What's next with five steps and links to the certificate authority and Grafana, the helper's last answer, a Check that finished with exit status 0, with what ok3d check printed, and Releases, with a Look for a new release button." width="700">
 </picture>
 
 Each page also says what its buttons do on the server, as the command or the line in a file
@@ -121,7 +121,7 @@ file on the server.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../images/screenshots/dashboard-maintenance-dark.png">
-  <img src="../images/screenshots/dashboard-maintenance-light.png" alt="The Dashboard's Maintenance page: ok3d hasn't read the windows from Alertmanager yet, a button to read them now, and a form to add one: for all of ok3d or ticked devices from the simulated network, from now for a length or between two times in the server's own time, and why, with the same command on the server." width="700">
+  <img src="../images/screenshots/dashboard-maintenance-light.png" alt="The Dashboard's Maintenance page: ok3d hasn't read the windows from Alertmanager yet, a button to read them now, and a form to add one: for all of ok3d or ticked devices from the simulated network, from now for a length or between two times in the server's own time, and why, with the same command on the server; then the helper's last answer, a Check that finished with exit status 0." width="700">
 </picture>
 
 **Maintenance** lists the maintenance windows: times when alerts don't notify you, for all of
