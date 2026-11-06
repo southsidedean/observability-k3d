@@ -4,8 +4,8 @@ Where ok3d is, release by release. Every pull request updates this page when it 
 starts, or changes something here. [PLAN.md](../PLAN.md#roadmap) has the detail of each
 release and the reasons behind it.
 
-**Now:** 0.5.3 is being released: fixes for what 0.5.2's release test found. 0.6.0, logs and
-changes, comes next.
+**Now:** 0.5.3 is released. 0.5.4 is in progress: what 0.5.3's release test found. 0.6.0, logs
+and changes, comes next.
 
 | Release | What it brings | Status |
 |---|---|---|
@@ -15,7 +15,8 @@ changes, comes next.
 | 0.5.0 | The Dashboard: set up and change ok3d from a web page, and screenshots in the docs | Released ([v0.5.0](https://github.com/southsidedean/observability-k3d/releases/tag/v0.5.0)) |
 | 0.5.1 | The Dashboard's second step: upgrades, maintenance windows, and Apply asking first | Released ([v0.5.1](https://github.com/southsidedean/observability-k3d/releases/tag/v0.5.1)) |
 | 0.5.2 | Small fixes from 0.5.1, and the first release test that upgrades from the Dashboard alone | Released ([v0.5.2](https://github.com/southsidedean/observability-k3d/releases/tag/v0.5.2)) |
-| 0.5.3 | Fixes for what 0.5.2's release test found: maintenance windows kept through an upgrade, and Apply recovering from a restart partway | Being released |
+| 0.5.3 | Fixes for what 0.5.2's release test found: maintenance windows kept through an upgrade, and Apply recovering from a restart partway | Released ([v0.5.3](https://github.com/southsidedean/observability-k3d/releases/tag/v0.5.3)) |
+| 0.5.4 | What 0.5.3's release test found: Home says when Apply finished an upgrade that stopped partway, and Check notices a delete that was cut off | In progress |
 | 0.6.0 | Logs and changes: syslog, host logs, what-changed markers, new devices | Planned |
 | 0.7.0 | The NOC: the board, alerts that know the layout, the internet link's record, backups | Planned |
 | 0.8.0 | One sign-in for every page, the mesh, and traces | Planned |
@@ -36,7 +37,7 @@ changes, comes next.
 | Screenshots of the pages for the docs (`scripts/screenshots.sh` on the test VM) | Moved to 0.5 |
 | Retire the old stack, and the guide for moving from it | Done ([#17](https://github.com/southsidedean/observability-k3d/pull/17)) |
 | Release 0.4.0 ([#18](https://github.com/southsidedean/observability-k3d/pull/18)), installed on the test VM from its base snapshot | Done |
-| Move production to ok3d: its server has a 0.4.0 checkout but no cluster yet, so it moves straight to the latest release | Planned |
+| Move production to ok3d | Moved to its own row, below |
 
 ## 0.5.0, in detail
 
@@ -92,7 +93,21 @@ changes, comes next.
 | The upgrade's output on Home without k3d's color codes, and the steps for going back that work without a `.env` | Done ([#62](https://github.com/southsidedean/observability-k3d/pull/62)) |
 | The steps from 0.5.0 or 0.4, tested from the 0.4.0 snapshot with v0.5.2 | Done ([#62](https://github.com/southsidedean/observability-k3d/pull/62)) |
 | The screenshots retaken to show a released version | Done ([#64](https://github.com/southsidedean/observability-k3d/pull/64)) |
-| Release 0.5.3, tested with an upgrade from 0.5.2 from the Dashboard alone, with a maintenance window added just before and a restart partway | In progress |
+| Release 0.5.3 ([#63](https://github.com/southsidedean/observability-k3d/pull/63), [#64](https://github.com/southsidedean/observability-k3d/pull/64)), tested with an upgrade from 0.5.2 from the Dashboard alone, with a maintenance window added just before and a restart partway | Done |
+
+## 0.5.4, in detail
+
+| Part | Status |
+|---|---|
+| After Apply finishes an upgrade that a restart cut off, Home's Releases says so, instead of still saying the upgrade stopped and pointing to docs/upgrading.md | Planned |
+| Check notices a cluster left with nothing running by a delete that was cut off after it stopped everything, and says `./ok3d delete --yes` finishes it | Planned |
+| Release 0.5.4, tested with an upgrade from 0.5.3 from the Dashboard alone, with a restart partway, after which Home says Apply finished it | Planned |
+
+## Outside the releases
+
+| Part | Status |
+|---|---|
+| Move production to ok3d: its server has a 0.4.0 checkout but no cluster yet, so it moves straight to 0.5.3 with the steps from 0.5.0 or 0.4 | Planned |
 
 ## Found in the 0.5.2 review, for later
 
