@@ -92,7 +92,7 @@ pre { overflow-x: auto; font-size: 13px; background: var(--bg); border: 1px soli
 input, select { font: inherit; padding: 8px; box-sizing: border-box;
   border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); }
 input[type=checkbox], input[type=radio] { padding: 0; }
-input[type=password] { width: 100%; max-width: 420px; }
+input[type=password], input[type=text] { width: 100%; max-width: 420px; }
 button { font: inherit; padding: 8px 14px; border-radius: 6px; border: 1px solid var(--accent);
   background: var(--accent); color: #fff; cursor: pointer; }
 button.plain { background: none; color: var(--fg); border-color: var(--line); }

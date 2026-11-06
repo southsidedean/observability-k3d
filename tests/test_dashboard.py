@@ -1143,6 +1143,16 @@ def test_output_is_shown_without_a_terminals_color_codes(tmp_path: Path) -> None
         assert shown.output == "INFO[0009] Deleting cluster 'ok3d'\nDone [ok]\n"
 
 
+def test_text_boxes_are_wide_enough_for_their_example() -> None:
+    # With the page's font and padding, a text box's default 20 characters cut Maintenance's
+    # "Router firmware update" to "Router firmware updat", so text boxes get a width, as
+    # password boxes do.
+    rules = {sel.strip(): body for sels, body in re.findall(rb"([^{}]+)\{([^{}]*)\}", server.STYLE)
+             for sel in sels.split(b",")}
+    assert b"width: 100%" in rules[b"input[type=text]"]
+    assert rules[b"input[type=text]"] == rules[b"input[type=password]"]
+
+
 def test_only_the_end_of_a_long_upgrade_is_shown(tmp_path: Path) -> None:
     from ok3d.dashboard import helper_link
 

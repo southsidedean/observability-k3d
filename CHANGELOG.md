@@ -31,6 +31,8 @@
   now does after a Helm run that failed. Apply also waits until a cluster that has just started
   again is steady: its API server answered, then didn't, and Helm failed partway.
 - The output on Home no longer shows k3d's color codes as `[36mINFO[0m`.
+- The Why box on Maintenance is wide enough for its example again, which 0.5.2 cut to
+  "Router firmware updat".
 - The steps for going back to the release you had (docs/upgrading.md) no longer fail when
   you have no `.env`.
 
