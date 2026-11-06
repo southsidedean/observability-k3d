@@ -429,8 +429,8 @@ every Grafana dashboard, each step of the install, and how the pieces fit.
 Each release ends with something that works on its own and a test that proves it, and goes
 through the test VM before production. Patch releases (0.4.1, ...) fix what testing and use
 turn up. Production was to move to ok3d at 0.4.0; it hasn't yet. Decided 2026-11-06: it
-moves to 0.5.3, the first release that keeps maintenance windows through an upgrade and
-recovers from a restart partway, whenever suits, apart from any release.
+moves to 0.5.3 whenever suits, apart from any release. 0.5.3 is the first release that keeps
+maintenance windows through an upgrade and recovers from a restart partway.
 
 ### 0.3: Groundwork
 
@@ -600,7 +600,7 @@ upgrade worked. It also found two problems that 0.5.1 had too, listed as known i
 - Tested 2026-11-06, both from 0.5.2 on the test VM. A window added on the Dashboard, then
   the upgrade straight away: the window was still on afterwards. And the power cut 8 seconds
   after the new release began deploying ok3d, which left it pending-install: Check, then
-  one Apply on the Dashboard, finished it in 12 minutes, with the same certificate authority.
+  one Apply on the Dashboard, finished it in 11 minutes, with the same certificate authority.
   Retaking the screenshots from the release showed the Why box on Maintenance cut short since
   0.5.2, and it was fixed before the tag.
 

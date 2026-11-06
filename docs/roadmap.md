@@ -101,7 +101,7 @@ and changes, comes next.
 |---|---|
 | After Apply finishes an upgrade that a restart cut off, Home's Releases says so, instead of still saying the upgrade stopped and pointing to docs/upgrading.md | Planned |
 | Check notices a cluster left with nothing running by a delete that was cut off after it stopped everything, and says `./ok3d delete --yes` finishes it | Planned |
-| Release 0.5.4, tested with an upgrade from 0.5.3 from the Dashboard alone, with a restart partway | Planned |
+| Release 0.5.4, tested with an upgrade from 0.5.3 from the Dashboard alone, with a restart partway, after which Home says Apply finished it | Planned |
 
 ## Outside the releases
 
