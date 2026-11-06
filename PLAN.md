@@ -1,9 +1,9 @@
 # Plan: ok3d, a home network operations center on k3d, with AI agents
 
-Status: 0.5.3 is being released; `docs/roadmap.md` has where each release stands. `v0.2.0`
-was the old stack's last version (the `scripts/cluster-setup-k3d-observability-everything.sh`
-stack), and 0.4.0 replaced it. The plan was written on 2026-10-27, before anything was
-built, and the roadmap ends in 1.x.
+Status: 0.5.3 is released, and 0.5.4 is in progress; `docs/roadmap.md` has where each
+release stands. `v0.2.0` was the old stack's last version (the
+`scripts/cluster-setup-k3d-observability-everything.sh` stack), and 0.4.0 replaced it. The
+plan was written on 2026-10-27, before anything was built, and the roadmap ends in 1.x.
 
 ## Goal
 
@@ -428,8 +428,9 @@ every Grafana dashboard, each step of the install, and how the pieces fit.
 
 Each release ends with something that works on its own and a test that proves it, and goes
 through the test VM before production. Patch releases (0.4.1, ...) fix what testing and use
-turn up. Production was to move to ok3d at 0.4.0; it hasn't yet, and moves straight to the
-latest release when it does.
+turn up. Production was to move to ok3d at 0.4.0; it hasn't yet. Decided 2026-11-06: it
+moves to 0.5.3, the first release that keeps maintenance windows through an upgrade and
+recovers from a restart partway, whenever suits, apart from any release.
 
 ### 0.3: Groundwork
 
@@ -596,6 +597,24 @@ upgrade worked. It also found two problems that 0.5.1 had too, listed as known i
   snapshot, and the screenshots retaken to show a released version.
 - Test: an upgrade from 0.5.2 from the Dashboard alone, with a maintenance window added
   just before it (still there after), and a restart partway through.
+- Tested 2026-11-06, both from 0.5.2 on the test VM. A window added on the Dashboard, then
+  the upgrade straight away: the window was still on afterwards. And the power cut 8 seconds
+  after the new release began deploying ok3d, which left it pending-install: Check, then
+  one Apply on the Dashboard, finished it in 12 minutes, with the same certificate authority.
+  Retaking the screenshots from the release showed the Why box on Maintenance cut short since
+  0.5.2, and it was fixed before the tag.
+
+### 0.5.4: What 0.5.3's release test found
+
+- After a restart cut off the upgrade and Apply finished it, Home's Releases still said the
+  upgrade stopped and pointed to docs/upgrading.md. Home says a later Apply finished it.
+- A delete cut off after it stopped everything leaves a cluster with nothing running, and
+  only running `./ok3d delete --yes` again finishes it. Check notices that and says so.
+- Left as it is (decided 2026-11-06): Apply stops when any Helm is running on the machine,
+  even one for another cluster. That's the safe way to be wrong, and ok3d's server rarely
+  runs another.
+- Test: an upgrade from 0.5.3 from the Dashboard alone, with a restart partway, after which
+  Home says Apply finished it. The test VM has a 0.5.3 snapshot to start from.
 
 ### 0.6: Logs and changes
 
